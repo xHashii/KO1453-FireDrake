@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>KnightOnline.Verification</RootNamespace>
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+  </PropertyGroup>
+
+  <!--
+    Deliberately a dependency-free console app instead of an xUnit project:
+    it must run anywhere `dotnet run` works, with zero NuGet packages, and
+    fail loudly (non-zero exit code) if the wire-protocol ports ever drift
+    from the original C behaviour. Migrate/extend with xUnit later if wanted.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\KnightOnline.Shared\KnightOnline.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

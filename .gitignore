@@ -1,0 +1,29 @@
+# .NET
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# Server runtime output (C# and C++)
+Logs/
+*.log
+
+# Local configs - commit the *.sample.ini files only
+LogInServer.ini
+GameServer.ini
+AIServer.ini
+
+# Local data drop zone until we decide on Git LFS (map/*.smd, Quests/*.Lua)
+data/
+
+# Legacy Visual C++ cruft (the copies already tracked stay tracked until the
+# C++ tree is moved under legacy/; this keeps new ones out)
+*.sdf
+*.opensdf
+*.VC.db
+ipch/
+Debug/
+Release/
+x64/
