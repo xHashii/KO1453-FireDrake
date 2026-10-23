@@ -1,4 +1,4 @@
-using System.Binary;
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 
 namespace KnightOnline.Shared.Crypto;

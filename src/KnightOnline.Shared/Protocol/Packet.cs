@@ -1,4 +1,4 @@
-using System.Binary;
+using System.Buffers.Binary;
 using System.Text;
 
 namespace KnightOnline.Shared.Protocol;

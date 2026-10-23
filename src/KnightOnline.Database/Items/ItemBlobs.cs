@@ -1,4 +1,4 @@
-using System.Binary;
+using System.Buffers.Binary;
 
 namespace KnightOnline.Database.Items;
 

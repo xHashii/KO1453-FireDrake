@@ -1,4 +1,4 @@
-using System.Binary;
+using System.Buffers.Binary;
 using KnightOnline.Shared.Compression;
 using KnightOnline.Shared.Crypto;
 
