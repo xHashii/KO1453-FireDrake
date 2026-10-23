@@ -321,6 +321,91 @@ class BinaryLiteralTest(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------
+# CAST: MariaDB's CAST vocabulary is much smaller than its column types
+# --------------------------------------------------------------------------
+class CastTest(unittest.TestCase):
+    """SSMS wraps every numeric/decimal value in CAST(x AS Numeric(p, s)).
+
+    NUMERIC is a fine *column* type in MariaDB and ERROR 1064 inside CAST(),
+    which is what stopped 0003_data.sql at statement 69998 - one statement
+    before the SERVERS row, and 600-odd before the VERSION rows the login
+    server reads.
+    """
+
+    def dml(self, stmt: str) -> str:
+        return converter.convert_dml(stmt)
+
+    def test_literal_numeric_cast_is_unwrapped(self) -> None:
+        out = self.dml("INSERT [dbo].[SERVERS] ([sNum], [sName]) "
+                       "VALUES (CAST(1 AS Numeric(18, 0)), N'Heros');")
+        self.assertEqual("INSERT `SERVERS` (`sNum`, `sName`) VALUES (1, 'Heros');", out)
+
+    def test_hex_and_string_casts_are_unwrapped(self) -> None:
+        self.assertIn("0x0A12", self.dml(
+            "INSERT [dbo].[T] ([a]) VALUES (CAST(0x0A12 AS VarBinary(10)));"))
+        self.assertIn("'2024-01-01'", self.dml(
+            "INSERT [dbo].[T] ([a]) VALUES (CAST(N'2024-01-01' AS DateTime));"))
+
+    def test_expression_casts_keep_the_cast_and_change_the_type(self) -> None:
+        cases = [
+            ("Numeric(18, 2)", "DECIMAL(18,2)"),
+            ("Decimal(9, 4)", "DECIMAL(9,4)"),
+            ("money", "DECIMAL(19,4)"),
+            ("smallmoney", "DECIMAL(10,4)"),
+            ("bigint", "SIGNED"),
+            ("smallint", "SIGNED"),
+            ("tinyint", "UNSIGNED"),
+            ("bit", "UNSIGNED"),
+            ("float", "DOUBLE"),
+            ("nvarchar(50)", "CHAR(50)"),
+            ("varchar(max)", "CHAR"),
+            ("varbinary(12)", "BINARY(12)"),
+            ("varbinary(max)", "BINARY"),
+            ("uniqueidentifier", "CHAR(36)"),
+            ("datetime2(3)", "DATETIME"),
+            ("smalldatetime", "DATETIME"),
+            ("xml", "CHAR"),
+        ]
+        for source, expected in cases:
+            with self.subTest(source=source):
+                out = self.dml(f"UPDATE [dbo].[T] SET [a] = CAST([b] AS {source});")
+                self.assertEqual(f"UPDATE `T` SET `a` = CAST(`b` AS {expected});", out)
+                self.assertEqual([], check_migrations.illegal_cast_types(out))
+
+    def test_already_mariadb_cast_types_are_kept(self) -> None:
+        for decl in ("DECIMAL(18,2)", "CHAR(30)", "BINARY(16)", "SIGNED", "UNSIGNED",
+                     "DATE", "DATETIME", "TIME", "INT", "DOUBLE", "VARCHAR(20)"):
+            with self.subTest(decl=decl):
+                out = self.dml(f"UPDATE [dbo].[T] SET [a] = CAST([b] AS {decl});")
+                self.assertEqual([], check_migrations.illegal_cast_types(out))
+
+    def test_nested_expression_survives(self) -> None:
+        out = self.dml("UPDATE [dbo].[T] SET [a] = CAST(DATE_ADD([b], INTERVAL 1 DAY) AS Date);")
+        self.assertEqual("UPDATE `T` SET `a` = CAST(DATE_ADD(`b`, INTERVAL 1 DAY) AS DATE);", out)
+
+    def test_text_inside_a_literal_is_never_rewritten(self) -> None:
+        """NPC dialogue in this dump mentions money, brackets and CAST."""
+        stmt = ("INSERT [dbo].[QUEST_TALK] ([nIndex], [strTalk]) VALUES "
+                "(8740, 'Do you think money grows on trees? CAST(x AS Numeric) [Karus]');")
+        self.assertEqual(
+            "INSERT `QUEST_TALK` (`nIndex`, `strTalk`) VALUES "
+            "(8740, 'Do you think money grows on trees? CAST(x AS Numeric) [Karus]');",
+            self.dml(stmt))
+
+    def test_checker_flags_the_tsql_cast_types(self) -> None:
+        for bad in ("Numeric(18, 0)", "VarBinary(10)", "money", "bigint",
+                    "nvarchar(50)", "datetime2", "VARCHAR"):
+            with self.subTest(bad=bad):
+                found = check_migrations.illegal_cast_types(
+                    f"INSERT `T` (`a`) VALUES (CAST(`b` AS {bad}));")
+                self.assertEqual(1, len(found), found)
+
+    def test_checker_ignores_cast_in_a_literal(self) -> None:
+        stmt = "INSERT `T` (`a`) VALUES ('a CAST(1 AS Numeric(18, 0)) in dialogue');"
+        self.assertEqual([], check_migrations.illegal_cast_types(stmt))
+
+
+# --------------------------------------------------------------------------
 # End to end: a dump in, gate-clean migration scripts out
 # --------------------------------------------------------------------------
 DUMP = """USE [KN_Online]
@@ -355,7 +440,20 @@ CREATE TABLE [dbo].[SN_NEWS](
 ) ON [PRIMARY]
 ) ON [PRIMARY]
 GO
+CREATE TABLE [dbo].[SERVERS](
+\t[sNum] [numeric](18, 0) IDENTITY(1,1) NOT NULL,
+\t[sName] [char](250) NULL,
+\t[sIP] [char](15) NULL,
+\t[DatabaseName] [char](100) NULL,
+ CONSTRAINT [PK_SERVERS] PRIMARY KEY CLUSTERED 
+(
+\t[sNum] ASC
+) ON [PRIMARY]
+) ON [PRIMARY]
+GO
 ALTER TABLE [dbo].[MAIL_BOX] ADD  CONSTRAINT [DF_MAIL_BOX_bDeleted]  DEFAULT ((0)) FOR [bDeleted]
+GO
+INSERT [dbo].[SERVERS] ([sNum], [sName], [sIP], [DatabaseName]) VALUES (CAST(1 AS Numeric(18, 0)), N'Heros                    ', N'127.0.0.1      ', N'Heros')
 GO
 INSERT [dbo].[MAIL_BOX] ([nLetterID], [bDeleted], [byType], [strSubject], [strSerial]) VALUES (1, 1, 2, N'hello', 0x0A12F67E01)
 GO
@@ -420,6 +518,15 @@ class EndToEndTest(unittest.TestCase):
         statements = [stmt for _, stmt in check_migrations.iter_statements(self.schema()) if stmt.strip()]
         self.assertTrue(any("CREATE TABLE `MAIL_BOX`" in s for s in statements))
         self.assertTrue(any(s.strip().upper().startswith("ALTER TABLE") for s in statements))
+
+    def test_numeric_cast_is_unwrapped_in_the_data_file(self) -> None:
+        """The statement that stranded 0003_data.sql at statement 69998."""
+        path = os.path.join(self.outdir, "KN_Online_02_data.sql")
+        data = open(path, encoding="utf-8").read()
+        self.assertIn("INSERT `SERVERS` (`sNum`, `sName`, `sIP`, `DatabaseName`) "
+                      "VALUES (1, 'Heros", data)
+        self.assertNotIn("CAST(", data)
+        self.assertEqual([], check_migrations.illegal_cast_types(data))
 
     def test_data_file_keeps_the_binary_literal(self) -> None:
         path = os.path.join(self.outdir, "KN_Online_02_data.sql")

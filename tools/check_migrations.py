@@ -38,6 +38,9 @@ Checks
     9. statements are splittable: balanced quotes, every statement terminated,
        no leftover SQL Server syntax ([dbo], IDENTITY(, NVARCHAR, GETDATE,
        CLUSTERED, ON [PRIMARY])                            -> error
+   12. CAST target types outside MariaDB's CAST grammar (NUMERIC, MONEY,
+       NVARCHAR, VARBINARY, DATETIME2, ...) - legal as column types, ERROR 1064
+       inside CAST()                                              -> error
    11. optional deep parse: with sqlglot installed (pip install sqlglot) every
        DDL statement is parsed by a real MySQL grammar instead of by the
        regexes above                                        -> error
@@ -75,6 +78,43 @@ MSSQL_LEFTOVERS = [
     r"\bCLUSTERED\b", r"ON\s+\[PRIMARY\]", r"(?<![\w'])N'", r"\bdatetime2\b",
     r"\buniqueidentifier\b", r"\bsmalldatetime\b",
 ]
+
+# CAST has its own, much smaller vocabulary than CREATE TABLE: from MariaDB's
+# grammar (sql/sql_yacc.yy `cast_type`, `cast_type_numeric`, `cast_type_temporal`)
+# only these are accepted. True = a length/precision argument is allowed.
+# NUMERIC is the trap - a perfectly good column type, ERROR 1064 inside CAST(),
+# and SSMS emits `CAST(1 AS Numeric(18, 0))` for every numeric/decimal value.
+CAST_TYPES: dict[str, bool] = {
+    "binary": True, "char": True, "varchar": True, "nchar": False,
+    "int": False, "integer": False, "signed": False, "unsigned": False,
+    "decimal": True, "float": False, "double": True,
+    "date": False, "time": True, "datetime": True,
+}
+
+CAST_RE = re.compile(
+    r"(?is)\bCAST\s*\(\s*(?P<expr>.*?)\s+AS\s+"
+    r"(?P<type>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\(\s*(?P<args>[^()]*)\))?\s*\)")
+
+_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
+
+
+def illegal_cast_types(text: str) -> list[str]:
+    """CAST target types MariaDB's parser rejects, ignoring string literals."""
+    if "cast" not in text.lower():
+        return []
+    bad = []
+    for m in CAST_RE.finditer(_LITERAL_RE.sub("''", text)):
+        name = m.group("type").lower()
+        args = (m.group("args") or "").strip()
+        spelled = f"{m.group('type')}({args})" if args else m.group("type")
+        if name not in CAST_TYPES:
+            bad.append(spelled)
+        elif name == "varchar" and not args:
+            bad.append("VARCHAR without a length")
+        elif args and not CAST_TYPES[name]:
+            bad.append(spelled)
+    return bad
+
 
 _CONTROL_CHARS = frozenset(chr(c) for c in range(0x20) if c not in (0x09, 0x0A, 0x0D)) | {"\x7f"}
 
@@ -305,6 +345,12 @@ def check_schema_file(path: str, sql: str, rep: Report) -> dict[str, dict[str, s
                 rep.error(f"{path}: {table}.{col} is {base.upper()} and has a DEFAULT "
                           f"(ERROR 1101)")
 
+    # 12. CAST target types (DDL rarely has one, but a DEFAULT or a generated
+    #     column can, and the grammar is much narrower than CREATE TABLE's).
+    for bad in illegal_cast_types(sql):
+        rep.error(f"{path}: CAST(... AS {bad}) - MariaDB rejects that CAST type "
+                  f"(ERROR 1064); see CAST_TYPES for the accepted list")
+
     # 9. SQL Server leftovers.
     for pat in MSSQL_LEFTOVERS:
         for m in re.finditer(pat, sql):
@@ -385,6 +431,15 @@ def check_data_file(path: str, sql: str, tables: dict[str, dict[str, str]],
                     rep.error(f"{path}:{line}: leftover SQL Server syntax in {head[:60]!r}")
                     break
             continue
+
+        # 12. a CAST type MariaDB cannot parse. Checked for INSERTs too: the
+        #     leftover scan above only covers non-DML statements, and this is
+        #     exactly where SSMS puts `CAST(1 AS Numeric(18, 0))`.
+        for bad in illegal_cast_types(head):
+            line = sql.count("\n", 0, offset) + 1
+            rep.error(f"{path}:{line}: CAST(... AS {bad}) - MariaDB rejects that CAST "
+                      f"type (ERROR 1064); for a literal value drop the CAST, otherwise "
+                      f"use DECIMAL/CHAR/BINARY/SIGNED/DATETIME")
 
         m = INSERT_RE.match(head.strip())
         if not m:

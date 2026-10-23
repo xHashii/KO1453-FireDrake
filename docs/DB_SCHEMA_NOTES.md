@@ -176,6 +176,35 @@ that is not a spelling MariaDB parses (and `--fix` moves a misplaced
 normalises the same thing on the converter side, and `tools/test_converter.py`
 pins all 30 source-type mappings plus this cascade specifically.
 
+**6. `CAST` has a much smaller vocabulary than `CREATE TABLE`.** The next
+failure was in the *data*: SSMS wraps every `numeric`/`decimal` value it
+exports in a cast, so the single `SERVERS` row arrived as
+
+```sql
+INSERT `SERVERS` (...) VALUES (CAST(1 AS Numeric(18, 0)), 'Heros', '127.0.0.1', 'Heros');
+```
+
+`NUMERIC` is a perfectly good column type and is **not** one of the types
+MariaDB accepts inside `CAST()` — `sql/sql_yacc.yy` lists `cast_type` as
+`BINARY(n)`, `CHAR(n)`, `VARCHAR(n)`, `NCHAR(n)`, `INT`/`SIGNED`/`UNSIGNED`,
+`DECIMAL(M,D)`, `FLOAT`, `DOUBLE(p)`, `DATE`, `TIME(fsp)`, `DATETIME(fsp)` and
+nothing else. ERROR 1064 at statement 69998 of 70633 — and since the `VERSION`
+rows sit 600 statements later, the login server came up with no version list at
+all. `convert_dml` now unwraps a cast around a plain literal (the destination
+column type does exactly the same job) and rewrites the target type of any cast
+that still has an expression inside it: `Numeric(18,2)` → `DECIMAL(18,2)`,
+`money` → `DECIMAL(19,4)`, `nvarchar(50)` → `CHAR(50)`, `varbinary(12)` →
+`BINARY(12)`, `bigint` → `SIGNED`, `datetime2(3)` → `DATETIME`. Text inside a
+string literal is never touched, which matters here: NPC dialogue in this dump
+contains the words `money`, `CAST` and square brackets. The checker rejects any
+cast type outside that grammar, in DDL and DML alike.
+
+**7. Both gates now run in CI.** `.github/workflows/ci.yml` builds the solution,
+runs the golden-vector verifier, runs `tools/test_converter.py` and checks the
+committed migration scripts (with `sqlglot` installed, so the DDL is really
+parsed) on every push and pull request. Findings 5 and 6 both reached a running
+LoginServer before they were caught locally; neither can do that again.
+
 ## The big structural finding: ONE database
 
 There is no separate account/game DB. Everything — `TB_USER`, `USERDATA`,

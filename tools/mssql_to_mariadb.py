@@ -601,11 +601,101 @@ def convert_binary_literals(sql: str, policy: str) -> str:
     return "".join(pieces)
 
 
+#: T-SQL CAST target type -> (MariaDB CAST target, keep the length argument).
+#:
+#: MariaDB's grammar (sql/sql_yacc.yy: `cast_type`, `cast_type_numeric`,
+#: `cast_type_temporal`) accepts only BINARY(n), CHAR(n), VARCHAR(n), NCHAR(n),
+#: INT, SIGNED, UNSIGNED, DECIMAL(M,D), FLOAT, DOUBLE(p), DATE, TIME(fsp) and
+#: DATETIME(fsp). A name being a valid *column* type says nothing about CAST:
+#: NUMERIC, MONEY, NVARCHAR, VARBINARY and DATETIME2 are all fine in CREATE
+#: TABLE and all ERROR 1064 inside CAST() - which is how SSMS's
+#: `VALUES (CAST(1 AS Numeric(18, 0)), ...)` stranded a data script.
+CAST_TYPE_MAP: dict[str, tuple[str, bool]] = {
+    "numeric": ("DECIMAL", True),
+    "decimal": ("DECIMAL", True),
+    "money": ("DECIMAL(19,4)", False),
+    "smallmoney": ("DECIMAL(10,4)", False),
+    "bit": ("UNSIGNED", False),
+    "tinyint": ("UNSIGNED", False),
+    "smallint": ("SIGNED", False),
+    "bigint": ("SIGNED", False),
+    "int": ("SIGNED", False),
+    "integer": ("SIGNED", False),
+    "real": ("DOUBLE", False),
+    "float": ("DOUBLE", False),
+    "nvarchar": ("CHAR", True),
+    "nchar": ("CHAR", True),
+    "varchar": ("CHAR", True),
+    "char": ("CHAR", True),
+    "character": ("CHAR", True),
+    "ntext": ("CHAR", False),
+    "text": ("CHAR", False),
+    "xml": ("CHAR", False),
+    "sql_variant": ("CHAR", False),
+    "uniqueidentifier": ("CHAR(36)", False),
+    "varbinary": ("BINARY", True),
+    "binary": ("BINARY", True),
+    "image": ("BINARY", False),
+    "datetime2": ("DATETIME", False),
+    "datetimeoffset": ("DATETIME", False),
+    "smalldatetime": ("DATETIME", False),
+    "datetime": ("DATETIME", False),
+    "date": ("DATE", False),
+    "time": ("TIME", False),
+}
+
+_CAST_RE = re.compile(
+    r"(?is)\bCAST\s*\(\s*(?P<expr>.*?)\s+AS\s+"
+    r"(?P<type>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\(\s*(?P<args>[^()]*)\))?\s*\)")
+
+
+def _map_outside_literals(sql: str, transform) -> str:
+    """Apply `transform` to everything that is not a '...' string literal.
+
+    Item names and NPC dialogue in this dump contain brackets, keywords and
+    even the word CAST; rewriting inside a literal would corrupt player-visible
+    text, so the literal spans are copied through untouched.
+    """
+    pieces = []
+    cursor = 0
+    for start, end, _ in _iter_string_literals(sql):
+        pieces.append(transform(sql[cursor:start]))
+        pieces.append(sql[start:end])
+        cursor = end
+    pieces.append(transform(sql[cursor:]))
+    return "".join(pieces)
+
+
+def convert_cast_types(sql: str) -> str:
+    """Rewrite CAST target types to the vocabulary MariaDB's parser accepts."""
+
+    def repl(m: re.Match[str]) -> str:
+        mapping = CAST_TYPE_MAP.get(m.group("type").lower())
+        if mapping is None:
+            return m.group(0)  # DATE/TIME/SIGNED/... or something unknown
+        target, keep_length = mapping
+        args = re.sub(r"\s+", "", m.group("args") or "")
+        # "(max)" and friends are not a CAST length; drop them (bare CHAR and
+        # bare BINARY are both legal, VARCHAR is not - hence CHAR above).
+        if keep_length and re.fullmatch(r"\d+(?:,\d+)?", args):
+            target = f"{target}({args})"
+        return f"CAST({m.group('expr').strip()} AS {target})"
+
+    return _map_outside_literals(sql, lambda part: _CAST_RE.sub(repl, part))
+
+
 def convert_dml(sql: str, binary_literals: str = "hex") -> str:
     sql = bracket_to_backtick(sql)
     # CAST(0xAB.. AS VarBinary(123)) -> 0xAB.. ; CAST(N'x' AS ...) -> 'x'
     sql = re.sub(r"(?i)CAST\s*\(\s*(0x[0-9A-Fa-f]+)\s+AS\s+[A-Za-z]+\s*(?:\(\s*[\d,\s]+\))?\s*\)", r"\1", sql)
     sql = re.sub(r"(?i)CAST\s*\(\s*(N?'(?:[^']|'')*')\s+AS\s+[A-Za-z]+\s*(?:\(\s*[\d,\s]+\))?\s*\)", r"\1", sql)
+    # SSMS wraps every numeric/decimal value in a CAST to pin its exactness;
+    # for a literal the column type already does that, so unwrap it. This is
+    # what `INSERT SERVERS ... VALUES (CAST(1 AS Numeric(18, 0)), ...)` needed.
+    sql = re.sub(r"(?i)CAST\s*\(\s*(-?\d+(?:\.\d+)?)\s+AS\s+[A-Za-z]+\s*(?:\(\s*[\d,\s]+\))?\s*\)", r"\1", sql)
+    # Anything left has a real expression inside, so keep the CAST and only
+    # translate its target type.
+    sql = convert_cast_types(sql)
     # N'unicode' literal -> plain (MariaDB connection charset decides storage)
     sql = re.sub(r"\bN'((?:[^']|'')*)'", r"'\1'", sql)
     sql = convert_binary_literals(sql, binary_literals)

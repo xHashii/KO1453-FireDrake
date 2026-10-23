@@ -146,7 +146,25 @@ then `docker compose up -d` again.
 
 5. Point your 1453 client at `127.0.0.1` port **15100**. Expect version
    check / server list / account login to answer; character select & world
-   entry arrive with the GameServer milestones.
+   entry arrive with the GameServer milestones (`KnightOnline.GameServer` is
+   still the M4 stub, so the client has nowhere to go after the server list).
+
+   **The seed data advertises version 1456.** `VERSION` carries the patch
+   chain of the server this dump came from (1453 → 1456), and the LoginServer
+   answers a version request with the highest `sVersion` in that table
+   (`GameVersion.Version` = 1453 is only the fallback used when the table
+   cannot be read). A client older than the answer asks for the patch files
+   `patch1454.zip` … `patch1456.zip` from `[DOWNLOAD] URL` — and a URL that
+   does not exist stops it *before the login dialog appears*. Align the two:
+
+   ```sql
+   SELECT MAX(sVersion) FROM `VERSION`;            -- what the server advertises
+   DELETE FROM `VERSION` WHERE `sVersion` > 1453;  -- what a 1453 client needs
+   ```
+
+   Alternatively host the real patch files under `[DOWNLOAD] URL`/`PATH` if
+   you want the client to update itself. Nothing else in the seed depends on
+   those rows.
 
 ## 7. AdminPanel (the website)
 
@@ -265,7 +283,10 @@ single file over 100 MB (and warns over 50 MB).
   line, and `--fix` repairs the type syntax. Then start the server again — the
   tables the aborted run created are cleaned up automatically.
   `python3 tools/test_converter.py` covers the converter rules that produce
-  those statements.
+  those statements. In a *data* script the usual culprit is a `CAST`: SSMS
+  wraps every numeric value as `CAST(1 AS Numeric(18, 0))`, and `NUMERIC` is a
+  valid column type but not a valid `CAST` target — the checker reports those
+  too. Both gates run in CI (`.github/workflows/ci.yml`).
 - **Migration checksum error after a pull** → an already-applied script
   changed upstream. During development the cheap fix is a fresh volume:
   `docker compose down -v` → `up -d` (all test data is recreated from the
