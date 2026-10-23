@@ -1,6 +1,5 @@
 -- Auto-converted from SQL Server dump (mssql_to_mariadb.py). Review before production use.
-CREATE DATABASE IF NOT EXISTS `KN_Online`;
-USE `KN_Online`;
+-- Target database: chosen by server config / the importing connection (not by this file).
 SET FOREIGN_KEY_CHECKS=0;
 SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';
 

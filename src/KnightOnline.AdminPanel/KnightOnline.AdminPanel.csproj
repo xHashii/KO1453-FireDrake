@@ -14,9 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- DB migrations applied automatically on startup -->
-    <None Include="..\..\sql\mysql\ko_main\*.sql" Link="sql\ko_main\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\sql\mysql\ko_game\*.sql" Link="sql\ko_game\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Single configured database migrations applied automatically on startup -->
+    <None Include="..\..\sql\mysql\kn_online\*.sql" Link="sql\kn_online\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -3,7 +3,7 @@ namespace KnightOnline.Database;
 /// <summary>One row of the VERSION table (LogInServer _VERSION_INFO).</summary>
 public sealed record VersionInfo(ushort Version, ushort HistoryVersion, string FileName);
 
-/// <summary>Result codes of the ACCOUNT_LOGIN routine, as the client expects them.</summary>
+/// <summary>Login result codes, as the client expects them.</summary>
 public enum AccountLoginResult : byte
 {
     Success = 0x01,
@@ -17,7 +17,7 @@ public enum AccountLoginResult : byte
 }
 
 /// <summary>
-/// Everything the LoginServer needs from the account database.
+/// Everything the LoginServer needs from the single configured database.
 /// Port of LogInServer/CDBProcess.
 /// </summary>
 public interface IAccountRepository
@@ -32,15 +32,15 @@ public interface IAccountRepository
     Task<IReadOnlyDictionary<int, int>> LoadUserCountsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Calls ACCOUNT_LOGIN (T-SQL: {? = CALL ACCOUNT_LOGIN(?, ?)}).
-    /// The MariaDB port of the procedure takes an OUT parameter - see
-    /// sql/mysql/ko_main/. To be replaced by the converted original
-    /// procedure once the real database export is available.
+    /// Authenticates against TB_USER with the observable semantics of the
+    /// original ACCOUNT_LOGIN procedure. Creating an unknown account is a
+    /// server-config policy (auto-register), not unconditional behaviour.
     /// </summary>
     Task<AccountLoginResult> AccountLoginAsync(string accountId, string password, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Calls ACCOUNT_PREMIUM: remaining premium hours, or -1 if none.
+    /// Equivalent to ACCOUNT_PREMIUM: remaining premium hours from
+    /// TB_USER.dtPremiumTime, or -1 if none/expired.
     /// </summary>
     Task<short> AccountPremiumAsync(string accountId, CancellationToken cancellationToken = default);
 }

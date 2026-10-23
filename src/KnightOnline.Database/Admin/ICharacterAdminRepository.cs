@@ -1,8 +1,9 @@
 namespace KnightOnline.Database.Admin;
 
 /// <summary>
-/// GM-panel data access over KO_GAME (characters/items/warehouse) and KO_MAIN
-/// (who is online). Implementations must enforce the panel's safety rules:
+/// GM-panel data access over the single configured game database
+/// (accounts, characters, items, warehouse, and who is online).
+/// Implementations must enforce the panel's safety rules:
 ///  - never save item blobs for an online character,
 ///  - optimistic concurrency (data must not have changed since load),
 ///  - every save writes an audit row + a restorable backup first.

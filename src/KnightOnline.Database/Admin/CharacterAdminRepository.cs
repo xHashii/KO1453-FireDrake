@@ -9,8 +9,8 @@ namespace KnightOnline.Database.Admin;
 /// <summary>
 /// MariaDB implementation of <see cref="ICharacterAdminRepository"/>.
 ///
-/// Schema resilience: until the real KO_GAME export is converted, column sets
-/// can vary between installs. The repository therefore probes
+/// Schema resilience: column sets can vary between converted installs and
+/// hand-tuned schemas. The repository therefore probes
 /// INFORMATION_SCHEMA once and only uses columns that exist (missing ones
 /// surface in CharacterDetails.MissingColumns and become read-only in the
 /// UI). strItem/strSerial are mandatory - without them there is nothing to
@@ -41,6 +41,17 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
     {
         _gameConnectionString = gameConnectionString;
         _accountConnectionString = accountConnectionString;
+    }
+
+    /// <summary>
+    /// Single-database constructor used by the rewrite's normal
+    /// configuration. Account-shaped and game-shaped tables live in the
+    /// same configured MariaDB database; the two-string constructor remains
+    /// for hybrid/legacy installs that deliberately split them.
+    /// </summary>
+    public CharacterAdminRepository(string connectionString)
+        : this(connectionString, connectionString)
+    {
     }
 
     private async Task<MySqlConnection> OpenGameAsync(CancellationToken cancellationToken)

@@ -1,4 +1,4 @@
-# Real database received: what `KN_Online` actually looks like
+# Real database received: what the source `KN_Online` actually looks like
 
 Status as of 2026-10-23. Source: `1453db.sql` (240.2 MB, UTF-16LE SSMS
 "Generate Scripts" export), delivered via the throwaway `db-drop` branch
@@ -9,10 +9,16 @@ Converted artifacts live in **`sql/mysql/kn_online/`**:
 
 | File | Contents |
 |---|---|
-| `KN_Online_01_schema.sql` (62 KB) | All 109 tables as MariaDB DDL + 208 translated column defaults |
-| `KN_Online_02_data.sql` (65 MB) + `KN_Online_03_data.sql` (49 MB) | 140,559 static-data INSERTs, user data excluded (~2 MB total once git compresses them) |
+| `0001_schema.sql` (62 KB) | All 109 tables as MariaDB DDL + 208 translated column defaults |
+| `0002_data.sql` (65 MB) + `0003_data.sql` (49 MB) | 140,559 static-data INSERTs, user data excluded (~2 MB total once git compresses them) |
+| `0004_admin_tables.sql` | AdminPanel-owned `_ko_admin_backups` + `_ko_admin_audit` tables |
 | `procedures_tsql/*.sql` (77 files) | Original T-SQL of every routine, to be ported |
 | `procedures_report.md`, `manifest.json` | Routine signatures + per-table row counts |
+
+The committed migration SQL intentionally contains no `CREATE DATABASE`
+or `USE KN_Online`. `KN_Online` is the source MSSQL name / sample default
+only; `DatabaseMigrator` creates and uses whatever MariaDB database name
+the server configuration supplies, and the tables/data are imported there.
 
 Verification (all scripted, re-runnable): per-table INSERT counts match the
 source **exactly** (140,559 converted + 7,256 excluded user rows = 147,815
@@ -48,28 +54,40 @@ There is no separate account/game DB. Everything — `TB_USER`, `USERDATA`,
 `ITEM`, quests, plus Turkish website-panel tables (`_Haber`, `_Ticket`, …) —
 lives in a single MSSQL database **`KN_Online`** (109 tables, 77 routines).
 
-Our C# code currently assumes two MariaDB databases (`ko_main` accounts /
-`ko_game` game) with draft schemas. That layout is superseded. **M3 rewire
-checklist (not yet done):**
+The C# rewrite now uses the same one-database shape, without hard-coding
+the old ODBC-era name. `KN_Online` remains the sample default, but the
+actual MariaDB name comes from `LogInServer.ini` / AdminPanel
+`ConnectionStrings:GameDatabase` and should match Docker's
+`MARIADB_DATABASE` when using the supplied compose file.
 
-- [ ] One MariaDB database `KN_Online` for LoginServer, GameServer, AdminPanel.
-- [ ] Migration folders: point projects at `sql/mysql/kn_online/`; retire the
-      draft `sql/mysql/ko_main/0001_account_schema_and_routines.sql`; move
-      `sql/mysql/ko_game/0001_admin_tables.sql` (`_ko_admin_*`) into the
-      `kn_online` sequence (after `KN_Online_03_data.sql`).
-- [ ] `DatabaseSettings`/sample INIs/`appsettings.json`: single connection
-      string (AdminPanel's dual strings collapse into one).
-- [ ] Port `ACCOUNT_LOGIN` + `ACCOUNT_PREMIUM` to MariaDB routines (below)
-      and align `MariaDbAccountRepository` with the *real* semantics.
+**M3 rewire completed 2026-10-23:**
+
+- [x] One configurable MariaDB database for LoginServer, AdminPanel, and
+      the future GameServer.
+- [x] Projects point at `sql/mysql/kn_online/`; the draft account
+      schema/routines were retired and `_ko_admin_*` moved to
+      `0004_admin_tables.sql`.
+- [x] Sample INI, AdminPanel appsettings, and Docker defaults collapsed to
+      one database setting/connection string.
+- [x] `ACCOUNT_LOGIN` + `ACCOUNT_PREMIUM` semantics implemented directly in
+      `MariaDbAccountRepository`; auto-register is opt-in via
+      `AUTO_REGISTER=1` (default off).
+- [ ] Remaining M3 work is GameServer-side: static game-data caches and
+      the remaining routines/repositories.
 
 ## Login/account procedures (real semantics)
 
 The repo C++ LogInServer calls `ACCOUNT_LOGIN` / `ACCOUNT_PREMIUM`
-(`LogInServer/DBProcess.cpp:89,105`) — our C# picked the right procs, but
-their assumed semantics were wrong. Real bodies (`procedures_tsql/`):
+(`LogInServer/DBProcess.cpp:89,105`). The C# repository now implements the
+real bodies (`procedures_tsql/`) directly:
 
 - **`ACCOUNT_LOGIN(@strAccountID varchar(21), @strPasswd varchar(28))`**
   - Unknown account → **auto-creates it** (`INSERT INTO TB_USER`) → `RETURN 1`
+  - **Rewrite policy:** unknown accounts return `NotFound` unless
+    `AUTO_REGISTER=1` is set in `[DATABASE]`; when enabled, C# inserts
+    `strAccountID`/`strPasswd` and returns `Success`. After a password
+    match, `strAuthority=255` returns `Banned` (the rule from
+    `MAIN_LOGIN`); a successful non-banned login clears `CURRENTUSER`.
   - Wrong password → `RETURN 3`
   - Match → `DELETE FROM CURRENTUSER` → `RETURN 1`
   - Passwords are stored/compared **in plaintext**. `HashPasswordString`
@@ -77,8 +95,9 @@ their assumed semantics were wrong. Real bodies (`procedures_tsql/`):
     — it belongs to the website side. Keep plaintext-compatible for existing
     accounts; any future hashing must migrate rows deliberately.
 - **`ACCOUNT_PREMIUM(@strAccountID char(20))`** → `RETURN` hours of premium
-  left, or `-1`. (T-SQL proc *return codes* don't exist in MariaDB — port as
-  `OUT` param or single-row result and adapt the repository.)
+  left, or `-1`. C# computes the equivalent
+  `TIMESTAMPDIFF(HOUR, NOW(), dtPremiumTime)` directly, so no MariaDB
+  routine or T-SQL-style return code is needed.
 - **`MAIN_LOGIN`** also exists (auto-register + ban check via
   `strAuthority=255`) but `EXEC`s `ACCOUNT_NATION_TRANSFER_CHECK`, which
   **does not exist in this DB** — it's broken/unused here. Ignore it for the

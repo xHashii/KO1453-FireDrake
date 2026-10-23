@@ -33,13 +33,11 @@ builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 
-var gameConnectionString = builder.Configuration.GetConnectionString("KoGame")
-    ?? throw new InvalidOperationException("ConnectionStrings:KoGame is missing.");
-var accountConnectionString = builder.Configuration.GetConnectionString("KoMain")
-    ?? throw new InvalidOperationException("ConnectionStrings:KoMain is missing.");
+var connectionString = builder.Configuration.GetConnectionString("GameDatabase")
+    ?? throw new InvalidOperationException("ConnectionStrings:GameDatabase is missing.");
 
 builder.Services.AddSingleton<ICharacterAdminRepository>(
-    _ => new CharacterAdminRepository(gameConnectionString, accountConnectionString));
+    _ => new CharacterAdminRepository(connectionString));
 builder.Services.AddSingleton(
     _ => new ItemSerialGenerator(builder.Configuration.GetValue("Admin:ServerNo", 1)));
 
@@ -58,8 +56,7 @@ app.UseAntiforgery();
 // ---- Auto-migration (same "no manual imports" rule as the game servers) ----
 if (builder.Configuration.GetValue("Admin:AutoMigrate", true))
 {
-    await RunMigratorAsync(accountConnectionString, "sql/ko_main");
-    await RunMigratorAsync(gameConnectionString, "sql/ko_game");
+    await RunMigratorAsync(connectionString, "sql/kn_online");
 }
 
 async Task RunMigratorAsync(string connectionString, string scriptsFolder)

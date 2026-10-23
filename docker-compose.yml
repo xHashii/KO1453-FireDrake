@@ -2,7 +2,7 @@
 #
 #   docker compose up -d
 #
-# Then just start LoginServer/GameServer: they create their databases and
+# Then just start LoginServer/GameServer: they create the configured database and
 # apply sql/mysql/** migrations automatically (AUTO_MIGRATE=1). There is NO
 # manual import step. Use HeidiSQL against localhost:3306 to browse.
 #
@@ -18,9 +18,11 @@ services:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-rootpass}
       MARIADB_USER: knight
       MARIADB_PASSWORD: ${MARIADB_PASSWORD:-changeme}
-      # The servers also CREATE DATABASE IF NOT EXISTS themselves;
-      # this just pre-creates the account DB on first boot.
-      MARIADB_DATABASE: KO_MAIN
+      # Must match DATABASE in LogInServer.ini and Database=... in the
+      # AdminPanel connection string: MariaDB's image grants the app user
+      # privileges on this database, and the servers create/use that same
+      # configured name on startup. You may rename all three together.
+      MARIADB_DATABASE: KN_Online
     ports:
       - "127.0.0.1:3306:3306"
     volumes:

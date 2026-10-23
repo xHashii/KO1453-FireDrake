@@ -34,8 +34,18 @@ public sealed class LoginServerSettings
 
     public int Port { get; private init; }
     public bool AllowOfflineStart { get; private init; }
+    public bool AutoMigrate { get; private init; } = true;
+    public string MigrationsPath { get; private init; } = "sql/kn_online";
+
+    /// <summary>
+    /// When true, a successful first login with an unknown account creates
+    /// that account. This was unconditional in the original ACCOUNT_LOGIN
+    /// procedure; the rewrite keeps it off unless explicitly enabled.
+    /// </summary>
+    public bool AutoRegister { get; private init; }
+
     public DatabaseSettings Database { get; private init; } =
-        new("127.0.0.1", 3306, "KO_MAIN", "username", "password");
+        new("127.0.0.1", 3306, "KN_Online", "username", "password");
     public string FtpUrl { get; private init; } = "ftp.yoursite.net";
     public string FtpPath { get; private init; } = "/";
     public List<ServerInfoEntry> Servers { get; private init; } = new();
@@ -52,13 +62,14 @@ public sealed class LoginServerSettings
             Port = ini.GetInt("SETTINGS", "PORT", 15100),
             AllowOfflineStart = ini.GetBool("SETTINGS", "ALLOW_OFFLINE_START", false),
             AutoMigrate = ini.GetBool("DATABASE", "AUTO_MIGRATE", true),
-            MigrationsPath = ini.GetString("DATABASE", "MIGRATIONS", "sql/ko_main"),
+            MigrationsPath = ini.GetString("DATABASE", "MIGRATIONS", "sql/kn_online"),
+            AutoRegister = ini.GetBool("DATABASE", "AUTO_REGISTER", false),
             FtpUrl = ini.GetString("DOWNLOAD", "URL", "ftp.yoursite.net"),
             FtpPath = ini.GetString("DOWNLOAD", "PATH", "/"),
             Database = new DatabaseSettings(
                 ini.GetString("DATABASE", "SERVER", "127.0.0.1"),
                 (uint)ini.GetInt("DATABASE", "PORT", 3306),
-                ini.GetString("DATABASE", "DATABASE", "KO_MAIN"),
+                ini.GetString("DATABASE", "DATABASE", "KN_Online"),
                 ini.GetString("DATABASE", "UID", "username"),
                 ini.GetString("DATABASE", "PWD", "password")),
             NewsContent = BuildNews(ini),

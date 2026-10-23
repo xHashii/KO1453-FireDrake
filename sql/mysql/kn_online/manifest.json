@@ -2,10 +2,10 @@
   "database": "KN_Online",
   "source": "1453db.sql",
   "input_encoding": "utf-16",
-  "schema_file": "KN_Online_01_schema.sql",
+  "schema_file": "0001_schema.sql",
   "data_files": [
-    "KN_Online_02_data.sql",
-    "KN_Online_03_data.sql"
+    "0002_data.sql",
+    "0003_data.sql"
   ],
   "statements_converted": 140876,
   "statements_skipped": 7919,

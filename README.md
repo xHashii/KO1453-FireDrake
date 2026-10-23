@@ -17,7 +17,7 @@ Full plan, milestone list and the audit of the original codebase:
 | `src/` | The C# rewrite (see below) |
 | `KnightOnline.Net.sln` | C# solution |
 | `tests/KnightOnline.Verification` | Dependency-free console harness that checks the C# wire protocol byte-for-byte against the original C |
-| `sql/mysql/` | MariaDB schema/procedures (currently a draft of the account DB) |
+| `sql/mysql/` | Converted MariaDB migrations for the single configured game database, plus original T-SQL routines awaiting port |
 | `docs/` | Rewrite plan and notes |
 
 ```text
@@ -38,8 +38,12 @@ src/
   a real client — that's the next step._
 - ✅ **Admin panel v1**: dashboard, character search, visual inventory/warehouse
   editor, give-item-by-letter, audit log + backups (`src/KnightOnline.AdminPanel`).
-- ⏳ Waiting on: the compressed SQL Server export (attached here by the owner),
-  `map/*.smd`, `Quests/*.Lua` (+ `*.evt`), original `*.ini` configs.
+- ✅ **Database conversion (M3, LoginServer/AdminPanel side)**: the real
+  single-database SQL Server export has been converted to MariaDB migrations;
+  the target database name comes from config, and legacy auto-register is
+  opt-in (`AUTO_REGISTER=1`, default off).
+- ⏳ Waiting on: a local .NET build + live client test, `map/*.smd`,
+  `Quests/*.Lua` (+ `*.evt`), original `*.ini` configs.
 - ⬜ GameServer (39k lines of C++) and the merged AI server.
 
 ## Building
@@ -55,9 +59,12 @@ dotnet run --project tests/KnightOnline.Verification   # protocol self-checks
 ## Trying the LoginServer
 
 **No manual database import.** MariaDB via one Docker command; the server
-creates the database and applies `sql/mysql/ko_main/*.sql` on startup
-(`AUTO_MIGRATE=1`). Full database story (incl. converting your SQL Server
-dump): **[docs/DATABASE.md](docs/DATABASE.md)**.
+creates the database named by `[DATABASE] DATABASE` in `LogInServer.ini`
+and applies the migrations copied from `sql/mysql/kn_online/` on startup
+(`AUTO_MIGRATE=1`). The old MSSQL name `KN_Online` is only the sample
+default—rename it if the same name is used in Docker/AdminPanel config.
+Full database story (incl. converting your SQL Server dump):
+**[docs/DATABASE.md](docs/DATABASE.md)**.
 
 ```bash
 docker compose up -d                                   # MariaDB on localhost:3306
@@ -65,10 +72,10 @@ cp src/KnightOnline.LoginServer/LogInServer.sample.ini LogInServer.ini   # then 
 dotnet run --project src/KnightOnline.LoginServer
 ```
 
-Point your 1453 client's login at port **15100**. Test account (optional):
-uncomment the `INSERT INTO TB_USER ... ('test', 'test')` at the bottom of
-`sql/mysql/ko_main/0001_account_schema_and_routines.sql` *before first run*,
-or add the row in HeidiSQL afterwards. No database at all yet? Set
+Point your 1453 client's login at port **15100**. Add a `TB_USER` row in
+HeidiSQL for a test account, or temporarily set `AUTO_REGISTER=1` in
+`LogInServer.ini` to restore the original first-login account creation
+(default is off). No database at all yet? Set
 `ALLOW_OFFLINE_START=1` — the server runs and talks to the client, logins
 just fail with AUTH_ERROR.
 
@@ -81,7 +88,9 @@ dotnet run --project src/KnightOnline.AdminPanel    # http://localhost:5100
 
 Sign in with the credentials in `src/KnightOnline.AdminPanel/appsettings.json`
 (default `admin` / `changeme` — change them, or set `KO_ADMIN_PASSWORD`).
-Design + safety rules: [docs/ADMIN_PANEL.md](docs/ADMIN_PANEL.md).
+It uses the same single configured database via
+`ConnectionStrings:GameDatabase`. Design + safety rules:
+[docs/ADMIN_PANEL.md](docs/ADMIN_PANEL.md).
 
 ## Porting rules
 

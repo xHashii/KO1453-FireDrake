@@ -101,7 +101,7 @@ Key facts driving the rewrite:
 | `TRACE`/console prints | Serilog (console + rolling file) |
 | `ConsoleInputThread` GM commands | Same console commands, later maybe an admin API |
 
-## 5. Database conversion (SQL Server → MySQL/MariaDB) — starts when DB files arrive
+## 5. Database conversion (SQL Server → MySQL/MariaDB) — received and converted
 
 1. Need from owner: a `.bak` **or** (much better) full `.sql` script export (schema **+ data**)
    of both DBs from SSMS, or direct `.sql` dumps per table. Stored-procedure bodies included.
@@ -127,9 +127,10 @@ Key facts driving the rewrite:
   first `dotnet` build still to be run on a machine with the SDK).
 - **M2 — LoginServer end-to-end** ✅ code / ⏳ client test: all 7 `LS_*` opcodes ported
   incl. news rendering, server-list cache and the crypto handshake; MariaDB account
-  repository + draft `KO_MAIN` schema/procedures (`sql/mysql/ko_main/`) so a
-  real 1453 client can be pointed at it today. Not yet verified against a live client.
-- **M3 — Data layer**: MySQL schema converted; ~40 game-data tables load into cache at startup
+  repository now implements the real single-database login/premium semantics
+  so a real 1453 client can be pointed at it once built locally. Not yet
+  verified against a live client.
+- **M3 — Data layer** ⏳ in progress: real MSSQL export converted to MariaDB and LoginServer/AdminPanel rewired to one configurable database; ~40 game-data tables load into cache at startup
   (items, magic 1–9, NPCs, drops, quests, zones…); account/char/USERDATA CRUD.
 - **M4 — GameServer vertical slice**: game login, character CRUD, nation select,
   enter world (`WIZ_MYINFO`), movement/rotation, region user in/out, chat, time/weather.
@@ -151,7 +152,8 @@ server should build and, from M2 on, talk to a real client.
 ## 7. Main risks
 
 - **Stored procedures** hide real game logic (char creation, king elections, mail) that only
-  exists in the DB — cannot finish M3/M6 without the DB export.
+  exists in the DB — the export has now been received, but each routine still
+  needs a deliberate MariaDB/C# port before M3/M6 can finish.
 - **Blobs**: one wrong offset in `strItem` corrupts inventories. Dedicated (de)serializers + tests.
 - **`CUser` god object + `g_pMain`**: behavior (incl. bugs the client tolerates) must be
   preserved while restructuring — port first, refactor second.
@@ -162,8 +164,9 @@ server should build and, from M2 on, talk to a real client.
 
 ## 8. Files needed from the owner
 
-1. **Databases**: `.sql` script export (schema + data + procedures) of `KO_MAIN` and `KO_GAME`
-   from SSMS — *not* just `.mdf/.ldf` if avoidable.
+1. **Databases**: ✅ received — one `.sql` script export (schema + data +
+   procedures) of the combined source database named `KN_Online`, converted
+   under `sql/mysql/kn_online/`.
 2. **Maps**: the whole `map/` folder (`*.smd`).
 3. **Quests**: the whole `Quests/` folder (`*.Lua`) and any `*.evt` / `*.aievt` files.
 4. **Configs**: `GameServer.ini`, `LogInServer.ini`, AIServer ini (sanitized passwords OK).

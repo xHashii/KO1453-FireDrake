@@ -1,4 +1,4 @@
-USE `KN_Online`;
+-- Target database: chosen by server config / the importing connection (not by this file).
 SET FOREIGN_KEY_CHECKS=0;
 SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';
 

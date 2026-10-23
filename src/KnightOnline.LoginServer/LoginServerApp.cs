@@ -1,4 +1,5 @@
 using KnightOnline.Database;
+using KnightOnline.Database.Migrations;
 using KnightOnline.Shared;
 using KnightOnline.Shared.Diagnostics;
 using KnightOnline.Shared.Network;
@@ -43,15 +44,16 @@ public sealed class LoginServerApp
     {
         // Repository creation itself doesn't connect; connectivity is proven
         // when the version list is loaded in RunAsync, mirroring Startup().
-        return new MariaDbAccountRepository(settings.Database);
+        return new MariaDbAccountRepository(settings.Database, settings.AutoRegister);
     }
 
     public async Task RunAsync(CancellationToken shutdownToken)
     {
         OpenUserLog();
 
-        // No manual imports: create the account DB if needed and apply any
-        // pending scripts from sql/ko_main (see docs/DATABASE.md).
+        // No manual imports: create the configured database if needed and
+        // apply any pending scripts from the configured migrations folder
+        // (default sql/kn_online; see docs/DATABASE.md).
         if (_settings.AutoMigrate)
         {
             try
@@ -74,7 +76,7 @@ public sealed class LoginServerApp
             // has been converted - logins then return AUTH_ERROR.
             if (!_settings.AllowOfflineStart)
                 throw new InvalidOperationException(
-                    "Could not load the version list from the account database. " +
+                    "Could not load the version list from the configured database. " +
                     "Check [DATABASE] in LogInServer.ini (or set ALLOW_OFFLINE_START=1).");
 
             KoLog.Warn("Starting WITHOUT a database connection (ALLOW_OFFLINE_START=1). Login attempts will fail.");

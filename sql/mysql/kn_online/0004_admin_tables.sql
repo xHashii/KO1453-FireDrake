@@ -1,5 +1,6 @@
+-- Target database: chosen by server config / the importing connection (not by this file).
 -- ============================================================================
--- KO_GAME migration 0001 - AdminPanel support tables
+-- Migration 0004 - AdminPanel support tables
 -- (Applied automatically by DatabaseMigrator; see docs/DATABASE.md. The game
 -- server itself never reads these tables; they belong to the GM tooling.)
 -- ============================================================================

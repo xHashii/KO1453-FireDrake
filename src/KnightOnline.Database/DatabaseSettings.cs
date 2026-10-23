@@ -3,9 +3,12 @@ using MySqlConnector;
 namespace KnightOnline.Database;
 
 /// <summary>
-/// Connection settings for one MariaDB database. KO uses two databases:
-/// the account DB (ODBC DSN "KO_MAIN") and the game DB (DSN "KO_GAME",
-/// ) - in the originals. The C# port takes explicit settings instead of DSNs.
+/// Connection settings for the single MariaDB database used by the C# servers.
+/// The received MSSQL database was named KN_Online because the original
+/// C++ servers reached it through ODBC, but that name is not baked into the
+/// rewrite: <see cref="Database"/> comes from server config and can be any
+/// valid MariaDB database name. Migration SQL deliberately contains no
+/// CREATE DATABASE / USE statement.
 /// </summary>
 public sealed record DatabaseSettings(
     string Server,

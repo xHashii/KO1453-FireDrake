@@ -1,14 +1,15 @@
 # Database: getting the dump across, converting it, and never importing manually
 
-> **Status 2026-10-23: dump received and converted.** `1453db.sql` arrived
-> via `db-drop` (240 MB → 3.5 MB zip), was converted and verified statement-
-> for-statement, and the sanitized output is committed under
-> `sql/mysql/kn_online/`. The transfer sections below are kept as the
-> runbook for future dumps. What the real schema changed (single
-> `KN_Online` DB, no item-expiration columns, real login-proc semantics, …)
-> is documented in **[DB_SCHEMA_NOTES.md](DB_SCHEMA_NOTES.md)** — including
-> the M3 single-database rewire checklist. The `db-drop` branch can now be
-> deleted (`git push origin --delete db-drop`).
+> **Status 2026-10-23: dump received, converted, and wired in.**
+> `1453db.sql` arrived via `db-drop` (240 MB → 3.5 MB zip), was converted
+> and verified statement-for-statement, and the sanitized output is
+> committed under `sql/mysql/kn_online/`. The transfer sections below are
+> kept as the runbook for future dumps. What the real schema changed (one
+> source database—named `KN_Online` in MSSQL—imported into a configurable
+> MariaDB database name; no item-expiration columns; real login semantics)
+> is documented in **[DB_SCHEMA_NOTES.md](DB_SCHEMA_NOTES.md)**. The
+> single-database wiring is done. The `db-drop` branch can now be deleted
+> (`git push origin --delete db-drop`).
 
 ## TL;DR
 
@@ -24,9 +25,9 @@
    payload outside the tracked rewrite files, and run the converter. **I will
    not merge `db-drop` into `arena/a8daa4cb-ko1453-firedrake`.** Anything
    committed back to the rewrite branch must exclude account/character rows.
-4. Once the real converted migrations are ready, there is **no manual import
-   step**: `docker compose up -d` starts MariaDB, and the servers create and
-   upgrade their databases on boot.
+4. The real converted migrations are committed, and there is **no manual
+   import step**: `docker compose up -d` starts MariaDB, and the servers
+   create and upgrade the configured database on boot.
 
 ---
 
@@ -122,8 +123,8 @@ I will:
 2. Extract the ZIP (or re-join and hash-verify the split parts) into a
    sandbox cache outside the tracked project files.
 3. Inspect encoding and database boundaries (`USE ...`, `CREATE DATABASE`,
-   object prefixes) so `KO_MAIN` and `KO_GAME` are not accidentally treated
-   as one database.
+   object prefixes) so separate source databases, if a future export
+   contains more than one, are not accidentally treated as one.
 4. Run `tools/mssql_to_mariadb.py` and inspect `manifest.json` plus
    `procedures_report.md`.
 5. Commit only reviewable, migration-safe outputs to the rewrite branch. For
@@ -133,14 +134,17 @@ I will:
 
 ## 3. Converting locally instead (optional)
 
-You can also run the converter on your own machine. Separate exports per
-database are easiest. For output that is safe to share/commit, exclude user
-data:
+You can also run the converter on your own machine. The received export
+is one combined account+game database. For output that is safe to
+share/commit, exclude user data:
 
 ```powershell
-python tools\mssql_to_mariadb.py "C:\path\to\KO_MAIN.sql" --database KO_MAIN -o "$env:TEMP\ko_main_converted" --exclude-user-data
-python tools\mssql_to_mariadb.py "C:\path\to\KO_GAME.sql" --database KO_GAME -o "$env:TEMP\ko_game_converted" --exclude-user-data
+python tools\mssql_to_mariadb.py "C:\path\to\1453db.sql" --database KN_Online -o "$env:TEMP\kn_online_converted" --exclude-user-data
 ```
+
+`--database` only labels converter output files and the manifest (source
+provenance). Generated SQL contains no `CREATE DATABASE` / `USE`, so the
+importing connection or server config chooses the target MariaDB name.
 
 The converter streams the file, so a 120 MB input is fine, including UTF-16
 SSMS exports. Per database it produces:
@@ -158,10 +162,10 @@ characters**, the converter can be run without `--exclude-user-data`, but keep
 that output outside the repository and never commit the generated player-data
 SQL.
 
-If the only export is one combined file for multiple databases, do not guess
-which `--database` value applies to the whole file. Send it through the
-selected route above or generate separate per-database exports; the combined
-file needs its database sections identified/split first.
+If a future export contains sections from more than one MSSQL database,
+do not guess which `--database` label applies to the whole file; identify
+and split the database sections first. (The received `1453db.sql` is one
+MSSQL database combining account and game tables, so no split was needed.)
 
 ## 4. No manual import: how the servers use the DB
 
@@ -172,26 +176,32 @@ dotnet run --project src/KnightOnline.LoginServer
 
 - `docker-compose.yml` ships in the repo root (user `knight` / `changeme`,
   matching the sample settings).
-- Source migrations live under `sql/mysql/ko_main/` and
-  `sql/mysql/ko_game/`; project files copy them beside the executables as
-  `sql/ko_main/` / `sql/ko_game/`.
+- Source migrations live under `sql/mysql/kn_online/`; project files copy
+  them beside the executables as `sql/kn_online/`.
+- The target database name comes from `LogInServer.ini`
+  (`[DATABASE] DATABASE`) or the AdminPanel `GameDatabase` connection
+  string. `KN_Online` is the sample default, not baked into the SQL. If
+  renamed, keep Docker's `MARIADB_DATABASE` in sync.
 - On startup the servers run **DatabaseMigrator**: it creates the database if
   missing, then applies pending `*.sql` files in order and records filename +
   SHA-256 checksum in `_ko_migrations`.
-- The Admin Panel also auto-migrates both databases on boot.
-- Converted dump files should be reviewed, split/renamed into ordered
-  migration files, and only then placed in the migration folders. From that
-  point the workflow is: add `000N_*.sql`, restart the server, done. HeidiSQL
-  remains a browsing/editing tool, never a required import step.
+- The Admin Panel also auto-migrates the same configured database on boot.
+- The received dump has already been reviewed and committed as
+  `0001_schema.sql`, `0002_data.sql`, `0003_data.sql`, and
+  `0004_admin_tables.sql`. From here the workflow is: add the next
+  `000N_*.sql`, restart the server, done. HeidiSQL remains a
+  browsing/editing tool, never a required import step.
 
 ## 5. What still needs a human (that's me, next milestone)
 
-- **Stored procedures**: T-SQL bodies (`LOAD_USER_DATA`, `CREATE_NEW_CHAR`,
-  `KING_ELECTION_PROC`, …) do not translate mechanically. The converter
-  extracts them; I then port each one either to a MariaDB procedure or—where
-  it hides game logic—into C# repository code.
+- **Stored procedures**: `ACCOUNT_LOGIN`/`ACCOUNT_PREMIUM` semantics are
+  now implemented in `MariaDbAccountRepository`. Remaining T-SQL bodies
+  (`LOAD_USER_DATA`, `CREATE_NEW_CHAR`, king/mail/quest logic, …) do not
+  translate mechanically; each will become a MariaDB procedure or—where it
+  hides game logic—C# repository code.
 - **Blob columns** (`USERDATA.strItem` etc.): format already reverse-engineered
   and implemented in `KnightOnline.Database/Items/ItemBlobs.cs`.
-- **Real-schema confirmation**: until the dump arrives, the Admin Panel editor
-  targets the standard KO schema behind runtime `INFORMATION_SCHEMA`
-  probing. The received schema/procs will replace those assumptions.
+- **Real-schema confirmation**: done for the LoginServer/AdminPanel data
+  paths. GameServer caches/repositories and the remaining routines are the
+  next porting work; the panel still probes `INFORMATION_SCHEMA` for
+  optional columns.

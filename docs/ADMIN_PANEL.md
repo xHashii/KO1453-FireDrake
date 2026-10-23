@@ -61,10 +61,11 @@ Community GM-panel designs also stress searchable/paged item pickers and
 - ✅ Module A (character & inventory editor) implemented: search, equipment /
   inventory / cospre+magic-bag / warehouse grids, slot edit, move/swap,
   add item with serial generation, give-by-letter, online-protection,
-  optimistic concurrency, audit log + backups (`sql/mysql/ko_game/0001_admin_tables.sql`).
-- ⏳ First live test needs the converted `USERDATA`/`ITEM` tables from the
-  owner's database export (expected as a compressed attachment). Until then
-  the repository probes `INFORMATION_SCHEMA` and only uses columns that exist.
+  optimistic concurrency, audit log + backups (`sql/mysql/kn_online/0004_admin_tables.sql`).
+- ⏳ First live test still needs a local .NET build plus MariaDB/client
+  UAT. The converted `USERDATA`/`ITEM` schema and static data are now
+  committed, and the repository continues to probe `INFORMATION_SCHEMA`
+  for optional columns.
 
 ## Architecture options (recorded)
 
