@@ -1,0 +1,22 @@
+CREATE PROCEDURE [dbo].[DELETE_ACCOUNT]
+@AccountID char(21)
+AS
+
+DECLARE @CharID1 char(21)
+DECLARE @CharID2 char(21)
+DECLARE @CharID3 char(21)
+
+SELECT @CharID1 = strCharID1, @CharID2 = strCharID2, @CharID3 = strCharID3 FROM ACCOUNT_CHAR WHERE strAccountID = @AccountID
+
+IF @CharID1 IS NOT NULL
+	EXEC DELETE_USER @CharID1
+IF @CharID2 IS NOT NULL
+	EXEC DELETE_USER @CharID2
+IF @CharID3 IS NOT NULL
+	EXEC DELETE_USER @CharID3
+
+DELETE FROM ACCOUNT_CHAR WHERE strAccountID = @AccountID
+DELETE FROM TB_USER WHERE strAccountID = @AccountID
+DELETE FROM WAREHOUSE WHERE strAccountID = @AccountID
+
+PRINT RTRIM(LTRIM(@AccountID)) + ' Adli Hesabin Tüm Verileri Silindi.'

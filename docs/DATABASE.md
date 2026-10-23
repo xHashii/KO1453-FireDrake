@@ -1,5 +1,15 @@
 # Database: getting the dump across, converting it, and never importing manually
 
+> **Status 2026-10-23: dump received and converted.** `1453db.sql` arrived
+> via `db-drop` (240 MB → 3.5 MB zip), was converted and verified statement-
+> for-statement, and the sanitized output is committed under
+> `sql/mysql/kn_online/`. The transfer sections below are kept as the
+> runbook for future dumps. What the real schema changed (single
+> `KN_Online` DB, no item-expiration columns, real login-proc semantics, …)
+> is documented in **[DB_SCHEMA_NOTES.md](DB_SCHEMA_NOTES.md)** — including
+> the M3 single-database rewire checklist. The `db-drop` branch can now be
+> deleted (`git push origin --delete db-drop`).
+
 ## TL;DR
 
 1. **Do not paste the ~120 MB SQL dump into chat, and do not commit the raw

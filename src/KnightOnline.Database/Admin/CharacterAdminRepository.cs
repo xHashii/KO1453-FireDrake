@@ -13,8 +13,11 @@ namespace KnightOnline.Database.Admin;
 /// can vary between installs. The repository therefore probes
 /// INFORMATION_SCHEMA once and only uses columns that exist (missing ones
 /// surface in CharacterDetails.MissingColumns and become read-only in the
-/// UI). The three item blobs (strItem/strSerial/strItemTime) are mandatory -
-/// without them there is nothing to edit.
+/// UI). strItem/strSerial are mandatory - without them there is nothing to
+/// edit. strItemTime (and WAREHOUSE.WarehouseDataTime) are OPTIONAL: the
+/// real KN_Online dump (Oct 2026) has neither column - it predates item
+/// expiration support - so expirations simply read as 0 and are not written
+/// back when the columns are absent.
 /// </summary>
 public sealed class CharacterAdminRepository : ICharacterAdminRepository
 {
@@ -115,6 +118,11 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
     }
 
     private bool Has(string column) => _userDataColumns?.Contains(column) == true;
+
+    // Item-expiration blobs: present in newer schemas, absent in the real
+    // KN_Online dump. Everything expiration-shaped is conditional on these.
+    private bool HasItemTime => Has("strItemTime");
+    private bool HasWarehouseTime => _warehouseColumns?.Contains("WarehouseDataTime") == true;
 
     private string ExistingColumns(IEnumerable<string> wishlist)
         => string.Join(", ", wishlist.Where(Has).Select(c => $"`{c}`"));
@@ -235,6 +243,18 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
         return reader.GetValue(ordinal) as byte[] ?? Array.Empty<byte>();
     }
 
+    /// <summary>Like <see cref="ReadBlob"/>, but returns empty when the SELECT
+    /// did not include the column (schema lacks it) instead of throwing.</summary>
+    private static byte[] ReadOptionalBlob(MySqlDataReader reader, string column)
+    {
+        for (var i = 0; i < reader.FieldCount; i++)
+        {
+            if (string.Equals(reader.GetName(i), column, StringComparison.OrdinalIgnoreCase))
+                return ReadBlob(reader, column);
+        }
+        return Array.Empty<byte>();
+    }
+
     /// <summary>ACCOUNT_CHAR maps an account to its (up to) 3 character names.</summary>
     private async Task<Dictionary<string, string>> ResolveAccountsAsync(MySqlConnection gameConnection, IReadOnlyCollection<string> names, CancellationToken cancellationToken)
     {
@@ -308,7 +328,7 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
     public async Task<CharacterDetails?> GetCharacterAsync(string name, CancellationToken cancellationToken = default)
     {
         await ProbeAsync(cancellationToken).ConfigureAwait(false);
-        if (_userDataColumns!.Count == 0 || !Has("strItem") || !Has("strSerial") || !Has("strItemTime"))
+        if (_userDataColumns!.Count == 0 || !Has("strItem") || !Has("strSerial"))
             return null;
 
         var columns = ExistingColumns(UserDataWishList);
@@ -329,7 +349,7 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
 
             itemBlob = ReadBlob(reader, "strItem");
             serialBlob = ReadBlob(reader, "strSerial");
-            itemTimeBlob = ReadBlob(reader, "strItemTime");
+            itemTimeBlob = ReadOptionalBlob(reader, "strItemTime");
 
             details = new CharacterDetails
             {
@@ -375,7 +395,9 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
         {
             await using var command = connection.CreateCommand();
             command.CommandText =
-                "SELECT `nMoney`, `WarehouseData`, `strSerial`, `WarehouseDataTime` FROM `WAREHOUSE` WHERE `strAccountID` = @account";
+                "SELECT `nMoney`, `WarehouseData`, `strSerial`" +
+                (HasWarehouseTime ? ", `WarehouseDataTime`" : "") +
+                " FROM `WAREHOUSE` WHERE `strAccountID` = @account";
             command.Parameters.AddWithValue("@account", accountId);
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -384,7 +406,7 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
                 bankCoins = ReadLong(reader, "nMoney");
                 warehouseItems = ReadBlob(reader, "WarehouseData");
                 warehouseSerials = ReadBlob(reader, "strSerial");
-                warehouseTimes = ReadBlob(reader, "WarehouseDataTime");
+                warehouseTimes = ReadOptionalBlob(reader, "WarehouseDataTime");
             }
         }
 
@@ -438,7 +460,9 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
         await using (var command = connection.CreateCommand())
         {
             command.Transaction = transaction;
-            command.CommandText = "SELECT `strItem`, `strSerial`, `strItemTime` FROM `USERDATA` WHERE `strUserID` = @name FOR UPDATE";
+            command.CommandText = "SELECT `strItem`, `strSerial`" +
+                (HasItemTime ? ", `strItemTime`" : "") +
+                " FROM `USERDATA` WHERE `strUserID` = @name FOR UPDATE";
             command.Parameters.AddWithValue("@name", character.Name);
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -447,14 +471,16 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
 
             oldItems = ReadBlob(reader, "strItem");
             oldSerials = ReadBlob(reader, "strSerial");
-            oldTimes = ReadBlob(reader, "strItemTime");
+            oldTimes = ReadOptionalBlob(reader, "strItemTime");
         }
 
         if (character.AccountId is not null && _warehouseColumns is { Count: > 0 } && _warehouseColumns.Contains("WarehouseData"))
         {
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = "SELECT `WarehouseData`, `strSerial`, `WarehouseDataTime` FROM `WAREHOUSE` WHERE `strAccountID` = @account FOR UPDATE";
+            command.CommandText = "SELECT `WarehouseData`, `strSerial`" +
+                (HasWarehouseTime ? ", `WarehouseDataTime`" : "") +
+                " FROM `WAREHOUSE` WHERE `strAccountID` = @account FOR UPDATE";
             command.Parameters.AddWithValue("@account", character.AccountId);
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -462,7 +488,7 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
             {
                 oldWItems = ReadBlob(reader, "WarehouseData");
                 oldWSerials = ReadBlob(reader, "strSerial");
-                oldWTimes = ReadBlob(reader, "WarehouseDataTime");
+                oldWTimes = ReadOptionalBlob(reader, "WarehouseDataTime");
             }
         }
 
@@ -494,10 +520,14 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
         await using (var update = connection.CreateCommand())
         {
             update.Transaction = transaction;
-            var sets = new List<string> { "`strItem` = @items", "`strSerial` = @serials", "`strItemTime` = @itemTimes" };
+            var sets = new List<string> { "`strItem` = @items", "`strSerial` = @serials" };
             update.Parameters.AddWithValue("@items", items);
             update.Parameters.AddWithValue("@serials", serials);
-            update.Parameters.AddWithValue("@itemTimes", itemTimes);
+            if (HasItemTime)
+            {
+                sets.Add("`strItemTime` = @itemTimes");
+                update.Parameters.AddWithValue("@itemTimes", itemTimes);
+            }
 
             void AddScalar(string column, object value)
             {
@@ -532,11 +562,14 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
             await using var updateWarehouse = connection.CreateCommand();
             updateWarehouse.Transaction = transaction;
             updateWarehouse.CommandText =
-                "UPDATE `WAREHOUSE` SET `nMoney` = @money, `WarehouseData` = @items, `strSerial` = @serials, `WarehouseDataTime` = @times WHERE `strAccountID` = @account";
+                "UPDATE `WAREHOUSE` SET `nMoney` = @money, `WarehouseData` = @items, `strSerial` = @serials" +
+                (HasWarehouseTime ? ", `WarehouseDataTime` = @times" : "") +
+                " WHERE `strAccountID` = @account";
             updateWarehouse.Parameters.AddWithValue("@money", character.BankCoins);
             updateWarehouse.Parameters.AddWithValue("@items", wItems);
             updateWarehouse.Parameters.AddWithValue("@serials", wSerials);
-            updateWarehouse.Parameters.AddWithValue("@times", wTimes);
+            if (HasWarehouseTime)
+                updateWarehouse.Parameters.AddWithValue("@times", wTimes);
             updateWarehouse.Parameters.AddWithValue("@account", character.AccountId);
             await updateWarehouse.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -555,7 +588,12 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-        var newToken = BlobToken(items, serials, itemTimes, wItems, wSerials, wTimes);
+        // The returned token must describe what is actually stored: on schemas
+        // without expiration columns the stored "blobs" are empty, matching
+        // what the next load/save will read back.
+        var storedItemTimes = HasItemTime ? itemTimes : Array.Empty<byte>();
+        var storedWTimes = HasWarehouseTime ? wTimes : Array.Empty<byte>();
+        var newToken = BlobToken(items, serials, storedItemTimes, wItems, wSerials, storedWTimes);
         KoLog.Info($"[admin] {adminUser} saved character {character.Name}");
         return newToken;
     }
