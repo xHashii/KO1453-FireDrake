@@ -224,9 +224,17 @@ single file over 100 MB (and warns over 50 MB).
   → Docker Desktop isn't running. Start it from the Start menu, wait for
   the tray whale to settle, verify with `docker ps`, then re-run
   `docker compose up -d`.
-- **Docker: port 3306 already in use** → a local MySQL/MariaDB service is
-  running. Stop it, or change the compose port mapping *and* the ports in
-  `LogInServer.ini` + `appsettings.json`.
+- **Docker: `ports are not available ... 127.0.0.1:3306 ... forbidden by
+  its access permissions`** → Windows won't let Docker bind host port 3306.
+  Find the owner with `netstat -ano | findstr :3306` (then
+  `tasklist /FI "PID eq <pid>"`). If it's a local MySQL/MariaDB/XAMPP
+  service, stop it and re-run `docker compose up -d`. If nothing is
+  listening, check Windows reserved ranges with
+  `netsh interface ipv4 show excludedportrange protocol=tcp`; if 3306 is
+  inside one, remap instead: in `docker-compose.yml` change
+  `"127.0.0.1:3306:3306"` to `"127.0.0.1:3307:3306"` (host port first), then
+  set the same host port in `LogInServer.ini` (`PORT=3307`), the
+  AdminPanel `GameDatabase` connection string (`Port=3307`), and HeidiSQL.
 - **Panel opens but shows DB offline** → same DB checks; also confirm the
   database name matches in all three places (§5).
 - **Migration checksum error after a pull** → an already-applied script
