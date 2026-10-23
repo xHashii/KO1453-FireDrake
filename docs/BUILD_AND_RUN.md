@@ -18,7 +18,7 @@ AdminPanel website) and running it locally against MariaDB. Windows-oriented
 |---|---|---|
 | **Git** | get the code | All C# work lives on branch **`arena/a8daa4cb-ko1453-firedrake`** — `main` only has the original C++ |
 | **.NET 10 SDK** | build everything | <https://dotnet.microsoft.com/download/dotnet/10.0> — verify with `dotnet --version` → `10.x` |
-| **Visual Studio 2026** (optional) | IDE build/debug | ⚠️ **Visual Studio 2022 cannot target `net10.0`** (its ceiling is net9.0, even with the .NET 10 SDK installed). Use VS 2026 Community (free) with the *“.NET desktop development”* + *“ASP.NET and web development”* workloads — or keep VS 2022 as a text editor and build/run from the CLI (below). VS Code + C# Dev Kit also works |
+| **VS 2022 as editor + dotnet CLI** (chosen) | edit + build/run | ⚠️ **Visual Studio 2022 cannot target `net10.0`** (its ceiling is net9.0, even with the .NET 10 SDK installed), so do not use VS 2022's Build/F5 for these projects. Use VS 2022 only as an editor and build/run with the `dotnet` commands below. VS 2026 Community or VS Code + C# Dev Kit also work if you later want IDE debugging |
 | **Docker Desktop** | MariaDB via one command | Or your own MariaDB 11.x — then match host/port/user in the configs |
 | **HeidiSQL** (optional) | browse/edit the DB | e.g. creating test accounts |
 
@@ -44,8 +44,10 @@ CLI (works everywhere):
 dotnet build KnightOnline.Net.sln -c Release
 ```
 
-Visual Studio 2026: open `KnightOnline.Net.sln` → **Build → Build Solution**
-(`Ctrl+Shift+B`).
+VS 2022 note: don't use Build Solution/F5 for this `net10.0` solution —
+build and run from the CLI commands in this guide. (If you later install
+VS 2026, opening `KnightOnline.Net.sln` and pressing `Ctrl+Shift+B` also
+works.)
 
 | Project | Type | What it is |
 |---|---|---|
@@ -183,11 +185,20 @@ See `data/README.md`. Nothing in C# reads them yet — they're needed for
 GameServer zone loading (M4+) and Lua quests (M8); having them in place now
 unblocks that work (SMD parser, height/collision, warps, spawn events).
 
-`data/` is currently **gitignored** (files stay on your machine) until we
-pick how they travel to the repo — commit directly, Git LFS, or a throwaway
-ZIP branch like the database. Before choosing: check the total size of your
-`map` folder and the largest single file (GitHub hard-blocks any single
-file over 100 MB).
+**These assets are committed directly on this branch** (owner decision
+2026-10-23), so after copying the files into the folders above, push them
+on `arena/a8daa4cb-ko1453-firedrake` for the GameServer work:
+
+```powershell
+git checkout arena/a8daa4cb-ko1453-firedrake
+git status
+git add data
+git commit -m "Add server runtime assets (maps/quests/events)"
+git push origin arena/a8daa4cb-ko1453-firedrake
+```
+
+Before pushing, check the largest single file: GitHub hard-blocks any
+single file over 100 MB (and warns over 50 MB).
 
 ## 9. Ports at a glance
 

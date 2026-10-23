@@ -22,11 +22,11 @@ Notes:
 - Nothing in the C# servers reads these yet — they're inputs for the
   GameServer milestones (zone loading, heights/collision, warps, spawns)
   and the Lua quest engine.
-- Everything under `data/` is **gitignored except this README**, so files
-  you drop here stay on your machine until we decide how they travel
-  (direct commit vs Git LFS vs a throwaway ZIP branch like the DB dump).
-  Before deciding, it's useful to know: total size of the `map` folder
-  and the size of the largest single `.smd` (GitHub blocks single files
-  over 100 MB).
+- These assets are **committed directly on
+  `arena/a8daa4cb-ko1453-firedrake`** (owner decision 2026-10-23). After
+  dropping files in, run `git status`, then `git add data`, commit, and
+  push this branch so the GameServer work can use them. Before pushing,
+  check the largest single `.smd`: GitHub blocks single files over 100 MB
+  and warns over 50 MB.
 - The build will later copy from here next to the GameServer executable
   (same pattern as the `sql/kn_online` migrations).

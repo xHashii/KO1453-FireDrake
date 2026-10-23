@@ -49,8 +49,9 @@ src/
 ## Building
 
 Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
-In Visual Studio that means **VS 2026** — VS 2022 cannot target `net10.0`
-(CLI builds work anywhere). Full step-by-step (build, DB, LoginServer,
+**VS 2022 cannot target `net10.0`** — the chosen local workflow is
+VS 2022 as an editor plus dotnet CLI builds (VS 2026/VS Code also work).
+Full step-by-step (build, DB, LoginServer,
 AdminPanel, where `map/*.smd` / `Quests/*.Lua` go):
 **[docs/BUILD_AND_RUN.md](docs/BUILD_AND_RUN.md)**.
 
