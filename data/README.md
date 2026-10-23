@@ -30,3 +30,44 @@ Notes:
   and warns over 50 MB.
 - The build will later copy from here next to the GameServer executable
   (same pattern as the `sql/kn_online` migrations).
+
+## Filling it in, step by step
+
+1. **Pick the right content version.** This server source runs quests as
+   **Lua scripts**: `GameServer/LuaEngine.h` sets `LUA_SCRIPT_DIRECTORY` to
+   `./Quests/`, and `QUEST_HELPER.strLuaFilename` names the script each NPC
+   event runs. Of two content packs, use the one that **ships the `.lua`
+   quest scripts** - a pack without them belongs to a server generation this
+   Lua engine cannot drive. Maps exist in both packs; only one set matches
+   this database, and step 3 tells you which.
+2. **Copy, do not rename**, keeping casing exactly:
+   - zone maps `*.smd` -> `data/map/`
+   - quest scripts `*.lua` -> `data/Quests/`
+   - event files `*.aievt`, `*.evt` -> `data/` (this level)
+3. **Verify before committing:**
+
+   ```powershell
+   python tools\check_data_assets.py
+   ```
+
+   It compares `data/` against what the database references and prints
+   `MISSING` (a zone the database knows but you did not drop in), `STRAY`
+   (a file no zone references - usually the wrong pack) and `CASE` (git and
+   Linux keep the case Windows ignores). Exit code 0 means it lines up;
+   while `data/map/` is empty it exits 0 too, which is the fresh-clone/CI
+   state.
+4. **Commit and push** so the assets travel with the branch (owner decision,
+   see above):
+
+   ```powershell
+   git add data
+   git commit -m "data: zone maps and quest scripts"
+   git push
+   ```
+
+5. **What is still dormant today:** no C# server reads these files yet -
+   zone loading arrives with the world-entry milestone - and the converted
+   database ships **zero `QUEST_HELPER` rows**, so Lua scripts stay unused
+   until quest table data is imported. If your `.lua` pack also ships quest
+   table SQL (QUEST_HELPER / QUEST_MENU / QUEST_TALK / QUEST_MONSTER rows),
+   keep it: that is the import that wakes the scripts up.
