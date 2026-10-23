@@ -51,19 +51,23 @@ dotnet run --project tests/KnightOnline.Verification   # protocol self-checks
 
 ## Trying the LoginServer
 
-1. Create the account DB: run `sql/mysql/ko_main_draft.sql` in HeidiSQL
-   (or `mariadb < sql/mysql/ko_main_draft.sql`), and uncomment the test
-   account insert at the bottom if you want `test/test`.
-2. Copy `src/KnightOnline.LoginServer/LogInServer.sample.ini` to
-   `LogInServer.ini` next to the built executable and fill in `[DATABASE]`.
-   (The rest of the file matches the original C++ `LogInServer.ini`.)
-   No MariaDB yet? Set `ALLOW_OFFLINE_START=1` — the server starts and talks
-   to the client, logins just fail with AUTH_ERROR.
-3. Point your 1453 client's login at this machine, port **15100**.
+**No manual database import.** MariaDB via one Docker command; the server
+creates the database and applies `sql/mysql/ko_main/*.sql` on startup
+(`AUTO_MIGRATE=1`). Full database story (incl. converting your SQL Server
+dump): **[docs/DATABASE.md](docs/DATABASE.md)**.
 
 ```bash
+docker compose up -d                                   # MariaDB on localhost:3306
+cp src/KnightOnline.LoginServer/LogInServer.sample.ini LogInServer.ini   # then edit [DATABASE]
 dotnet run --project src/KnightOnline.LoginServer
 ```
+
+Point your 1453 client's login at port **15100**. Test account (optional):
+uncomment the `INSERT INTO TB_USER ... ('test', 'test')` at the bottom of
+`sql/mysql/ko_main/0001_account_schema_and_routines.sql` *before first run*,
+or add the row in HeidiSQL afterwards. No database at all yet? Set
+`ALLOW_OFFLINE_START=1` — the server runs and talks to the client, logins
+just fail with AUTH_ERROR.
 
 ## Porting rules
 

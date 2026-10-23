@@ -27,3 +27,6 @@ ipch/
 Debug/
 Release/
 x64/
+
+# Python (tools/)
+__pycache__/

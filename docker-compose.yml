@@ -1,0 +1,39 @@
+# One-command MariaDB for the KO1453 C# servers.
+#
+#   docker compose up -d
+#
+# Then just start LoginServer/GameServer: they create their databases and
+# apply sql/mysql/** migrations automatically (AUTO_MIGRATE=1). There is NO
+# manual import step. Use HeidiSQL against localhost:3306 to browse.
+#
+# The app user 'knight' matches the defaults in *.sample.ini.
+# Change both passwords for anything beyond local testing!
+
+services:
+  db:
+    image: mariadb:11.4
+    container_name: ko1453-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-rootpass}
+      MARIADB_USER: knight
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-changeme}
+      # The servers also CREATE DATABASE IF NOT EXISTS themselves;
+      # this just pre-creates the account DB on first boot.
+      MARIADB_DATABASE: KO_MAIN
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - ko1453-db:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --max_allowed_packet=256M   # converted game-data inserts can be chunky
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ko1453-db:

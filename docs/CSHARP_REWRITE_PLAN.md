@@ -127,7 +127,7 @@ Key facts driving the rewrite:
   first `dotnet` build still to be run on a machine with the SDK).
 - **M2 — LoginServer end-to-end** ✅ code / ⏳ client test: all 7 `LS_*` opcodes ported
   incl. news rendering, server-list cache and the crypto handshake; MariaDB account
-  repository + draft `KO_MAIN` schema/procedures (`sql/mysql/ko_main_draft.sql`) so a
+  repository + draft `KO_MAIN` schema/procedures (`sql/mysql/ko_main/`) so a
   real 1453 client can be pointed at it today. Not yet verified against a live client.
 - **M3 — Data layer**: MySQL schema converted; ~40 game-data tables load into cache at startup
   (items, magic 1–9, NPCs, drops, quests, zones…); account/char/USERDATA CRUD.

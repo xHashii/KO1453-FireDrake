@@ -34,7 +34,7 @@ public interface IAccountRepository
     /// <summary>
     /// Calls ACCOUNT_LOGIN (T-SQL: {? = CALL ACCOUNT_LOGIN(?, ?)}).
     /// The MariaDB port of the procedure takes an OUT parameter - see
-    /// sql/mysql/ko_main.sql. To be replaced by the converted original
+    /// sql/mysql/ko_main/. To be replaced by the converted original
     /// procedure once the real database export is available.
     /// </summary>
     Task<AccountLoginResult> AccountLoginAsync(string accountId, string password, CancellationToken cancellationToken = default);

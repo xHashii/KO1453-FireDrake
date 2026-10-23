@@ -260,5 +260,58 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     Check("ini missing file uses defaults", !missing.FileExists && missing.GetString("A", "B", "x") == "x");
 }
 
+// ---------- Item blobs (USERDATA.strItem etc., DBAgent.cpp layout) ----------
+{
+    // Hand-built slot: item 310110000 (0x127B03F0), durability 12345, count 7,
+    // serial 0x1122334455667788, expiration 1700000000 (0x6553F100).
+    var itemBlob = new byte[InventorySlots.Total * 8];
+    var serialBlob = new byte[InventorySlots.Total * 8];
+    var expirations = new byte[InventorySlots.Total * 4];
+    // slot 6 = Right Hand
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(itemBlob.AsSpan(6 * 8), 310110000);
+    System.Buffers.Binary.BinaryPrimitives.WriteInt16LittleEndian(itemBlob.AsSpan(6 * 8 + 4), 12345);
+    System.Buffers.Binary.BinaryPrimitives.WriteInt16LittleEndian(itemBlob.AsSpan(6 * 8 + 6), 7);
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt64LittleEndian(serialBlob.AsSpan(6 * 8), 0x1122334455667788UL);
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(expirations.AsSpan(6 * 4), 1700000000u);
+
+    var parsed = ItemBlobs.ParseExact(itemBlob, serialBlob, expirations);
+    var slot6 = parsed.Slots[6];
+    Check("item blob: slot fields", slot6.ItemId == 310110000 && slot6.Durability == 12345 &&
+        slot6.Count == 7 && slot6.Serial == 0x1122334455667788UL && slot6.ExpirationUnixTime == 1700000000u);
+    Check("item blob: empty slot", parsed.Slots[0].IsEmpty && parsed.SlotCount == 73);
+    Check("item blob: slot naming", InventorySlots.Describe(6) == "Right Hand" &&
+        InventorySlots.Describe(72) == "Magic Bag 2 slot 11");
+
+    var (rtItems, rtSerials, rtExp) = ItemBlobs.Serialize(parsed.Slots);
+    Check("item blob: roundtrip lossless",
+        rtItems.SequenceEqual(itemBlob) && rtSerials.SequenceEqual(serialBlob) && rtExp.SequenceEqual(expirations));
+
+    // Short/absent blobs read as empty trailing slots (C++ overrun semantics)
+    var shortParse = ItemBlobs.Parse(itemBlob.AsSpan(0, 16), ReadOnlySpan<byte>.Empty, ReadOnlySpan<byte>.Empty, 73);
+    Check("item blob: short blobs tolerated", shortParse[2].IsEmpty && shortParse[0] is not null);
+
+    Check("item blob: load clamp", ItemBlobs.ClampForLoad(slot6, isCountable: false).Count == 1 &&
+        ItemBlobs.ClampForLoad(slot6 with { Count = 30000 }, isCountable: true).Count == 9999);
+}
+
+// ---------- SqlScriptSplitter (migrations incl. procedures) ----------
+{
+    var script = """
+        CREATE TABLE t (a VARCHAR(10) DEFAULT ';');
+        -- a comment; with semicolon
+        INSERT INTO t VALUES ('x;y'), ('it''s');
+        DELIMITER //
+        CREATE PROCEDURE p() BEGIN SET @x = 1; SET @y = 'a;b'; END //
+        DELIMITER ;
+        SELECT 1;
+        """;
+    var statements = SqlScriptSplitter.Split(script).ToList();
+    Check("sql splitter: statement count", statements.Count == 4, string.Join(" | ", statements));
+    Check("sql splitter: procedure kept whole",
+        statements.Count == 4 && statements[2].Contains("SET @x = 1;") && statements[2].TrimEnd().EndsWith("END"));
+    Check("sql splitter: strings respected",
+        statements.Count == 4 && statements[1].Contains("'x;y'"));
+}
+
 Console.WriteLine($"\n{passed} passed, {failed} failed.");
 return failed == 0 ? 0 : 1;

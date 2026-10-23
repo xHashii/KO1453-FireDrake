@@ -11,13 +11,14 @@
   </PropertyGroup>
 
   <!--
-    Deliberately a dependency-free console app instead of an xUnit project:
-    it must run anywhere `dotnet run` works, with zero NuGet packages, and
-    fail loudly (non-zero exit code) if the wire-protocol ports ever drift
-    from the original C behaviour. Migrate/extend with xUnit later if wanted.
+    Deliberately a plain console app instead of an xUnit project: it must run
+    anywhere `dotnet run` works and fail loudly (non-zero exit code) if the
+    wire-protocol / blob ports ever drift from the original C behaviour.
+    Migrate/extend with xUnit later if wanted.
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\KnightOnline.Shared\KnightOnline.Shared.csproj" />
+    <ProjectReference Include="..\..\src\KnightOnline.Database\KnightOnline.Database.csproj" />
   </ItemGroup>
 
 </Project>

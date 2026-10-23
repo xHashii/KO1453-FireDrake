@@ -1,29 +1,15 @@
 -- ============================================================================
--- KO_MAIN (account database) - MariaDB DRAFT
+-- KO_MAIN migration 0001 - account schema + routines (DRAFT)
 -- ============================================================================
--- WARNING: This is a *draft* reconstructed from the queries visible in the
--- C++ sources (LogInServer/DBProcess.cpp) plus the account-table layout that
--- is standard for KO 1299-15xx private-server databases.
+-- Applied automatically by DatabaseMigrator on server startup.
+-- Do NOT edit after it has been applied anywhere: add a 0002_*.sql instead.
 --
--- It exists so the C# LoginServer can be tested end-to-end (in HeidiSQL or
--- `mariadb < ko_main_draft.sql`) BEFORE the real SQL Server database has
--- been exported. Once the real .sql export of KO_MAIN arrives, this file is
--- replaced by the converted original schema + procedures and the differences
--- (especially TB_USER columns and ACCOUNT_LOGIN semantics) must be diffed.
---
--- Known-exact (column names come verbatim from DBProcess.cpp SQL):
---   VERSION(sVersion, sHistoryVersion, strFilename)
---   CONCURRENT(serverid, zone1_count, zone2_count, zone3_count)
--- Assumed (only ever touched inside stored procedures in the original):
---   TB_USER, CURRENTUSER, ACCOUNT_LOGIN, ACCOUNT_PREMIUM
+-- Reconstruction status (until the real SQL Server export is converted):
+--   exact   : VERSION, CONCURRENT (columns verbatim from LogInServer/DBProcess.cpp)
+--   assumed : TB_USER, CURRENTUSER, ACCOUNT_LOGIN, ACCOUNT_PREMIUM
+--             (only ever touched via stored procedures in the original;
+--             community-standard layout, VERIFY against the real export)
 -- ============================================================================
-
-CREATE DATABASE IF NOT EXISTS KO_MAIN
-  CHARACTER SET latin1 COLLATE latin1_general_ci;
-  -- latin1 on purpose for the draft: KO account/character names are
-  -- single-byte in this protocol generation. Re-evaluate during conversion.
-
-USE KO_MAIN;
 
 -- ----------------------------------------------------------------------------
 -- VERSION: patch list. sVersion = patch version the file brings you to,

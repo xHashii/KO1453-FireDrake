@@ -51,6 +51,8 @@ public sealed class LoginServerSettings
         {
             Port = ini.GetInt("SETTINGS", "PORT", 15100),
             AllowOfflineStart = ini.GetBool("SETTINGS", "ALLOW_OFFLINE_START", false),
+            AutoMigrate = ini.GetBool("DATABASE", "AUTO_MIGRATE", true),
+            MigrationsPath = ini.GetString("DATABASE", "MIGRATIONS", "sql/ko_main"),
             FtpUrl = ini.GetString("DOWNLOAD", "URL", "ftp.yoursite.net"),
             FtpPath = ini.GetString("DOWNLOAD", "PATH", "/"),
             Database = new DatabaseSettings(

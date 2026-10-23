@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <None Include="LogInServer.sample.ini" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Account-DB migrations, applied automatically on startup -->
+    <None Include="..\..\sql\mysql\ko_main\*.sql" Link="sql\ko_main\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

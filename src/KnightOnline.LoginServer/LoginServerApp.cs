@@ -50,6 +50,23 @@ public sealed class LoginServerApp
     {
         OpenUserLog();
 
+        // No manual imports: create the account DB if needed and apply any
+        // pending scripts from sql/ko_main (see docs/DATABASE.md).
+        if (_settings.AutoMigrate)
+        {
+            try
+            {
+                var migrator = new DatabaseMigrator(_settings.Database, _settings.MigrationsPath);
+                await migrator.MigrateAsync(shutdownToken).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                KoLog.Error("Auto-migration failed.", ex);
+                if (!_settings.AllowOfflineStart)
+                    throw;
+            }
+        }
+
         if (!await LoadVersionListAsync().ConfigureAwait(false))
         {
             // The C++ server refused to start without the DB. Offline start is
