@@ -417,6 +417,15 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     Check("travel: case insensitive alias", KnightOnline.Database.TravelRules.Resolve("MORADON", 1) == 21);
     Check("travel: invalid destination", KnightOnline.Database.TravelRules.Resolve("invalid", 1) is null);
     // 31200 / 10 = 3120 (0x0C30), 40200 / 10 = 4020 (0x0FB4).
+    // SelectCharacter sends no bInit echo, and GetZoneID() is uint8.
+    // The old [success=1, init=1, zone=21 as uint16] made the client load Karus.
+    CheckHex("selection: Moradon uses byte zone without init echo",
+        TravelPackets.SelectCharacter(21, 31200, 40200, 0).Payload, "0115300CB40F000000");
+    CheckHex("selection: Karus homeland",
+        TravelPackets.SelectCharacter(1, 35400, 161000, 0).Payload, "0101D40AE43E000000");
+    CheckHex("selection: El Morad homeland",
+        TravelPackets.SelectCharacter(2, 167000, 37000, 0).Payload, "01023C41740E000000");
+    Check("selection: nine-byte payload", TravelPackets.SelectCharacter(21, 31200, 40200, 0).Length == 9);
     CheckHex("travel: same-zone warp coordinates", TravelPackets.Warp(31200, 40200).Payload, "300CB40F");
     CheckHex("travel: zone teleport header and coordinate units",
         TravelPackets.ChangeZone(21, 31200, 40200, 0).Payload, "031500300CB40F000000");

@@ -50,6 +50,13 @@ public sealed partial class MariaDbCharacterRepository
         // Tracks explicit travel, so returning to the old spawn never triggers the repair again.
         command.CommandText = "CREATE TABLE IF NOT EXISTS KO_WORLD_TRAVEL (strUserID varchar(21) NOT NULL PRIMARY KEY) ENGINE=InnoDB";
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        using var stream = typeof(MariaDbCharacterRepository).Assembly.GetManifestResourceStream(
+            "KnightOnline.Database.WorldCoordinateRepair.sql")
+            ?? throw new InvalidOperationException("Embedded zone coordinate repair is missing.");
+        using var reader = new StreamReader(stream);
+        command.CommandText = await reader.ReadToEndAsync().ConfigureAwait(false);
+        var repaired = await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        KnightOnline.Shared.Diagnostics.KoLog.Info($"Zone init points: repaired {repaired} shipped placeholder/invalid row(s); map IDs unchanged.");
     }
 
     public async Task<IReadOnlyList<TravelDestination>> LoadTravelDestinationsAsync(byte nation, byte level, ushort? townZone = null)

@@ -195,3 +195,35 @@ Existing authority values are deliberately not bulk-demoted; earlier prototype
 characters may already have Authority 0. Promotion reports owned character count
 and is safe to repeat. Receiving GM authority does not itself fix a client-side
 slash-command parser; use the plus-prefixed alternatives above.
+
+### Map identity / selection packet correction
+
+The old rewrite's selection success packet was incorrectly encoded as
+`success, init, uint16 zone, X/Z/Y, victory` (11 bytes). The original
+`CUser::SelectCharacter` reads `bInit` from its internal DB response but sends
+only `success, uint8 zone, X/Z/Y, victory` (9 bytes). With init=1, the client
+could read **Karus (1)** while the server believed it had selected Moradon
+(21). MYINFO then supplied Moradon coordinates on the wrong client map.
+This was not a reason to renumber the zone IDs or replace the map assets.
+
+Selection now uses the original nine-byte layout. Cross-zone teleport keeps
+its distinct **uint16** zone field (`ZoneChange` explicitly casts the ID).
+Reconnect after updating; same-zone `/moradon` cannot repair a map already
+loaded under the old packet layout. SelChar/Warp/ZoneChange reply payloads
+are now hex-dumped for verification. Selecting Moradon at 312,402 yields
+`01 15 30 0C B4 0F 00 00 00`.
+
+`0009_zone_start_points.sql` also fixes shipped placeholder init coordinates
+and the Eslant homeland-copy coordinates (which lay outside the Eslant SMD
+bounds), using existing START_POSITION entries and the correct *100 storage
+units. This repair is embedded and applied at startup for existing installs;
+it does not renumber maps, overwrite custom non-placeholder coordinates or
+bulk-reset saved character positions. Nation-specific travel continues to
+use START_POSITION rather than the generic ZONE_INFO fallback.
+
+`python tools/test_world_coordinates.py` audits all 31 shipped map references,
+their repaired init points and both nations' start points against the actual
+SMD terrain dimensions, and checks repair repeatability/custom preservation.
+This verifies bounds, not collision walkability or a modified client's own
+map tables. Zones without START_POSITION still need authored spawn data;
+this change does not invent event mechanics or open restricted routes.

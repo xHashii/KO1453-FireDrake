@@ -485,7 +485,7 @@ internal sealed partial class GameSession : KoSession
     /// (captured: string account, string char, uint8 init), which the C++
     /// source - written against a later client - does not read; the capture
     /// wins, and the account is verified against the session. The success
-    /// answer is the original's: result byte, init echo, zone, spawn X/Z/Y,
+    /// answer is the original's: result byte, uint8 zone, spawn X/Z/Y,
     /// old-victory flag. The warehouse/premium/saved-magic loads that gate
     /// the original collapse to the warehouse existence check inside
     /// <see cref="MariaDbCharacterRepository.LoadUserDataAsync"/>.
@@ -494,7 +494,7 @@ internal sealed partial class GameSession : KoSession
     {
         var account = packet.ReadString();
         var charId = packet.ReadString();
-        var init = packet.ReadByte();
+        _ = packet.ReadByte(); // bInit: internal selection flag, not part of the success reply
 
         UserData? user = null;
         if (string.Equals(account, _accountId, StringComparison.Ordinal) && charId.Length > 0)
@@ -518,9 +518,6 @@ internal sealed partial class GameSession : KoSession
             return;
         }
 
-        KoLog.Info($"[ SEL CHAR - {DateTime.Now:HH:mm:ss} ] ID={_accountId} char={charId} " +
-                   $"zone={user.Zone} spawn={user.Px},{user.Pz},{user.Py} level={user.Level} items={_protos.Count}");
-
         _user = user;
         _charId = charId;
 
@@ -533,16 +530,13 @@ internal sealed partial class GameSession : KoSession
         _stats[3] = user.Int; _stats[4] = user.Cha;
         _points = user.Points;
         RecomputeStats(refillWhenEmpty: true);
+        KoLog.Info($"[ SEL CHAR - {DateTime.Now:HH:mm:ss} ] ID={_accountId} char={charId} " +
+                   $"zone={user.Zone} spawn={user.Px},{user.Pz},{user.Py} level={user.Level} items={_protos.Count}");
 
         // GetSPosX() = uint16(world * 10) and the stored PX is world * 100.
-        result.WriteByte(1)
-            .WriteByte(init)
-            .WriteUInt16(user.Zone)
-            .WriteUInt16((ushort)(user.Px / 10))
-            .WriteUInt16((ushort)(user.Pz / 10))
-            .WriteUInt16((ushort)(user.Py / 10))
-            .WriteByte(0); // g_pMain->m_byOldVictory
-        Send(result);
+        // SelectCharacter consumes bInit internally; it is NOT echoed on the wire.
+        // GetZoneID() returns uint8 here, unlike ZoneChange's explicit uint16 cast.
+        Send(TravelPackets.SelectCharacter(user.Zone, user.Px, user.Pz, user.Py));
     }
 
     /// <summary>
@@ -1165,7 +1159,9 @@ internal sealed partial class GameSession : KoSession
 
     public override bool Send(Packet packet)
     {
-        KoLog.Info($"-> {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s))");
+        var travelDump = packet.Opcode is WizOpcode.SelChar or WizOpcode.ZoneChange or WizOpcode.Warp
+            ? $": {Hexdump(packet.Payload)}" : string.Empty;
+        KoLog.Info($"-> {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s)){travelDump}");
         return base.Send(packet);
     }
 
