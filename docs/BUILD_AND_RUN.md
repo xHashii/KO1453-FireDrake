@@ -73,7 +73,8 @@ against the original C++).
 
 ## 5. Database (one command, no manual import)
 
-From the repo root:
+Docker Desktop must be **running** first (Start menu → Docker Desktop;
+wait until the tray whale icon settles). Then, from the repo root:
 
 ```powershell
 docker compose up -d
@@ -219,6 +220,10 @@ single file over 100 MB (and warns over 50 MB).
 - **First start looks hung** → it's applying 114 MB of migrations
   (one-time). Watch the log; don't kill it mid-import — if you do, reset
   with `docker compose down -v` and start clean.
+- **`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`**
+  → Docker Desktop isn't running. Start it from the Start menu, wait for
+  the tray whale to settle, verify with `docker ps`, then re-run
+  `docker compose up -d`.
 - **Docker: port 3306 already in use** → a local MySQL/MariaDB service is
   running. Stop it, or change the compose port mapping *and* the ports in
   `LogInServer.ini` + `appsettings.json`.
