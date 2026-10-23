@@ -17,7 +17,7 @@ public sealed record CharacterSummary(
 public sealed class CharacterDetails
 {
     public required string Name { get; init; }
-    public string? AccountId { get; init; }
+    public string? AccountId { get; internal set; }
     public int Nation { get; init; }
     public int Race { get; init; }
     public int ClassId { get; set; }
@@ -47,7 +47,7 @@ public sealed class CharacterDetails
     public int StoredInventorySlots { get; init; }
 
     /// <summary>Optimistic-concurrency token captured at load (checksums of all item blobs).</summary>
-    public required string ConcurrencyToken { get; init; }
+    public required string ConcurrencyToken { get; set; }
 }
 
 public sealed record ItemSearchResult(
