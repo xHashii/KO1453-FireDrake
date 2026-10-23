@@ -87,10 +87,23 @@ public sealed class LoginServerApp
 
         // Saying "latest version in database" when the database was never read
         // sends you looking in exactly the wrong place.
+        var tableVersion = _latestVersion;
         if (databaseReady)
-            KoLog.Info($"Latest version in database: {_latestVersion}");
+            KoLog.Info($"Latest version in database: {tableVersion}");
         else
-            KoLog.Warn($"No version list from the database; falling back to the built-in version {_latestVersion}.");
+            KoLog.Warn($"No version list from the database; falling back to the built-in version {tableVersion}.");
+
+        ApplyAdvertisedVersion();
+
+        if (_settings.AdvertiseVersion != 0)
+            KoLog.Info($"Advertising version {_latestVersion} ([SETTINGS] ADVERTISE_VERSION) and offering " +
+                       $"{_versionList.Count} patch file(s); the VERSION table's highest is {tableVersion}.");
+        else if (databaseReady && tableVersion > GameVersion.Version)
+            KoLog.Warn($"The VERSION table advertises {tableVersion} but this port targets {GameVersion.Version}. " +
+                       $"A client older than that asks for the patch files above its own version and then dials " +
+                       $"'{_settings.FtpUrl}{_settings.FtpPath}'; when that host does not exist the client stops " +
+                       $"before the login dialog (its patcher cannot reach the FTP server). Set ADVERTISE_VERSION " +
+                       $"to your client's version in [SETTINGS], e.g. ADVERTISE_VERSION={GameVersion.Version}.");
 
         // Build the first server list synchronously so early clients see data,
         // then refresh every 60 seconds like Timer_UpdateUserCount.
@@ -142,6 +155,21 @@ public sealed class LoginServerApp
             KoLog.Error("Failed to load the version list.", ex);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Caps both the advertised version and the patch list at
+    /// <see cref="LoginServerSettings.AdvertiseVersion"/> when it is set, so a
+    /// client is never offered patches above the version it was just told to be.
+    /// </summary>
+    private void ApplyAdvertisedVersion()
+    {
+        var cap = _settings.AdvertiseVersion;
+        if (cap == 0)
+            return;
+
+        _versionList = _versionList.Where(info => info.Version <= cap).ToList();
+        _latestVersion = cap;
     }
 
     private async Task RefreshServerListLoopAsync(CancellationToken token)

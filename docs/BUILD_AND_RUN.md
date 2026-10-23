@@ -149,22 +149,28 @@ then `docker compose up -d` again.
    entry arrive with the GameServer milestones (`KnightOnline.GameServer` is
    still the M4 stub, so the client has nowhere to go after the server list).
 
-   **The seed data advertises version 1456.** `VERSION` carries the patch
-   chain of the server this dump came from (1453 → 1456), and the LoginServer
-   answers a version request with the highest `sVersion` in that table
-   (`GameVersion.Version` = 1453 is only the fallback used when the table
+   **Set `ADVERTISE_VERSION` to your client's version.** `VERSION` carries the
+   patch chain of the server this dump came from (1453 → 1456), and the
+   LoginServer answers a version request with the highest `sVersion` in that
+   table (`GameVersion.Version` = 1453 is only the fallback used when the table
    cannot be read). A client older than the answer asks for the patch files
    `patch1454.zip` … `patch1456.zip` from `[DOWNLOAD] URL` — and a URL that
-   does not exist stops it *before the login dialog appears*. Align the two:
+   does not exist stops it *before the login dialog appears*, with
+   **"Cannot connect to FTP Server"**.
 
-   ```sql
-   SELECT MAX(sVersion) FROM `VERSION`;            -- what the server advertises
-   DELETE FROM `VERSION` WHERE `sVersion` > 1453;  -- what a 1453 client needs
+   `ADVERTISE_VERSION=1453` in `[SETTINGS]` (the sample's default) caps both
+   the advertised version and the patch list, so the client is never offered a
+   patch above the version it was just told to be. Don't know your client's
+   number? Start the server, connect the client once and read the log:
+
+   ```
+   [INFO ] Patch check from 127.0.0.1: client version 1453, server 1456, 3 file(s) from ftp.yoursite.net/: patch1454.zip, ...
    ```
 
-   Alternatively host the real patch files under `[DOWNLOAD] URL`/`PATH` if
-   you want the client to update itself. Nothing else in the seed depends on
-   those rows.
+   Alternatives, if you would rather not use the knob: `DELETE FROM VERSION
+   WHERE sVersion > 1453;` (survives until the next fresh database), or host
+   the real patch files under `[DOWNLOAD] URL`/`PATH`. Nothing else in the seed
+   depends on those rows.
 
 ## 7. AdminPanel (the website)
 
@@ -287,6 +293,12 @@ single file over 100 MB (and warns over 50 MB).
   wraps every numeric value as `CAST(1 AS Numeric(18, 0))`, and `NUMERIC` is a
   valid column type but not a valid `CAST` target — the checker reports those
   too. Both gates run in CI (`.github/workflows/ci.yml`).
+- **Client: "Cannot connect to FTP Server" (`ftp.yoursite.net`)** → the client
+  was told a higher version than its own, so it is trying to download patch
+  files. The log line `Patch check from …: client version NNNN, server MMMM,
+  K file(s)` shows both numbers. Set `ADVERTISE_VERSION=NNNN` in `[SETTINGS]`
+  and restart — see §6 step 5. (The seeded `VERSION` table advertises 1456;
+  this port targets 1453.)
 - **Migration checksum error after a pull** → an already-applied script
   changed upstream. During development the cheap fix is a fresh volume:
   `docker compose down -v` → `up -d` (all test data is recreated from the

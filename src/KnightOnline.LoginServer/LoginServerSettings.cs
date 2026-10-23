@@ -53,6 +53,19 @@ public sealed class LoginServerSettings
     /// </summary>
     public bool AutoRegister { get; private init; }
 
+    /// <summary>
+    /// Version to advertise to clients, and the highest patch entry to offer
+    /// them. 0 (the default) keeps the original behaviour: the highest
+    /// <c>sVersion</c> in the VERSION table. Set it to *your client's* version
+    /// when the seed data came from a server that had patched further on - the
+    /// committed dump advertises 1456 while this port targets 1453
+    /// (<see cref="KnightOnline.Shared.GameVersion"/>). A client told a higher
+    /// version than its own asks for the patch files above it and then dials
+    /// <c>[DOWNLOAD] URL</c>, which stops it before the login dialog when that
+    /// host does not exist.
+    /// </summary>
+    public ushort AdvertiseVersion { get; private init; }
+
     public DatabaseSettings Database { get; private init; } =
         new("127.0.0.1", 3306, "KN_Online", "username", "password");
     public string FtpUrl { get; private init; } = "ftp.yoursite.net";
@@ -79,6 +92,7 @@ public sealed class LoginServerSettings
         {
             Port = ini.GetInt("SETTINGS", "PORT", 15100),
             AllowOfflineStart = ini.GetBool("SETTINGS", "ALLOW_OFFLINE_START", false),
+            AdvertiseVersion = (ushort)ini.GetInt("SETTINGS", "ADVERTISE_VERSION", 0),
             AutoMigrate = ini.GetBool("DATABASE", "AUTO_MIGRATE", true),
             MigrationsPath = ini.GetString("DATABASE", "MIGRATIONS", "sql/kn_online"),
             MigrationRepair = ini.GetBool("DATABASE", "MIGRATION_REPAIR", true),

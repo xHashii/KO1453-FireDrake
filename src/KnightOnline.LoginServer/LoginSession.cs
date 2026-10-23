@@ -44,6 +44,9 @@ public sealed class LoginSession : KoSession
     {
         var result = new Packet(packet.Opcode);
         result.WriteUInt16(_app.LatestVersion);
+        // One line per client: comparing this with what the client itself shows
+        // is how you find the number ADVERTISE_VERSION needs.
+        KoLog.Info($"Version check from {RemoteIp}: advertising {_app.LatestVersion}");
         Send(result);
     }
 
@@ -58,6 +61,13 @@ public sealed class LoginSession : KoSession
             if (info.Version > version && info.FileName.Length > 0)
                 downloads.Add(info.FileName);
         }
+
+        // The client only asks for this when the two versions disagree, and the
+        // URL below is what it dials next - so a mismatch deserves a log line of
+        // its own ("Cannot connect to FTP Server" on the client is exactly this).
+        var fileList = downloads.Count > 0 ? ": " + string.Join(", ", downloads) : string.Empty;
+        KoLog.Info($"Patch check from {RemoteIp}: client version {version}, server {_app.LatestVersion}, " +
+                   $"{downloads.Count} file(s) from {_app.Settings.FtpUrl}{_app.Settings.FtpPath}{fileList}");
 
         var result = new Packet(packet.Opcode);
         result.WriteString(_app.Settings.FtpUrl);
