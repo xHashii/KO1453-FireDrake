@@ -218,8 +218,10 @@ single file over 100 MB (and warns over 50 MB).
   DB down (`docker compose ps`), `LogInServer.ini` missing (= placeholder
   credentials), or passwords changed in one place but not the others.
 - **First start looks hung** → it's applying 114 MB of migrations
-  (one-time). Watch the log; don't kill it mid-import — if you do, reset
-  with `docker compose down -v` and start clean.
+  (one-time). The log prints a line per script plus progress every 25,000
+  statements, so you can see it moving. Killing it mid-import is no longer
+  fatal: the next start repairs the half-applied script (see below) — but let
+  it finish if you can.
 - **`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`**
   → Docker Desktop isn't running. Start it from the Start menu, wait for
   the tray whale to settle, verify with `docker ps`, then re-run
@@ -237,6 +239,25 @@ single file over 100 MB (and warns over 50 MB).
   AdminPanel `GameDatabase` connection string (`Port=3307`), and HeidiSQL.
 - **Panel opens but shows DB offline** → same DB checks; also confirm the
   database name matches in all three places (§5).
+- **`Auto-migration failed` + `Table '…' already exists`** → an earlier run
+  stopped halfway through a script (MariaDB DDL is not transactional, so the
+  tables it had already created survive it while `_ko_migrations` still lists
+  the script as pending). The migrator repairs this on the next start: it drops
+  the *empty* tables that pending script creates and truncates the static data
+  tables it fills, then applies it again — just start the server once more. It
+  refuses (and says why) when a table involved holds rows, and it never
+  truncates player tables (`TB_USER`, `USERDATA`, `KNIGHTS*`, `MAIL_BOX`, …).
+  `[DATABASE] MIGRATION_REPAIR=0` turns the repair off.
+- **`Auto-migration failed` + `Column length too big for column '…' (max = 255)`**
+  (or `Row size too large`, `Incorrect table definition`) → a column type this
+  server refuses to create; the log names the script, statement number and
+  MySQL error number. Check the committed SQL with
+  `python3 tools/check_migrations.py` and repair it with `--fix`: oversized
+  `CHAR`/`BINARY`/`VARBINARY` become `BLOB` and over-wide `VARCHAR` becomes
+  `TEXT`, which every MySQL-family server accepts in any row format. If your
+  `bin/…/sql/kn_online/*.sql` copy is stale, rebuild (`dotnet build`) so the
+  fixed scripts are copied next to the executable, then start again — the
+  half-created tables are cleaned up automatically.
 - **Migration checksum error after a pull** → an already-applied script
   changed upstream. During development the cheap fix is a fresh volume:
   `docker compose down -v` → `up -d` (all test data is recreated from the

@@ -38,6 +38,15 @@ public sealed class LoginServerSettings
     public string MigrationsPath { get; private init; } = "sql/kn_online";
 
     /// <summary>
+    /// When true (the default) <see cref="KnightOnline.Database.Migrations.DatabaseMigrator"/>
+    /// cleans up the
+    /// leftovers of a script that failed halfway before retrying it, so a
+    /// broken migration is recoverable by simply starting the server again.
+    /// Set MIGRATION_REPAIR=0 only if you manage the schema by hand.
+    /// </summary>
+    public bool MigrationRepair { get; private init; } = true;
+
+    /// <summary>
     /// When true, a successful first login with an unknown account creates
     /// that account. This was unconditional in the original ACCOUNT_LOGIN
     /// procedure; the rewrite keeps it off unless explicitly enabled.
@@ -72,6 +81,7 @@ public sealed class LoginServerSettings
             AllowOfflineStart = ini.GetBool("SETTINGS", "ALLOW_OFFLINE_START", false),
             AutoMigrate = ini.GetBool("DATABASE", "AUTO_MIGRATE", true),
             MigrationsPath = ini.GetString("DATABASE", "MIGRATIONS", "sql/kn_online"),
+            MigrationRepair = ini.GetBool("DATABASE", "MIGRATION_REPAIR", true),
             AutoRegister = ini.GetBool("DATABASE", "AUTO_REGISTER", false),
             FtpUrl = ini.GetString("DOWNLOAD", "URL", "ftp.yoursite.net"),
             FtpPath = ini.GetString("DOWNLOAD", "PATH", "/"),

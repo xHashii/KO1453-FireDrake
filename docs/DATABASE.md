@@ -142,6 +142,18 @@ share/commit, exclude user data:
 python tools\mssql_to_mariadb.py "C:\path\to\1453db.sql" --database KN_Online -o "$env:TEMP\kn_online_converted" --exclude-user-data
 ```
 
+Add `--binary-literals hex` (the default) to keep packed-binary values that
+SQL Server stored in a character column as charset-independent `0x…` literals;
+`--binary-literals null` writes `NULL` for the ones whose bytes the text export
+already destroyed, which is more honest than importing mangled data. Either way
+`manifest.json` lists what happened per `table.column`.
+
+Then validate the result before committing or importing it:
+
+```powershell
+python tools\check_migrations.py --dir "$env:TEMP\kn_online_converted"
+```
+
 `--database` only labels converter output files and the manifest (source
 provenance). Generated SQL contains no `CREATE DATABASE` / `USE`, so the
 importing connection or server config chooses the target MariaDB name.
@@ -183,9 +195,38 @@ dotnet run --project src/KnightOnline.LoginServer
   string. `KN_Online` is the sample default, not baked into the SQL. If
   renamed, keep Docker's `MARIADB_DATABASE` in sync.
 - On startup the servers run **DatabaseMigrator**: it creates the database if
-  missing, then applies pending `*.sql` files in order and records filename +
-  SHA-256 checksum in `_ko_migrations`.
+  missing (as `utf8mb4`/`utf8mb4_general_ci`, so the converted Turkish game
+  data survives a server whose default is `latin1`), then applies pending
+  `*.sql` files in order and records filename + SHA-256 checksum in
+  `_ko_migrations`.
+- **A failed migration repairs itself.** MariaDB DDL is not transactional, so a
+  script that dies halfway leaves the tables it already created behind while
+  still being "pending". Before applying a pending script the migrator drops
+  the *empty* tables that script creates and truncates the static data tables
+  it fills, so restarting the server is enough to recover - no
+  `docker compose down -v`. Tables that hold rows are never dropped: if a
+  pending script would have to destroy data, the migrator says so and stops.
+  Player tables (`TB_USER`, `USERDATA`, `KNIGHTS*`, `MAIL_BOX`, …) are never
+  truncated. `[DATABASE] MIGRATION_REPAIR=0` disables the repair.
+- Failures are actionable: the log names the script, the statement number, the
+  MySQL error number, and the fix for the errors this project has actually hit.
+  The big data scripts log progress every 25,000 statements (~2 minutes of
+  imports should not look like a hang).
 - The Admin Panel also auto-migrates the same configured database on boot.
+- **Check migration SQL without a server:**
+
+  ```bash
+  python3 tools/check_migrations.py           # 0 errors = imports cleanly
+  python3 tools/check_migrations.py --fix     # rewrite non-portable types
+  ```
+
+  It encodes the limits MariaDB enforces (`CHAR`/`BINARY` ≤ 255 characters,
+  `VARCHAR`/`VARBINARY` ≤ 65535 bytes, InnoDB's inline row budget, keyless
+  `AUTO_INCREMENT`, `DEFAULT` on BLOB/TEXT, …) and cross-checks every INSERT
+  against the schema and `manifest.json`. Run it after touching the converter
+  or any artifact under `sql/mysql/`; the rules live in
+  `tools/mariadb_portability.py` with their MariaDB source references, and
+  `docs/DB_SCHEMA_NOTES.md` records what each one was needed for.
 - The received dump has already been reviewed and committed as
   `0001_schema.sql`, `0002_data.sql`, `0003_data.sql`, and
   `0004_admin_tables.sql`. From here the workflow is: add the next

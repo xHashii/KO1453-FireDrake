@@ -23,6 +23,7 @@ public sealed class LoginServerApp
     private List<VersionInfo> _versionList = new();
     private ushort _latestVersion = GameVersion.Version; // m_sLastVersion starts at __VERSION
     private byte[] _serverListPayload = Array.Empty<byte>();
+    private int _userCountFailures;
     private StreamWriter? _userLog;
 
     public LoginServerApp(LoginServerSettings settings)
@@ -58,7 +59,8 @@ public sealed class LoginServerApp
         {
             try
             {
-                var migrator = new DatabaseMigrator(_settings.Database, _settings.MigrationsPath);
+                var migrator = new DatabaseMigrator(
+                    _settings.Database, _settings.MigrationsPath, _settings.MigrationRepair);
                 await migrator.MigrateAsync(shutdownToken).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -69,7 +71,8 @@ public sealed class LoginServerApp
             }
         }
 
-        if (!await LoadVersionListAsync().ConfigureAwait(false))
+        var databaseReady = await LoadVersionListAsync().ConfigureAwait(false);
+        if (!databaseReady)
         {
             // The C++ server refused to start without the DB. Offline start is
             // a C#-port convenience for testing the client before the database
@@ -82,7 +85,12 @@ public sealed class LoginServerApp
             KoLog.Warn("Starting WITHOUT a database connection (ALLOW_OFFLINE_START=1). Login attempts will fail.");
         }
 
-        KoLog.Info($"Latest version in database: {_latestVersion}");
+        // Saying "latest version in database" when the database was never read
+        // sends you looking in exactly the wrong place.
+        if (databaseReady)
+            KoLog.Info($"Latest version in database: {_latestVersion}");
+        else
+            KoLog.Warn($"No version list from the database; falling back to the built-in version {_latestVersion}.");
 
         // Build the first server list synchronously so early clients see data,
         // then refresh every 60 seconds like Timer_UpdateUserCount.
@@ -161,10 +169,24 @@ public sealed class LoginServerApp
                     if (index >= 0 && index < _settings.Servers.Count)
                         _settings.Servers[index].UserCount = (short)count;
                 }
+
+                if (_userCountFailures > 0)
+                {
+                    KoLog.Info($"User counts are loading again after {_userCountFailures} failed attempt(s).");
+                    _userCountFailures = 0;
+                }
             }
             catch (Exception ex)
             {
-                KoLog.Error("Failed to refresh user counts.", ex);
+                // This runs every 60 seconds. A database that is simply down
+                // must not bury the log in identical stack traces, but the
+                // first failure and the fact that it is ongoing stay visible.
+                _userCountFailures++;
+                if (_userCountFailures == 1)
+                    KoLog.Error("Failed to refresh user counts.", ex);
+                else if (_userCountFailures % 30 == 0)
+                    KoLog.Warn($"Still unable to refresh user counts after {_userCountFailures} attempts " +
+                               $"({ex.GetType().Name}: {ex.Message}).");
             }
         }
 
