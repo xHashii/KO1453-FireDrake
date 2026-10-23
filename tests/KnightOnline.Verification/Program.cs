@@ -213,11 +213,24 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     };
     var fuzzOk = shapes.All(data =>
     {
-        var compressed = Lzf.CompressToArray(data);
-        return compressed.Length > 0 &&
-               Lzf.DecompressToArray(compressed, data.Length).SequenceEqual(data);
+        // Size for the worst case here: CompressToArray mirrors
+        // KOSocket::SendCompressed (input + LZF_MARGIN), which by design
+        // cannot hold incompressible data beyond ~4 KB - literal overhead
+        // is 1 byte per 32, so 5000 random bytes need 5157. The original
+        // lzf_compress returns 0 for that (verified against unmodified
+        // shared/lzf.c) and the packet falls back to uncompressed; that
+        // behaviour is asserted separately below.
+        var scratch = new byte[data.Length + data.Length / 16 + Lzf.Margin];
+        var written = Lzf.Compress(data, scratch);
+        return written > 0 &&
+               Lzf.DecompressToArray(scratch[..written], data.Length).SequenceEqual(data);
     });
     Check("lzf roundtrip fuzz", fuzzOk);
+
+    // The KOSocket-sized buffer (input + LZF_MARGIN) cannot hold 5 KB of
+    // incompressible data; like the original, compression reports failure.
+    Check("lzf incompressible 5k exceeds KOSocket margin",
+        Lzf.CompressToArray(Fill(5000, 123)).Length == 0);
 }
 
 // ---------- SendCompressed wrapper (KOSocket::SendCompressed) ----------
