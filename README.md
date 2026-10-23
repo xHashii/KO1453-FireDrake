@@ -117,3 +117,40 @@ unchanged. This is a tutorial-skip compatibility policy, not a complete quest
 handler or a claim that the player finished the tutorial. The repair happens
 on character selection (no manual SQL or migration required) and logs
 `[ STARTER QUEST ]` when it changes a row.
+
+### Prototype travel and H-menu actions
+
+GameServer now handles H-menu Town (`WIZ_HOME`), standing/sitting and public
+emotions (`WIZ_STATE_CHANGE`). It also accepts these normal-chat commands:
+
+| Command | Action |
+| --- | --- |
+| `/help` | List implemented travel commands |
+| `/town` | Return to the current zone's nation-specific START_POSITION; requires at least half HP |
+| `/teleport` (or `/warp`, `/zone`) | Open the prototype travel list and print available zone IDs |
+| `/zone <id or name>` | Travel to a listed public destination |
+| `/moradon` | Travel to Moradon (21) |
+| `/home` | Travel to your nation's homeland (1 or 2), not the same as `/town` |
+| `/eslant` | Travel to your nation's Eslant (11 or 12), level 60+ |
+
+Destination names include `moradon`, `home`, `eslant`, `ronark`/`cz`.
+Ronark Land (71) requires level 60+. Enemy homelands/Eslant and event/war
+zones are not exposed. These are **free prototype exploration routes**, not
+a port of official warp fees, PvP/event entry rules or map warp IDs.
+The travel list uses server-offered synthetic IDs and never accepts client
+coordinates. Native NPC/map gate interactions still require the SMD object/
+warp loader and NPC system; use `/teleport` or `/zone` to travel for now.
+
+Cross-zone travel implements the original 3 -> client 1 -> server 2 -> client 2
+handshake, with empty region snapshots (NPCs/other players are still unported).
+Zone/position changes are saved transactionally before the reply is sent.
+Walking positions are not saved by this travel slice.
+
+New characters start at Moradon's ZONE_INFO init coordinates. On selection,
+existing characters at the *exact* former nation-init coordinates are moved
+to Moradon too; other saved locations are left alone. Startup creates the
+small `KO_WORLD_TRAVEL` marker table (requires CREATE TABLE permission).
+Explicit travel writes a marker so returning to the old nation spawn does
+not trigger that compatibility repair on later logins. No SQL needs to be
+run manually. Log messages `[ TRAVEL ] ... loaded zone ...` confirm the
+handshake has completed.

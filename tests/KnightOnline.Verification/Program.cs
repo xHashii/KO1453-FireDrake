@@ -403,5 +403,28 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     Check("starter quest: appended count", appended.Count == 2);
 }
 
+// ---------- Prototype travel rules and wire vectors ----------
+{
+    Check("travel: Moradon is public", KnightOnline.Database.TravelRules.CanEnter(21, 1, 1));
+    Check("travel: own homeland", KnightOnline.Database.TravelRules.CanEnter(2, 2, 80));
+    Check("travel: enemy homeland rejected", !KnightOnline.Database.TravelRules.CanEnter(1, 2, 80));
+    Check("travel: Eslant level requirement", !KnightOnline.Database.TravelRules.CanEnter(12, 2, 59));
+    Check("travel: own Eslant", KnightOnline.Database.TravelRules.CanEnter(12, 2, 60));
+    Check("travel: enemy Eslant rejected", !KnightOnline.Database.TravelRules.CanEnter(11, 2, 80));
+    Check("travel: event zones rejected", !KnightOnline.Database.TravelRules.CanEnter(61, 2, 80));
+    Check("travel: unknown zone rejected", !KnightOnline.Database.TravelRules.CanEnter(65535, 2, 80));
+    Check("travel: home alias", KnightOnline.Database.TravelRules.Resolve("home", 2) == 2);
+    Check("travel: case insensitive alias", KnightOnline.Database.TravelRules.Resolve("MORADON", 1) == 21);
+    Check("travel: invalid destination", KnightOnline.Database.TravelRules.Resolve("invalid", 1) is null);
+    // 31200 / 10 = 3120 (0x0C30), 40200 / 10 = 4020 (0x0FB4).
+    CheckHex("travel: same-zone warp coordinates", TravelPackets.Warp(31200, 40200).Payload, "300CB40F");
+    CheckHex("travel: zone teleport header and coordinate units",
+        TravelPackets.ChangeZone(21, 31200, 40200, 0).Payload, "031500300CB40F000000");
+    var rejected = false;
+    try { TravelPackets.Warp(-100, 0); }
+    catch (ArgumentOutOfRangeException) { rejected = true; }
+    Check("travel: reject invalid wire coordinates", rejected);
+}
+
 Console.WriteLine($"\n{passed} passed, {failed} failed.");
 return failed == 0 ? 0 : 1;

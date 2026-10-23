@@ -40,12 +40,13 @@ if (!File.Exists(GameServerSettings.ConfigFileName))
 var characters = new MariaDbCharacterRepository(settings.Database);
 try
 {
+    await characters.EnsureTravelSchemaAsync();
     var restored = await characters.RepairStarterItemPrototypesAsync();
     KoLog.Info($"Starter-item definitions: restored {restored} missing ITEM row(s); existing definitions unchanged.");
 }
 catch (Exception ex)
 {
-    KoLog.Error("Starter-item repair failed. Check the configured database and ITEM table permissions before retrying.", ex);
+    KoLog.Error("Game data initialization failed. Check database connectivity and ITEM/KO_WORLD_TRAVEL table permissions before retrying.", ex);
     return 1;
 }
 
@@ -86,7 +87,7 @@ return 0;
 /// pre-character-select gate - the opening of CUser::HandlePacket. Packets are
 /// logged in both directions so a client run doubles as a protocol capture.
 /// </summary>
-internal sealed class GameSession : KoSession
+internal sealed partial class GameSession : KoSession
 {
     /// <summary>Bytes of each captured packet to dump; the opening ones are small.</summary>
     private const int DumpLimit = 128;
@@ -186,6 +187,10 @@ internal sealed class GameSession : KoSession
 
         if (_user is not null)
         {
+            if (_travelStage != 0 && packet.Opcode != WizOpcode.ZoneChange
+                && packet.Opcode != WizOpcode.SpeedhackCheck)
+                return true;
+
             // Past WIZ_SEL_CHAR: the in-game half of CUser::HandlePacket's switch.
             switch (packet.Opcode)
             {
@@ -201,6 +206,21 @@ internal sealed class GameSession : KoSession
                 case WizOpcode.Rental:
                     // CUser::RentalSystem reads the sub-opcode, but the premium/PvP
                     // rental handling is commented out in the original: no answer.
+                    break;
+                case WizOpcode.StateChange:
+                    BasicStateChange(packet);
+                    break;
+                case WizOpcode.Home:
+                    Town();
+                    break;
+                case WizOpcode.Chat:
+                    TravelChat(packet);
+                    break;
+                case WizOpcode.WarpList:
+                    SelectTravel(packet);
+                    break;
+                case WizOpcode.ZoneChange:
+                    FinishTravel(packet);
                     break;
                 case WizOpcode.ItemMove:
                     ItemMove(packet);

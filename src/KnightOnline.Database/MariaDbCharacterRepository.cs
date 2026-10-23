@@ -19,7 +19,7 @@ namespace KnightOnline.Database;
 /// connection per call instead of sharing one ODBC handle, and implements the
 /// routines in C# rather than as MariaDB procedures.
 /// </summary>
-public sealed class MariaDbCharacterRepository
+public sealed partial class MariaDbCharacterRepository
 {
     /// <summary>
     /// Equipped-inventory slots the character-select screen renders, as slot
@@ -425,8 +425,8 @@ public sealed class MariaDbCharacterRepository
 
             // The T-SQL INSERT left Zone/PX/PZ/PY to SQL Server defaults the
             // converted schema lost; a character at zone 0 has no map and can
-            // never enter the world, so the port spawns it at its nation's
-            // home zone init point. ZONE_INFO and USERDATA both store
+            // never enter the world, so the port spawns it at the
+            // Moradon init point. ZONE_INFO and USERDATA both store
             // world * 100 (ZoneInfoSet and DBAgent::LoadUserData divide by
             // 100 for the float world position); the WIZ_SEL_CHAR/WIZ_MYINFO
             // answers send GetSPosX() = uint16(world * 10), i.e. stored / 10.
@@ -434,7 +434,7 @@ public sealed class MariaDbCharacterRepository
             {
                 command.Transaction = transaction;
                 command.CommandText =
-                    "UPDATE USERDATA u JOIN ZONE_INFO z ON z.ZoneNo = @nation AND z.ServerNo = 1 " +
+                    "UPDATE USERDATA u JOIN ZONE_INFO z ON z.ZoneNo = 21 AND z.ServerNo = 1 " +
                     "SET u.Zone = z.ZoneNo, u.PX = z.InitX, u.PZ = z.InitZ, u.PY = z.InitY " +
                     "WHERE u.strUserID = @charId";
                 command.Parameters.AddWithValue("@nation", nation);
@@ -518,6 +518,7 @@ public sealed class MariaDbCharacterRepository
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        await RepairLegacySpawnAsync(connection, charId, cancellationToken).ConfigureAwait(false);
         await SkipBoostedStarterQuestAsync(connection, charId, cancellationToken).ConfigureAwait(false);
 
         // Distinct names on purpose: C# forbids reusing 'command'/'reader' at
