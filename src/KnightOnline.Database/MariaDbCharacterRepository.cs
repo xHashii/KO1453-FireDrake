@@ -222,4 +222,197 @@ public sealed class MariaDbCharacterRepository
 
         return new CharacterSelectInfo(characterId, race, characterClass, level, face, hair, zone, equipment);
     }
+
+    /// <summary>
+    /// Whether the class exists in the COEFFICIENT table - the port of the
+    /// C++-side gate <c>m_CoefficientArray.GetData(sClass) == nullptr</c> that
+    /// rejects WIZ_NEW_CHAR with NEWCHAR_INVALID_DETAILS before any database
+    /// write is attempted.
+    /// </summary>
+    public async Task<bool> HasCoefficientAsync(ushort characterClass, CancellationToken cancellationToken = default)
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT 1 FROM COEFFICIENT WHERE sClass = @class LIMIT 1";
+        command.Parameters.AddWithValue("@class", characterClass);
+
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not null;
+    }
+
+    /// <summary>
+    /// Port of the CREATE_NEW_CHAR stored procedure (T-SQL body in
+    /// sql/mysql/kn_online/procedures_tsql/): nation/race coherence, name
+    /// uniqueness, the ACCOUNT_CHAR slot update with bCharNum += 1, the USERDATA
+    /// insert, then the BEGINNER_ITEM template (level, experience, skill blob,
+    /// gold, starting items, loyalty, points) and the novice class bump
+    /// (+5/+6/+7/+8 by class branch). Return values are the NEWCHAR_* codes:
+    /// 0 success, 2 invalid details, 3 name exists, 4 database error.
+    ///
+    /// Two documented contractions of the T-SQL:
+    /// * the USERDATA insert fills the NOT NULL columns the T-SQL INSERT omits
+    ///   (Rank, Title, Level, ..., sQuestCount, MannerPoint, LoyaltyMonthly,
+    ///   dtCreateTime) with zeroes / NOW() - on SQL Server those columns had
+    ///   defaults the converted schema does not carry, and the beginner
+    ///   template overwrites the meaningful ones immediately after;
+    /// * the eighteen EDIT_QUEST calls that seed tutorial quest flags into
+    ///   USERDATA.strQuest are skipped: the quest tables ship empty, so the
+    ///   flags have no consumer yet. They belong with the quest import.
+    ///   A missing BEGINNER_ITEM row collapses to 4 (the T-SQL would either
+    ///   roll back on a NOT NULL violation or commit a NULL-level character).
+    /// </summary>
+    public async Task<byte> CreateCharacterAsync(
+        string account, byte index, string charId, byte race, ushort characterClass, byte hair, byte face,
+        byte strong, byte sta, byte dex, byte intel, byte cha, CancellationToken cancellationToken = default)
+    {
+        const byte invalidDetails = 2, exists = 3, dbError = 4;
+
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        byte nation;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT bNation FROM ACCOUNT_CHAR WHERE strAccountID = @account";
+            command.Parameters.AddWithValue("@account", account);
+
+            var value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            if (value is null or DBNull)
+                return invalidDetails;
+            nation = Convert.ToByte(value);
+        }
+
+        // Karus races sit below 10, El Morad's above; anything else is rejected.
+        if ((nation == 1 && race > 10) || (nation == 2 && race < 10) || (nation != 1 && nation != 2))
+            return invalidDetails;
+
+        // char(21): SQL Server truncated silently on the way in; do the same.
+        if (charId.Length > 21)
+            charId = charId[..21];
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT COUNT(strUserID) FROM USERDATA WHERE strUserID = @charId";
+            command.Parameters.AddWithValue("@charId", charId);
+
+            if (Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) > 0)
+                return exists;
+        }
+
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var slot = index switch
+            {
+                0 => "strCharID1",
+                1 => "strCharID2",
+                2 => "strCharID3",
+                _ => null,
+            };
+
+            await using (var command = connection.CreateCommand())
+            {
+                command.Transaction = transaction;
+                command.CommandText =
+                    $"UPDATE ACCOUNT_CHAR SET {slot} = @charId, bCharNum = bCharNum + 1 " +
+                    "WHERE strAccountID = @account";
+                command.Parameters.AddWithValue("@charId", charId);
+                command.Parameters.AddWithValue("@account", account);
+
+                if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 0)
+                    return dbError;
+            }
+
+            await using (var command = connection.CreateCommand())
+            {
+                command.Transaction = transaction;
+                command.CommandText =
+                    "INSERT INTO USERDATA (strUserID, Nation, Race, Class, HairRGB, Face, " +
+                    "Strong, Sta, Dex, Intel, Cha, " +
+                    "Rank, Title, Level, Exp, Loyalty, City, Knights, Fame, Hp, Mp, Sp, Authority, " +
+                    "Points, Gold, Zone, PX, PZ, PY, dwTime, sQuestCount, MannerPoint, LoyaltyMonthly, dtCreateTime) " +
+                    "VALUES (@charId, @nation, @race, @class, @hair, @face, " +
+                    "@strong, @sta, @dex, @intel, @cha, " +
+                    "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, " +
+                    "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NOW())";
+                command.Parameters.AddWithValue("@charId", charId);
+                command.Parameters.AddWithValue("@nation", nation);
+                command.Parameters.AddWithValue("@race", race);
+                command.Parameters.AddWithValue("@class", characterClass);
+                command.Parameters.AddWithValue("@hair", hair);
+                command.Parameters.AddWithValue("@face", face);
+                command.Parameters.AddWithValue("@strong", strong);
+                command.Parameters.AddWithValue("@sta", sta);
+                command.Parameters.AddWithValue("@dex", dex);
+                command.Parameters.AddWithValue("@intel", intel);
+                command.Parameters.AddWithValue("@cha", cha);
+
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            // SUBSTRING(RTRIM(LTRIM(STR(@sClass))), 3, 1): the class branch is
+            // the third digit of the three-digit class code (201 -> 1).
+            var classText = characterClass.ToString();
+            var branch = classText.Length >= 3 ? classText[2] - '0' : (int?)null;
+
+            await using (var command = connection.CreateCommand())
+            {
+                command.Transaction = transaction;
+                command.CommandText =
+                    "SELECT Level, Exp, Skill, Gold, strItem, Loyalty, Points " +
+                    "FROM BEGINNER_ITEM WHERE Class = @branch";
+                command.Parameters.AddWithValue("@branch", branch is null ? DBNull.Value : branch);
+
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+                if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                    return dbError;
+
+                var level = Convert.ToByte(reader.GetValue(0));
+                var exp = Convert.ToInt32(reader.GetValue(1));
+                var skill = reader.IsDBNull(2) ? DBNull.Value : reader.GetValue(2);
+                var gold = Convert.ToInt32(reader.GetValue(3));
+                var items = reader.IsDBNull(4) ? DBNull.Value : reader.GetValue(4);
+                var loyalty = Convert.ToInt32(reader.GetValue(5));
+                var points = Convert.ToInt16(reader.GetValue(6));
+                await reader.CloseAsync(cancellationToken).ConfigureAwait(false);
+
+                command.Parameters.Clear();
+                command.CommandText =
+                    "UPDATE USERDATA SET Level = @level, Exp = @exp, strSkill = @skill, Gold = @gold, " +
+                    "strItem = @items, Loyalty = @loyalty, Points = @points WHERE strUserID = @charId";
+                command.Parameters.AddWithValue("@level", level);
+                command.Parameters.AddWithValue("@exp", exp);
+                command.Parameters.AddWithValue("@skill", skill);
+                command.Parameters.AddWithValue("@gold", gold);
+                command.Parameters.AddWithValue("@items", items);
+                command.Parameters.AddWithValue("@loyalty", loyalty);
+                command.Parameters.AddWithValue("@points", points);
+                command.Parameters.AddWithValue("@charId", charId);
+
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            // Novice bump: branch 1..4 promotes the class by 5..8.
+            var bump = branch switch { 1 => 5, 2 => 6, 3 => 7, 4 => 8, _ => 0 };
+            if (bump != 0)
+            {
+                await using var command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = "UPDATE USERDATA SET Class = Class + @bump WHERE strUserID = @charId";
+                command.Parameters.AddWithValue("@bump", bump);
+                command.Parameters.AddWithValue("@charId", charId);
+
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return 0;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            return dbError;
+        }
+    }
 }

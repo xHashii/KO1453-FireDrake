@@ -83,6 +83,13 @@ internal sealed class GameSession : KoSession
     private const int MaxIdSize = 20; // MAX_ID_SIZE, shared/globals.h
     private const int MaxPwSize = 28; // MAX_PW_SIZE, shared/globals.h
 
+    // NEWCHAR_* result codes, shared/globals.h:263-274.
+    private const byte NewcharNoMore = 1;
+    private const byte NewcharInvalidDetails = 2;
+    private const byte NewcharExists = 3;
+    private const byte NewcharDbError = 4;
+    private const byte NewcharStatTooLow = 11;
+
     private readonly MariaDbCharacterRepository _characters;
 
     /// <summary>Port of m_strAccountID: empty until GAME_LOGIN accepts us.</summary>
@@ -126,6 +133,9 @@ internal sealed class GameSession : KoSession
                 break;
             case WizOpcode.AllcharInfoReq:
                 AllCharInfo();
+                break;
+            case WizOpcode.NewChar:
+                NewChar(packet);
                 break;
             case WizOpcode.SpeedhackCheck:
                 // CUser::SpeedHackTime returns immediately while the user is
@@ -269,6 +279,64 @@ internal sealed class GameSession : KoSession
                 result.WriteUInt32(item.ItemId).WriteUInt16(item.Durability);
         }
 
+        Send(result);
+    }
+
+    /// <summary>
+    /// Port of CUser::NewCharToAgent + CUser::ReqCreateNewChar
+    /// (CharacterSelectionHandler.cpp / DatabaseThread.cpp): the client-side
+    /// gates (slot index, class coefficient, 300 stat points, 50 per stat)
+    /// run here exactly in the original's order; everything else - nation
+    /// coherence, name uniqueness, the inserts - is CREATE_NEW_CHAR's job in
+    /// <see cref="MariaDbCharacterRepository.CreateCharacterAsync"/>. The answer
+    /// is the single NEWCHAR_* byte the original sends.
+    /// </summary>
+    private void NewChar(Packet packet)
+    {
+        var index = packet.ReadByte();
+        var name = packet.ReadString();
+        var race = packet.ReadByte();
+        var characterClass = packet.ReadUInt16();
+        var face = packet.ReadByte();
+        var hair = packet.ReadByte();
+        var strong = packet.ReadByte();
+        var sta = packet.ReadByte();
+        var dex = packet.ReadByte();
+        var intel = packet.ReadByte();
+        var cha = packet.ReadByte();
+
+        var statTotal = strong + sta + dex + intel + cha;
+
+        byte code;
+        if (index > 2)
+            code = NewcharNoMore;
+        else if (statTotal > 300)
+            code = NewcharInvalidDetails;
+        else if (!_characters.HasCoefficientAsync(characterClass).GetAwaiter().GetResult())
+            code = NewcharInvalidDetails;
+        else if (strong < 50 || sta < 50 || dex < 50 || intel < 50 || cha < 50)
+            code = NewcharStatTooLow;
+        else
+        {
+            try
+            {
+                code = _characters
+                    .CreateCharacterAsync(_accountId, index, name, race, characterClass, hair, face,
+                        strong, sta, dex, intel, cha)
+                    .GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                KoLog.Error($"Character creation for '{name}' could not reach the database.", ex);
+                code = NewcharDbError;
+            }
+        }
+
+        KoLog.Info($"[ NEW CHAR - {DateTime.Now:HH:mm:ss} ] ID={_accountId} char={name} " +
+                   $"race={race} class={characterClass} stats={statTotal} code={code}");
+
+        var result = new Packet(WizOpcode.NewChar);
+        result.WriteByte(code);
         Send(result);
     }
 
