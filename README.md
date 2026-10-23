@@ -154,3 +154,44 @@ Explicit travel writes a marker so returning to the old nation spawn does
 not trigger that compatibility repair on later logins. No SQL needs to be
 run manually. Log messages `[ TRAVEL ] ... loaded zone ...` confirm the
 handshake has completed.
+
+### Recovery and explicit GM promotion
+
+Normal recovery now runs every six seconds (the original `CUser::Update`
+checks whole elapsed seconds **> 5**). `CUser::HPTimeChange` supplies the rates:
+- Sitting HP: `floor(level * (1 + level / 30)) + 3` per tick.
+- Sitting MP: `(maxMP * 5 / (level + 29) + 3)` with integer division.
+- Standing restores only MP, using the original level-based formula.
+- Mastered mages (110/210) below 30% MP receive the original 120% MP factor.
+- GM characters refill both bars on a sitting tick, as in the C++ source.
+
+Bars are clamped, dead/loading characters do not regenerate, moving cancels
+sitting, and the timer is disposed on disconnect. Current HP/MP is saved on
+session disconnect. Combat, transformations and special event-zone recovery
+are still outside this prototype.
+
+To promote account `test`, log its characters out and stop GameServer, then run:
+
+```powershell
+dotnet run --project src\KnightOnline.GameServer -- --grant-gm test
+dotnet run --project src\KnightOnline.GameServer
+```
+
+The first command is an explicit offline operator action: it sets `Authority=0`
+for that account's **existing owned characters** and exits. It does not grant
+GM to every account, run on every startup or automatically promote future
+characters. Reconnect to load the new authority. Database credentials never
+need to be supplied in chat or command-line arguments.
+
+The rewrite's `/moradon` is public, not GM-gated. Some client command parsers
+may consume slash commands before sending chat. GM alternatives are
+`+moradon`, `+zonechange 21` (also `+zone 21`), `+teleport`, and `+heal`.
+`+` commands are checked server-side for Authority 0. `[ COMMAND ]` logs confirm
+the text reached the server. This does not implement the entire original GM
+command catalogue (item spawning, NPC spawning, war controls, etc.).
+
+New character creation now defaults to player Authority **1**, not GM **0**.
+Existing authority values are deliberately not bulk-demoted; earlier prototype
+characters may already have Authority 0. Promotion reports owned character count
+and is safe to repeat. Receiving GM authority does not itself fix a client-side
+slash-command parser; use the plus-prefixed alternatives above.

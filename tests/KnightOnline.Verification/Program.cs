@@ -426,5 +426,19 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     Check("travel: reject invalid wire coordinates", rejected);
 }
 
+// ---------- CUser::HPTimeChange recovery vectors ----------
+{
+    var normal = KnightOnline.Database.RecoveryRules.Amounts(80, 206, true, false, 6000, 5000, 0);
+    Check("recovery: level-80 sitting HP", normal.Hp == 296);
+    Check("recovery: level-80 sitting MP", normal.Mp == 232);
+    var standing = KnightOnline.Database.RecoveryRules.Amounts(80, 206, false, false, 6000, 5000, 0);
+    Check("recovery: standing restores mana only", standing.Hp == 0 && standing.Mp == 40);
+    var mage = KnightOnline.Database.RecoveryRules.Amounts(80, 210, true, false, 6000, 5000, 0);
+    Check("recovery: mastered mage low MP bonus", mage.Mp == 278);
+    var gm = KnightOnline.Database.RecoveryRules.Amounts(80, 206, true, true, 6000, 5000, 0);
+    Check("recovery: GM sitting refills both bars", gm.Hp == 6000 && gm.Mp == 5000);
+    Check("recovery: original elapsed > 5 second cadence", KnightOnline.Database.RecoveryRules.IntervalSeconds == 6);
+}
+
 Console.WriteLine($"\n{passed} passed, {failed} failed.");
 return failed == 0 ? 0 : 1;

@@ -50,6 +50,21 @@ catch (Exception ex)
     return 1;
 }
 
+if (args.Length == 2 && args[0] == "--grant-gm")
+{
+    try
+    {
+        var count = await characters.GrantGameMasterAsync(args[1]);
+        KoLog.Info($"GM promotion: account '{args[1]}', {count} owned character(s). Log out and reconnect to load authority 0.");
+        return count > 0 ? 0 : 1;
+    }
+    catch (Exception ex)
+    {
+        KoLog.Error("GM promotion failed; no promotion was committed.", ex);
+        return 1;
+    }
+}
+
 var port = settings.Port;
 if (args.Length > 0 && int.TryParse(args[0], out var parsedPort) && parsedPort is > 0 and < 65536)
     port = parsedPort;
@@ -163,6 +178,11 @@ internal sealed partial class GameSession : KoSession
 
     protected override bool HandlePacket(Packet packet)
     {
+        lock (_gameGate) return HandleGamePacket(packet);
+    }
+
+    private bool HandleGamePacket(Packet packet)
+    {
         KoLog.Info($"<- {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s)): {Hexdump(packet.Payload)}");
 
         if (!IsCryptoEnabled)
@@ -206,6 +226,10 @@ internal sealed partial class GameSession : KoSession
                 case WizOpcode.Rental:
                     // CUser::RentalSystem reads the sub-opcode, but the premium/PvP
                     // rental handling is commented out in the original: no answer.
+                    break;
+                case WizOpcode.Move:
+                    if (_inGame && packet.Length == 9 && (packet.Payload[6] != 0 || packet.Payload[7] != 0))
+                        _sitting = false;
                     break;
                 case WizOpcode.StateChange:
                     BasicStateChange(packet);
@@ -550,6 +574,7 @@ internal sealed partial class GameSession : KoSession
         else if (opcode == 2)
         {
             _inGame = true;
+            StartRecovery();
             RecomputeStats(refillWhenEmpty: false); // CUser::SetUserAbility()
         }
     }

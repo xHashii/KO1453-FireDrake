@@ -15,7 +15,10 @@ internal sealed partial class GameSession
         // Only public standing/sitting and emotion states; never GM/invisibility flags.
         if ((type == 1 && value is 1 or 2)
             || (type == 4 && value is 1 or 2 or 3 or 11 or 12 or 13 or 14 or 15))
+        {
+            if (type == 1) _sitting = value == 2;
             Send(new Packet(WizOpcode.StateChange).WriteUInt16(_socketId).WriteByte(type).WriteUInt32(value));
+        }
     }
 
     private void TravelMessage(string message)
@@ -39,15 +42,26 @@ internal sealed partial class GameSession
         if (message.Length > 128 || type is not (1 or 2))
             return;
         var words = message.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (words.Length == 0 || !words[0].StartsWith('/'))
+        if (words.Length == 0 || (words[0][0] != '/' && words[0][0] != '+'))
             return; // general multiplayer chat is a separate milestone
-        switch (words[0].ToLowerInvariant())
+        var gmCommand = words[0][0] == '+';
+        if (gmCommand && _user!.Authority != 0)
         {
+            TravelMessage("GM commands require Authority 0. Reconnect after promotion.");
+            return;
+        }
+        KoLog.Info($"[ COMMAND ] {_charId}: {message}");
+        switch ("/" + words[0][1..].ToLowerInvariant())
+        {
+            case "/heal":
+                if (_user!.Authority == 0) RestoreVitals(_maxHp, _maxMp);
+                else TravelMessage("Healing command requires GM authority.");
+                break;
             case "/town":
                 Town();
                 break;
             case "/help":
-                TravelMessage("Travel: /town, /teleport, /zone <id/name>, /moradon, /home, /eslant. H-menu Town also works.");
+                TravelMessage("Travel: /town, /teleport, /zone <id/name>, /moradon, /home, /eslant. GMs: +zonechange <id>, +moradon, +heal.");
                 break;
             case "/moradon":
                 TravelTo("moradon");
@@ -60,6 +74,7 @@ internal sealed partial class GameSession
                 break;
             case "/teleport":
             case "/warp":
+            case "/zonechange":
             case "/zone":
                 if (words.Length == 2) TravelTo(words[1]);
                 else ShowTravelList();
@@ -146,6 +161,7 @@ internal sealed partial class GameSession
         var sameZone = target.Zone == _user!.Zone;
         _user = _user with { Zone = target.Zone, Px = target.Px, Pz = target.Pz, Py = target.Py };
         _offeredTravel.Clear();
+        _sitting = false;
         if (sameZone)
         {
             Send(TravelPackets.Warp(target.Px, target.Pz));

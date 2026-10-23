@@ -364,7 +364,7 @@ public sealed partial class MariaDbCharacterRepository
                     "Points, Gold, Zone, PX, PZ, PY, dwTime, sQuestCount, MannerPoint, LoyaltyMonthly, dtCreateTime) " +
                     "VALUES (@charId, @nation, @race, @class, @hair, @face, " +
                     "@strong, @sta, @dex, @intel, @cha, " +
-                    "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, " +
+                    "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, " +
                     "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NOW())";
                 command.Parameters.AddWithValue("@charId", charId);
                 command.Parameters.AddWithValue("@nation", nation);
