@@ -663,6 +663,30 @@ public sealed class MariaDbCharacterRepository
     }
 
     /// <summary>
+    /// Persists an assigned stat point. The original keeps stat changes in
+    /// memory until the logout save; the port writes straight through so a
+    /// restart cannot spend the same point twice.
+    /// </summary>
+    public async Task SaveStatPointsAsync(string charId, byte[] stats, short points, CancellationToken cancellationToken = default)
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "UPDATE USERDATA SET Strong = @str, Sta = @sta, Dex = @dex, Intel = @intel, Cha = @cha, " +
+            "Points = @points WHERE strUserID = @charId";
+        command.Parameters.AddWithValue("@str", stats[0]);
+        command.Parameters.AddWithValue("@sta", stats[1]);
+        command.Parameters.AddWithValue("@dex", stats[2]);
+        command.Parameters.AddWithValue("@intel", stats[3]);
+        command.Parameters.AddWithValue("@cha", stats[4]);
+        command.Parameters.AddWithValue("@points", points);
+        command.Parameters.AddWithValue("@charId", charId);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// The LEVEL_UP row for a level - CGameServerDlg::GetExpByLevel, which
     /// returns 0 when the level is missing from the table.
     /// </summary>

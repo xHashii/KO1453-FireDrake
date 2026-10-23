@@ -138,6 +138,11 @@ internal sealed class GameSession : KoSession
     private readonly short[] _statBonus = new short[5];
     private readonly short[] _resist = new short[6];
 
+    // Mutable identity stats: the DB record is immutable, while the original
+    // mutates m_bStats/m_sPoints in place and saves them on logout.
+    private readonly byte[] _stats = new byte[5];
+    private short _points;
+
     public GameSession(TcpClient client, MariaDbCharacterRepository characters)
         : base(client, maxPayloadSize: 8192)
     {
@@ -189,6 +194,9 @@ internal sealed class GameSession : KoSession
                     break;
                 case WizOpcode.ItemMove:
                     ItemMove(packet);
+                    break;
+                case WizOpcode.PointChange:
+                    PointChange(packet);
                     break;
                 default:
                     KoLog.Warn($"Unhandled {Name(packet.Opcode)} in game - that system is not ported yet (M5+).");
@@ -457,7 +465,7 @@ internal sealed class GameSession : KoSession
         }
 
         KoLog.Info($"[ SEL CHAR - {DateTime.Now:HH:mm:ss} ] ID={_accountId} char={charId} " +
-                   $"zone={user.Zone} spawn={user.Px},{user.Pz},{user.Py} level={user.Level}");
+                   $"zone={user.Zone} spawn={user.Px},{user.Pz},{user.Py} level={user.Level} items={_protos.Count}");
 
         _user = user;
         _charId = charId;
@@ -467,6 +475,9 @@ internal sealed class GameSession : KoSession
             ? parsed.Slots
             : parsed.Slots.Concat(Enumerable.Repeat(ItemSlotData.Empty, InventoryTotal - parsed.Slots.Length)).ToArray();
         _slotCount = Math.Max(parsed.SlotCount, InventoryTotal);
+        _stats[0] = user.Str; _stats[1] = user.Sta; _stats[2] = user.Dex;
+        _stats[3] = user.Int; _stats[4] = user.Cha;
+        _points = user.Points;
         RecomputeStats(refillWhenEmpty: true);
 
         // GetSPosX() = uint16(world * 10) and the stored PX is world * 100.
@@ -572,7 +583,7 @@ internal sealed class GameSession : KoSession
             .WriteByte(0) // m_bRank - the king system recomputes it; not ported
             .WriteByte(user.Title)
             .WriteByte(user.Level)
-            .WriteUInt16((ushort)user.Points)
+            .WriteUInt16((ushort)_points)
             .WriteUInt32((uint)maxExp)
             .WriteUInt32((uint)user.Exp)
             .WriteUInt32((uint)user.Loyalty)
@@ -591,11 +602,11 @@ internal sealed class GameSession : KoSession
             .WriteUInt16((ushort)_currentMp)
             .WriteUInt16(_maxWeight)
             .WriteUInt16((ushort)_itemWeight)
-            .WriteByte(user.Str).WriteByte(ClampByte(_statBonus[0]))
-            .WriteByte(user.Sta).WriteByte(ClampByte(_statBonus[1]))
-            .WriteByte(user.Dex).WriteByte(ClampByte(_statBonus[2]))
-            .WriteByte(user.Int).WriteByte(ClampByte(_statBonus[3]))
-            .WriteByte(user.Cha).WriteByte(ClampByte(_statBonus[4]))
+            .WriteByte(_stats[0]).WriteByte(ClampByte(_statBonus[0]))
+            .WriteByte(_stats[1]).WriteByte(ClampByte(_statBonus[1]))
+            .WriteByte(_stats[2]).WriteByte(ClampByte(_statBonus[2]))
+            .WriteByte(_stats[3]).WriteByte(ClampByte(_statBonus[3]))
+            .WriteByte(_stats[4]).WriteByte(ClampByte(_statBonus[4]))
             .WriteUInt16(_totalHit)
             .WriteUInt16((ushort)_totalAc)
             .WriteByte(ClampByte(_resist[0]))
@@ -749,8 +760,8 @@ internal sealed class GameSession : KoSession
             itemDamage = 3;
 
         int level = user.Level;
-        int strTotal = user.Str + _statBonus[0], staTotal = user.Sta + _statBonus[1],
-            dexTotal = user.Dex + _statBonus[2], intTotal = user.Int + _statBonus[3];
+        int strTotal = _stats[0] + _statBonus[0], staTotal = _stats[1] + _statBonus[1],
+            dexTotal = _stats[2] + _statBonus[2], intTotal = _stats[3] + _statBonus[3];
 
         var baseAp = strTotal > 150 ? strTotal - 150 : 0;
         if (strTotal == 160)
@@ -846,8 +857,11 @@ internal sealed class GameSession : KoSession
         var src = packet.ReadByte();
         var dst = packet.ReadByte();
 
-        if (!TryApplyMove(dir, itemId, src, dst))
+        var rejection = MoveRejection(dir, itemId, src, dst);
+        if (rejection is not null)
         {
+            KoLog.Info($"[ ITEM MOVE - {DateTime.Now:HH:mm:ss} ] {_charId} rejected " +
+                       $"dir={dir} item={itemId} {src} -> {dst}: {rejection}");
             SendItemMove(0);
             return;
         }
@@ -868,62 +882,62 @@ internal sealed class GameSession : KoSession
         KoLog.Info($"[ ITEM MOVE - {DateTime.Now:HH:mm:ss} ] {_charId} dir={dir} item={itemId} {src} -> {dst}");
     }
 
-    private bool TryApplyMove(byte dir, uint itemId, byte src, byte dst)
+    /// <summary>Applies the move and returns null, or the reason it was rejected.</summary>
+    private string? MoveRejection(byte dir, uint itemId, byte src, byte dst)
     {
         if (itemId == 0 || !_protos.TryGetValue(itemId, out var proto))
-            return false; // C++: GetItemPtr(nullptr) -> fail_return
+            return $"no prototype for item {itemId} ({_protos.Count} loaded)"; // C++: GetItemPtr(nullptr)
 
         int srcIndex, dstIndex;
         switch (dir)
         {
             case 1: // ITEM_INVEN_SLOT
-                if (src >= HaveMax || dst >= SlotMax || !ItemEquipAvailable(proto) || !IsValidSlotPos(proto, dst))
-                    return false;
+                if (src >= HaveMax) return $"source {src} outside the inventory range";
+                if (dst >= SlotMax) return $"destination {dst} outside the equipment range";
+                if (!ItemEquipAvailable(proto)) return "level/rank/title/stat requirements not met";
+                if (!IsValidSlotPos(proto, dst)) return $"slot type {proto.Slot} does not fit position {dst}";
                 srcIndex = SlotMax + src;
                 dstIndex = dst;
                 break;
             case 2: // ITEM_SLOT_INVEN
-                if (src >= SlotMax || dst >= HaveMax)
-                    return false;
+                if (src >= SlotMax) return $"source {src} outside the equipment range";
+                if (dst >= HaveMax) return $"destination {dst} outside the inventory range";
                 srcIndex = src;
                 dstIndex = SlotMax + dst;
                 break;
             case 3: // ITEM_INVEN_INVEN
-                if (src >= HaveMax || dst >= HaveMax)
-                    return false;
+                if (src >= HaveMax || dst >= HaveMax) return $"inventory indices {src}/{dst} out of range";
                 srcIndex = SlotMax + src;
                 dstIndex = SlotMax + dst;
                 break;
             case 4: // ITEM_SLOT_SLOT
-                if (src >= SlotMax || dst >= SlotMax || !IsValidSlotPos(proto, dst))
-                    return false;
+                if (src >= SlotMax || dst >= SlotMax) return $"equipment indices {src}/{dst} out of range";
+                if (!IsValidSlotPos(proto, dst)) return $"slot type {proto.Slot} does not fit position {dst}";
                 srcIndex = src;
                 dstIndex = dst;
                 break;
             case 7: // ITEM_INVEN_TO_COSP
-                if (src >= HaveMax || dst >= CospreCount)
-                    return false;
+                if (src >= HaveMax || dst >= CospreCount) return $"cospre move indices {src}/{dst} out of range";
                 srcIndex = SlotMax + src;
                 dstIndex = CospreStart + dst;
                 break;
             case 8: // ITEM_COSP_TO_INVEN
-                if (src >= CospreCount || dst >= HaveMax)
-                    return false;
+                if (src >= CospreCount || dst >= HaveMax) return $"cospre move indices {src}/{dst} out of range";
                 srcIndex = CospreStart + src;
                 dstIndex = SlotMax + dst;
                 break;
             default:
-                return false;
+                return $"direction {dir} not ported (zone/magic-bag moves)";
         }
 
         if (Slot(srcIndex).ItemId != itemId)
-            return false; // the original insists the source holds exactly this item
+            return $"source slot {srcIndex} holds {Slot(srcIndex).ItemId}, not {itemId}";
 
         var source = Slot(srcIndex);
         var target = Slot(dstIndex);
         _slots[dstIndex] = source;
         _slots[srcIndex] = target.ItemId != 0 ? target : ItemSlotData.Empty;
-        return true;
+        return null;
     }
 
     /// <summary>Port of CUser::ItemEquipAvailable: level/rank/title/stat requirements.</summary>
@@ -934,11 +948,11 @@ internal sealed class GameSession : KoSession
             && user.Level <= proto.ReqLevelMax
             && user.Rank >= proto.ReqRank
             && user.Title >= proto.ReqTitle
-            && user.Str >= proto.ReqStr
-            && user.Sta >= proto.ReqSta
-            && user.Dex >= proto.ReqDex
-            && user.Int >= proto.ReqIntel
-            && user.Cha >= proto.ReqCha;
+            && _stats[0] >= proto.ReqStr
+            && _stats[1] >= proto.ReqSta
+            && _stats[2] >= proto.ReqDex
+            && _stats[3] >= proto.ReqIntel
+            && _stats[4] >= proto.ReqCha;
     }
 
     /// <summary>
@@ -969,6 +983,47 @@ internal sealed class GameSession : KoSession
             case 25: return dest == 47 || dest == 48; // the magic bags themselves
             default: return proto.Slot >= 100 && dest >= CospreStart && dest < CospreStart + CospreCount;
         }
+    }
+
+    /// <summary>
+    /// Port of CUser::PointChange (User.cpp:1833): uint8 type, 1-based STAT
+    /// order. Validates like the original (stat in range, a free point left,
+    /// stat below STAT_MAX) and drops invalid requests in silence; a valid one
+    /// spends the point, recomputes abilities and answers WIZ_POINT_CHANGE
+    /// (type sub-opcode, new stat value, max HP/MP, total hit, max weight)
+    /// plus the SendItemMove(1) stat refresh. The original keeps the change in
+    /// memory until the logout save; the port persists it immediately so a
+    /// restart cannot spend the same point twice.
+    /// </summary>
+    private void PointChange(Packet packet)
+    {
+        var type = packet.ReadByte();
+        var stat = type - 1;
+        if (stat > 4 || _points < 1 || _stats[stat] >= 255)
+            return;
+
+        _points--;
+        var value = ++_stats[stat];
+        try
+        {
+            _characters.SaveStatPointsAsync(_charId, _stats, _points).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            KoLog.Error($"Saving the stat change for '{_charId}' could not reach the database.", ex);
+        }
+
+        RecomputeStats(refillWhenEmpty: false); // SetUserAbility()
+
+        var result = new Packet(WizOpcode.PointChange, type);
+        result.WriteUInt16(value)
+            .WriteInt16(_maxHp)
+            .WriteInt16(_maxMp)
+            .WriteUInt16(_totalHit)
+            .WriteUInt16(_maxWeight);
+        Send(result);
+        SendItemMove(1);
+        KoLog.Info($"[ POINT CHANGE - {DateTime.Now:HH:mm:ss} ] {_charId} stat={stat} -> {value}, {_points} point(s) left");
     }
 
     /// <summary>Port of CUser::SendItemMove: sub-opcode 0 = failure, else the refreshed stats.</summary>
