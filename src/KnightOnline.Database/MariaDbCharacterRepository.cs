@@ -397,15 +397,16 @@ public sealed class MariaDbCharacterRepository
             // The T-SQL INSERT left Zone/PX/PZ/PY to SQL Server defaults the
             // converted schema lost; a character at zone 0 has no map and can
             // never enter the world, so the port spawns it at its nation's
-            // home zone init point. ZONE_INFO stores world * 100 (ZoneInfoSet
-            // divides by 100); USERDATA and the WIZ_SEL_CHAR answer carry
-            // world * 10, hence / 10.
+            // home zone init point. ZONE_INFO and USERDATA both store
+            // world * 100 (ZoneInfoSet and DBAgent::LoadUserData divide by
+            // 100 for the float world position); the WIZ_SEL_CHAR/WIZ_MYINFO
+            // answers send GetSPosX() = uint16(world * 10), i.e. stored / 10.
             await using (var command = connection.CreateCommand())
             {
                 command.Transaction = transaction;
                 command.CommandText =
                     "UPDATE USERDATA u JOIN ZONE_INFO z ON z.ZoneNo = @nation AND z.ServerNo = 1 " +
-                    "SET u.Zone = z.ZoneNo, u.PX = z.InitX / 10, u.PZ = z.InitZ / 10, u.PY = z.InitY / 10 " +
+                    "SET u.Zone = z.ZoneNo, u.PX = z.InitX, u.PZ = z.InitZ, u.PY = z.InitY " +
                     "WHERE u.strUserID = @charId";
                 command.Parameters.AddWithValue("@nation", nation);
                 command.Parameters.AddWithValue("@charId", charId);
@@ -492,8 +493,9 @@ public sealed class MariaDbCharacterRepository
         // method scope when enclosed blocks already used them (CS0136).
         await using var select = connection.CreateCommand();
         select.CommandText =
-            "SELECT Nation, Race, Class, HairRGB, Level, Exp, Loyalty, Face, City, Knights, Fame, " +
-            "Hp, Mp, Sp, Strong, Sta, Dex, Intel, Cha, Authority, Points, Gold, Zone, PX, PZ, PY " +
+            "SELECT Nation, Race, Class, HairRGB, Rank, Title, Level, Exp, Loyalty, Face, City, " +
+            "Knights, Fame, Hp, Mp, Sp, Strong, Sta, Dex, Intel, Cha, Authority, Points, Gold, " +
+            "Zone, PX, PZ, PY, strSkill, strItem, MannerPoint, LoyaltyMonthly, sQuestCount, strQuest " +
             "FROM USERDATA WHERE strUserID = @charId";
         select.Parameters.AddWithValue("@charId", charId);
 
@@ -507,26 +509,77 @@ public sealed class MariaDbCharacterRepository
             Convert.ToUInt16(row.GetValue(2)),
             Convert.ToByte(row.GetValue(3)),
             Convert.ToByte(row.GetValue(4)),
-            Convert.ToInt32(row.GetValue(5)),
-            Convert.ToInt32(row.GetValue(6)),
-            Convert.ToByte(row.GetValue(7)),
-            Convert.ToByte(row.GetValue(8)),
-            Convert.ToInt16(row.GetValue(9)),
+            Convert.ToByte(row.GetValue(5)),
+            Convert.ToByte(row.GetValue(6)),
+            Convert.ToInt32(row.GetValue(7)),
+            Convert.ToInt32(row.GetValue(8)),
+            Convert.ToByte(row.GetValue(9)),
             Convert.ToByte(row.GetValue(10)),
             Convert.ToInt16(row.GetValue(11)),
-            Convert.ToInt16(row.GetValue(12)),
+            Convert.ToByte(row.GetValue(12)),
             Convert.ToInt16(row.GetValue(13)),
-            Convert.ToByte(row.GetValue(14)),
-            Convert.ToByte(row.GetValue(15)),
+            Convert.ToInt16(row.GetValue(14)),
+            Convert.ToInt16(row.GetValue(15)),
             Convert.ToByte(row.GetValue(16)),
             Convert.ToByte(row.GetValue(17)),
             Convert.ToByte(row.GetValue(18)),
             Convert.ToByte(row.GetValue(19)),
-            Convert.ToInt16(row.GetValue(20)),
-            Convert.ToInt32(row.GetValue(21)),
-            Convert.ToUInt16(row.GetValue(22)),
-            Convert.ToUInt16(row.GetValue(23)),
+            Convert.ToByte(row.GetValue(20)),
+            Convert.ToByte(row.GetValue(21)),
+            Convert.ToInt16(row.GetValue(22)),
+            Convert.ToInt32(row.GetValue(23)),
             Convert.ToUInt16(row.GetValue(24)),
-            Convert.ToUInt16(row.GetValue(25)));
+            Convert.ToInt32(row.GetValue(25)),
+            Convert.ToInt32(row.GetValue(26)),
+            Convert.ToInt32(row.GetValue(27)),
+            GetBlob(row, 28),
+            GetBlob(row, 29),
+            Convert.ToInt32(row.GetValue(30)),
+            Convert.ToInt32(row.GetValue(31)),
+            Convert.ToInt16(row.GetValue(32)),
+            GetBlob(row, 33));
+    }
+
+    private static byte[] GetBlob(MySqlDataReader reader, int ordinal) =>
+        reader.IsDBNull(ordinal) ? Array.Empty<byte>() : (byte[])reader.GetValue(ordinal);
+
+    /// <summary>
+    /// The COEFFICIENT row for a class: the Hp/Mp/Sp factors SetMaxHp and
+    /// SetMaxMp build the derived maxima from (null when the class is missing).
+    /// </summary>
+    public async Task<ClassCoefficient?> LoadCoefficientAsync(ushort characterClass, CancellationToken cancellationToken = default)
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Hp, Mp, Sp FROM COEFFICIENT WHERE sClass = @class";
+        command.Parameters.AddWithValue("@class", characterClass);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            return null;
+
+        return new ClassCoefficient(
+            Convert.ToSingle(reader.GetValue(0)),
+            Convert.ToSingle(reader.GetValue(1)),
+            Convert.ToSingle(reader.GetValue(2)));
+    }
+
+    /// <summary>
+    /// The LEVEL_UP row for a level - CGameServerDlg::GetExpByLevel, which
+    /// returns 0 when the level is missing from the table.
+    /// </summary>
+    public async Task<long> LoadLevelExpAsync(int level, CancellationToken cancellationToken = default)
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Exp FROM LEVEL_UP WHERE level = @level";
+        command.Parameters.AddWithValue("@level", level);
+
+        var value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return value is null or DBNull ? 0L : Convert.ToInt64(value);
     }
 }
