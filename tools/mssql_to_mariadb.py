@@ -317,6 +317,17 @@ def detect_encoding(path: str, forced: str | None) -> str:
     return "utf-8"
 
 
+# Tables whose rows are player accounts/characters. Their schema is still
+# converted, but --exclude-user-data drops their INSERTs so the output can be
+# committed safely even to a public repo.
+USER_DATA_TABLES = {
+    "TB_USER", "ACCOUNT_CHAR", "CURRENTUSER", "USERDATA", "WAREHOUSE",
+    "USERDATA_SKILLSHORTCUT", "MAIL_BOX", "SEALED_ITEMS", "RENTAL_ITEM",
+    "WEB_ITEMMALL", "USER_DAILY_OP", "USER_KNIGHTS_RANK", "USER_PERSONAL_RANK",
+    "KNIGHTS_USER", "FRIEND_LIST", "REMOVED_USERDATA",
+}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("input", help="SSMS-generated .sql dump")
@@ -324,6 +335,10 @@ def main() -> int:
     ap.add_argument("-o", "--outdir", required=True, help="Output directory")
     ap.add_argument("--encoding", default=None, help="Force input encoding (default: auto-detect)")
     ap.add_argument("--chunk-mb", type=int, default=64, help="Split data output every N MB (default 64)")
+    ap.add_argument("--exclude-user-data", action="store_true",
+                    help="Skip INSERTs for account/character tables (TB_USER, USERDATA, WAREHOUSE, ...) so output is safe to commit")
+    ap.add_argument("--exclude", action="append", default=[], metavar="TABLE",
+                    help="Additionally skip INSERTs for this table (repeatable)")
     args = ap.parse_args()
 
     db = args.database
@@ -359,7 +374,13 @@ def main() -> int:
     row_counts: dict[str, int] = {}
     skipped = converted = errors = 0
 
+    excluded_tables = {t.upper() for t in args.exclude}
+    if args.exclude_user_data:
+        excluded_tables |= USER_DATA_TABLES
+    excluded_rows: dict[str, int] = {}
+
     insert_re = re.compile(r"(?is)^\s*INSERT\s+(?:INTO\s+)?(?:`dbo`\.)?`?([A-Za-z0-9_]+)`?")
+    dml_table_re = re.compile(r"(?is)^\s*(?:UPDATE|DELETE\s+FROM)\s+(?:`dbo`\.)?`?([A-Za-z0-9_]+)`?")
 
     with open(args.input, "r", encoding=encoding, errors="replace") as fh:
         for batch in split_batches(fh):
@@ -396,6 +417,12 @@ def main() -> int:
                             skipped += 1
                             continue
                     elif kw in ("INSERT", "UPDATE", "DELETE", "MERGE"):
+                        bt = bracket_to_backtick(text)
+                        tm = insert_re.search(bt) or dml_table_re.search(bt)
+                        if tm and tm.group(1).upper() in excluded_tables:
+                            excluded_rows[tm.group(1)] = excluded_rows.get(tm.group(1), 0) + 1
+                            skipped += 1
+                            continue
                         out = convert_dml(text)
                         data.write(out + "\n")
                         chunk_bytes += len(out) + 1
@@ -430,6 +457,7 @@ def main() -> int:
         "statements_skipped": skipped,
         "statement_errors": errors,
         "tables_with_rows": dict(sorted(row_counts.items())),
+        "excluded_tables_rows_skipped": dict(sorted(excluded_rows.items())),
         "routines_extracted": routines,
     }
     with open(os.path.join(args.outdir, "manifest.json"), "w", encoding="utf-8") as mf:
@@ -449,6 +477,9 @@ def main() -> int:
     print(f"[converter] done: {converted} statements converted, {skipped} skipped, "
           f"{errors} errors, {len(routines)} routines extracted, "
           f"{len(row_counts)} tables with data ({sum(row_counts.values())} inserts).")
+    if excluded_rows:
+        print(f"[converter] excluded {sum(excluded_rows.values())} statement(s) for {len(excluded_rows)} table(s): "
+              + ", ".join(sorted(excluded_rows)))
     print(f"[converter] outputs in {args.outdir}: {os.path.basename(schema_path)}, "
           f"{len(data_files)} data file(s), procedures_report.md, manifest.json")
     return 0

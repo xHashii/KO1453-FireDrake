@@ -14,34 +14,56 @@
 
 ---
 
-## 1. Getting the database to me: schema-only export (small, do this first)
+## 1. Getting the database to me
 
-The schema (tables, columns, indexes) plus the **stored procedure bodies**
-are what the conversion work needs. That's tiny compared to the data:
+### What does NOT work
 
-In SSMS, for **each** database (`KO_MAIN`-equivalent and `KO_GAME`-equivalent
-— in many KO installs it's one hybrid DB like `KN_online`, that's fine too):
+- **Pastebin**: max paste size is 512 KB (10 MB for PRO) — a 120 MB file
+  cannot go there, and Pastebin's acceptable-use policy bans password/login
+  data (a KO dump contains account passwords). Links to *small* files (a
+  procedure, an error log) are fine — I can read those; send the **raw** link.
+- **Pasting the dump into chat**: far beyond any context limit. Don't.
+- **Git LFS / GitHub Release assets**: work for humans, but their downloads
+  are served from hosts my sandbox cannot reach, so I couldn't retrieve them.
+- **GitHub web upload of the whole file**: capped at 25 MB per file; normal
+  git pushes block anything over 100 MB. Your ~120 MB text file fits neither.
 
-1. Right-click DB → **Tasks → Generate Scripts…**
-2. Choose Objects: **Select all** (tables, views, stored procedures, functions)
-3. Set Scripting Options → **Advanced**:
-   - *Types of data to script*: **Schema only**
-   - *Script Indexes*: True, *Script Primary Keys*: True
-4. Save as one file per DB, e.g. `sql/mssql/KO_MAIN_schema.sql`,
-   `sql/mssql/KO_GAME_schema.sql`, and commit/push those.
+### What DOES work — pick one
 
-That single step unblocks the whole data-layer milestone on my side.
+**Option A (recommended): schema-only export, a few MB.**
+Tables + column definitions + stored-procedure bodies are 90% of what the
+port needs. In SSMS, per database: right-click DB → **Tasks → Generate
+Scripts…** → Select all objects → **Advanced**: *Types of data to script* =
+**Schema only**, *Script Indexes/Primary Keys* = True. Upload the result
+with the GitHub web UI (under the 25 MB browser cap) to `sql/mssql/` on any
+branch, or push it with git. Player rows stay converting locally via §2.
 
-### If you *also* want me to see sample data
+**Option B: the full file, split into parts, on a throwaway branch.**
+This repo is currently **private** (verified) — keep it that way while the
+dump is on it. Parts are plain git objects, which I can fetch reliably:
 
-- Compress the full file (7-Zip). SQL text typically shrinks 5–15×,
-  so 240 MB often lands at ~15–40 MB.
-- Even compressed: **don't put the full thing in git** unless this repo is
-  private (passwords!). Options that keep it out of history:
-  - attach it to the chat here, if the size is accepted;
-  - or run the converter locally (§2) and share only
-    `out/<DB>/manifest.json`, `procedures_report.md` and a few
-    `procedures_tsql/*.sql` — that's usually everything I need.
+```powershell
+# On your PC (in a clone of this repository):
+git fetch origin
+git switch -c db-drop origin/arena/a8daa4cb-ko1453-firedrake   # base it on the rewrite branch so tools/ exists
+python tools\split_dump.py split "C:\path\to\your-dump.sql" db-drop --part-size-mb 40
+git add db-drop
+git commit -m "DB dump parts (temporary, do not merge)"
+git push -u origin db-drop
+```
+
+(Zip the .sql first and split the .zip instead if you prefer — either works;
+40 MB parts need the git CLI, 25 MB parts also fit the browser uploader.)
+
+Then tell me it's pushed. I will `git fetch origin db-drop`, extract and
+re-join the parts **without merging anything into the rewrite branch**, run
+the converter here, and commit only the converted outputs. Afterwards you
+can delete the `db-drop` branch on GitHub. Note that deleting a branch does
+not instantly purge objects from GitHub's storage — fine for a private repo;
+if that bothers you, use Option A + §2 instead.
+
+**Tip before splitting**: check how small a plain .zip gets. If it's ≤ 95 MB
+you can push that single file with the git CLI without splitting at all.
 
 ## 2. Converting the full dump (runs on your machine)
 
