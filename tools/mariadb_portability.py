@@ -218,6 +218,63 @@ def make_schema_portable(sql: str) -> tuple[str, dict[str, list[tuple[str, str, 
 
 
 # --------------------------------------------------------------------------
+# Type syntax
+# --------------------------------------------------------------------------
+# MariaDB parses the display width *before* UNSIGNED: `TINYINT(1) UNSIGNED` is
+# legal, `TINYINT UNSIGNED(1)` is ERROR 1064 and aborts the whole CREATE TABLE.
+# The converter's rule table produced exactly that once (bit -> TINYINT(1), then
+# the tinyint rule re-matched its own earlier output), so MAIL_BOX died at
+# statement 62 of 320 and nothing after it was created. A gate that only checks
+# *known* type names therefore has to check their spelling too.
+_NUMERIC_TYPE_WORDS = (
+    r"bigint|bit|dec|decimal|double(?:[ \t]+precision)?|fixed|float|int"
+    r"|integer|mediumint|middleint|numeric|real|smallint|tinyint")
+_OTHER_TYPE_WORDS = (
+    r"binary|blob|bool|boolean|char(?:acter)?(?:[ \t]+varying)?|date|datetime"
+    r"|geometry|json|longblob|longtext|mediumblob|mediumtext|set|text|time"
+    r"|timestamp|tinyblob|tinytext|varbinary|varchar|year")
+_TYPE_LENGTH = r"(?:[ \t]*\([ \t]*\d+(?:[ \t]*,[ \t]*\d+)?[ \t]*\))?"
+
+LEGAL_TYPE_RE = re.compile(
+    rf"(?i)^(?:(?:{_NUMERIC_TYPE_WORDS}){_TYPE_LENGTH}"
+    rf"(?:[ \t]+unsigned)?(?:[ \t]+zerofill)?"
+    rf"|(?:{_OTHER_TYPE_WORDS}){_TYPE_LENGTH}"
+    rf"|enum[ \t]*\([^)]*\)|set[ \t]*\([^)]*\))$")
+
+# UNSIGNED/ZEROFILL are numeric-only attributes, so the repair below never
+# touches a character or LOB column: moving the modifier there would only
+# produce a different kind of syntax error.
+_MISPLACED_MODIFIER_RE = re.compile(
+    rf"(?im)^(?P<head>[ \t]*`?[A-Za-z_][A-Za-z0-9_$]*`?[ \t]+)"
+    rf"(?P<type>{_NUMERIC_TYPE_WORDS})"
+    rf"(?P<mods>(?:[ \t]+(?:unsigned|zerofill))+)"
+    rf"(?P<len>[ \t]*\([ \t]*\d+(?:[ \t]*,[ \t]*\d+)?[ \t]*\))"
+    rf"(?P<tail>.*)$")
+
+
+def is_legal_type(decl: str) -> bool:
+    """True when a declared column type is a spelling MariaDB can parse."""
+    return LEGAL_TYPE_RE.match(re.sub(r"\s+", " ", decl).strip()) is not None
+
+
+def normalize_type_syntax(sql: str) -> tuple[str, list[tuple[str, str]]]:
+    """Move UNSIGNED/ZEROFILL behind the display width where they belong.
+
+    Purely syntactic and lossless - it keeps both the width and the modifier,
+    it only puts them in the order MariaDB accepts.
+    """
+    fixed: list[tuple[str, str]] = []
+
+    def repl(m: re.Match[str]) -> str:
+        old = f"{m.group('type')}{m.group('mods')}{m.group('len')}"
+        new = f"{m.group('type')}{m.group('len')}{m.group('mods')}"
+        fixed.append((re.sub(r"\s+", " ", old).strip(), re.sub(r"\s+", " ", new).strip()))
+        return f"{m.group('head')}{new}{m.group('tail')}"
+
+    return _MISPLACED_MODIFIER_RE.sub(repl, sql), fixed
+
+
+# --------------------------------------------------------------------------
 # Identifier quoting
 # --------------------------------------------------------------------------
 # SSMS brackets every identifier. A column whose name is also a type keyword

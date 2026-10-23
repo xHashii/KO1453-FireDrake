@@ -1010,7 +1010,7 @@ CREATE TABLE `MAIL_BOX`(
  `sDurability` smallint NOT NULL,
  `nSerialNum` bigint NOT NULL,
  `nCoins` int NOT NULL,
- `bDeleted` TINYINT UNSIGNED(1) NOT NULL,
+ `bDeleted` TINYINT(1) NOT NULL,
 PRIMARY KEY 
 (
  `nLetterID`
@@ -1213,7 +1213,7 @@ CREATE TABLE `PUS_CASH`(
 CREATE TABLE `PUS_ITEMLERI`(
  `id` int NOT NULL,
  `PID` int NULL,
- `ExtraItem` TINYINT UNSIGNED(1) NOT NULL,
+ `ExtraItem` TINYINT(1) NOT NULL,
  `ItemIsmi` varchar(50) NULL,
  `ItemResmi` varchar(50) NULL,
  `itemkodu` int NOT NULL,
@@ -1227,8 +1227,8 @@ CREATE TABLE `PUS_ITEMLERI`(
  `kullanim` varchar(250) NULL,
  `kosul` varchar(150) NULL,
  `reqtitle` TINYINT UNSIGNED NOT NULL,
- `ItemVer` TINYINT UNSIGNED(1) NOT NULL,
- `KomutCalistir` TINYINT UNSIGNED(1) NOT NULL,
+ `ItemVer` TINYINT(1) NOT NULL,
+ `KomutCalistir` TINYINT(1) NOT NULL,
  `Komut` varchar(50) NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 

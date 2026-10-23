@@ -258,6 +258,14 @@ single file over 100 MB (and warns over 50 MB).
   `bin/…/sql/kn_online/*.sql` copy is stale, rebuild (`dotnet build`) so the
   fixed scripts are copied next to the executable, then start again — the
   half-created tables are cleaned up automatically.
+- **`Auto-migration failed` + `You have an error in your SQL syntax … (1064)`**
+  → a statement the server cannot parse at all; the log names the script and
+  the statement number (e.g. `statement 62/320`). Run
+  `python3 tools/check_migrations.py`: it reports the offending column and
+  line, and `--fix` repairs the type syntax. Then start the server again — the
+  tables the aborted run created are cleaned up automatically.
+  `python3 tools/test_converter.py` covers the converter rules that produce
+  those statements.
 - **Migration checksum error after a pull** → an already-applied script
   changed upstream. During development the cheap fix is a fresh volume:
   `docker compose down -v` → `up -d` (all test data is recreated from the

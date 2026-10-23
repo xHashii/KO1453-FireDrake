@@ -29,10 +29,19 @@ Checks
     7. string literals carrying raw control bytes (binary smuggled through a
        character column by the SSMS text export)           -> warning
     8. per-table INSERT counts vs manifest.json             -> error
+  schema (continued)
+   10. declared column types MariaDB can actually parse - a misplaced
+       UNSIGNED (TINYINT UNSIGNED(1), the width must come first) or a
+       surviving SQL Server spelling is ERROR 1064 at CREATE TABLE time
+                                                               -> error
   all files
     9. statements are splittable: balanced quotes, every statement terminated,
        no leftover SQL Server syntax ([dbo], IDENTITY(, NVARCHAR, GETDATE,
        CLUSTERED, ON [PRIMARY])                            -> error
+   11. optional deep parse: with sqlglot installed (pip install sqlglot) every
+       DDL statement is parsed by a real MySQL grammar instead of by the
+       regexes above                                        -> error
+       (--no-parse skips it; the rest of the gate stays stdlib-only)
 
 Exit code 0 = clean (warnings allowed), 1 = something would break an import.
 """
@@ -47,6 +56,19 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import mariadb_portability as portability  # noqa: E402  (sibling module)
+
+# Optional. The checks below are regexes standing in for a parser; when sqlglot
+# is installed the DDL is parsed by a real MySQL grammar as well, which is the
+# only thing that reliably catches "MariaDB cannot read this at all". It is a
+# dev-machine extra, not a requirement: `pip install sqlglot`.
+try:
+    import sqlglot  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    sqlglot = None  # type: ignore
+
+#: statement heads worth deep-parsing (DML is checked structurally instead:
+#: value arity, known columns, balanced quotes - see checks 6, 7 and 9).
+_DDL_HEADS = frozenset({"CREATE", "ALTER", "SET", "DROP", "TRUNCATE", "RENAME"})
 
 MSSQL_LEFTOVERS = [
     r"\[dbo\]", r"\bIDENTITY\s*\(", r"\bNVARCHAR\b", r"\bGETDATE\b",
@@ -290,7 +312,56 @@ def check_schema_file(path: str, sql: str, rep: Report) -> dict[str, dict[str, s
             rep.error(f"{path}:{line}: leftover SQL Server syntax {m.group(0)!r}")
             break  # one report per pattern is enough
 
+    # 10. declared types MariaDB cannot parse at all. The converter's rule
+    #     cascade once emitted `TINYINT UNSIGNED(1)` (the width must come
+    #     *before* UNSIGNED); the old type scan accepted it as a legal spelling
+    #     and reported 0 errors over a schema that failed at statement 62/320
+    #     with ERROR 1064.
+    for m in CREATE_TABLE_BODY_RE.finditer(sql):
+        for cm in COLUMN_LINE_RE.finditer(m.group("body")):
+            name = cm.group("col")
+            if name.lower() in portability._CONSTRAINT_WORDS:
+                continue
+            decl = re.sub(r"\s+", " ", cm.group("type")).strip()
+            if portability.is_legal_type(decl):
+                continue
+            line = sql.count("\n", 0, m.start("body") + cm.start()) + 1
+            rep.error(f"{path}:{line}: {m.group('name')}.{name} declares {decl!r}, which "
+                      f"MariaDB cannot parse (ERROR 1064); the display width comes "
+                      f"before UNSIGNED - e.g. TINYINT(1) or TINYINT(1) UNSIGNED "
+                      f"(--fix repairs a misplaced UNSIGNED)")
+
     return tables
+
+
+def deep_parse_ddl(path: str, sql: str, rep: Report) -> int:
+    """Parse every DDL statement with a real MySQL grammar; return how many.
+
+    Returns 0 (and stays silent) when sqlglot is not installed. This is the
+    check that would have caught `TINYINT UNSIGNED(1)` on its own: a regex
+    that accepts "name [UNSIGNED] [(len)]" happily reads it, a parser reports
+    "Expecting ). Line 16" - the same statement and line MariaDB reported.
+    """
+    if sqlglot is None:
+        return 0
+
+    parsed = 0
+    for offset, stmt in iter_statements(sql):
+        if not stmt:
+            continue  # unbalanced quotes are reported by check 9
+        text = stmt.strip()
+        head = text.split(None, 1)
+        if not head or head[0].upper() not in _DDL_HEADS:
+            continue
+        parsed += 1
+        try:
+            sqlglot.parse_one(text, read="mysql")
+        except Exception as exc:  # ParseError, RecursionError, ...
+            line = sql.count("\n", 0, offset) + 1
+            first = text.splitlines()[0][:70]
+            rep.error(f"{path}:{line}: a MySQL parser rejects this statement "
+                      f"({str(exc).splitlines()[0][:160]}): {first}")
+    return parsed
 
 
 def check_data_file(path: str, sql: str, tables: dict[str, dict[str, str]],
@@ -368,11 +439,14 @@ def main() -> int:
     ap.add_argument("--dir", default="sql/mysql/kn_online",
                     help="migration folder to check (default: sql/mysql/kn_online)")
     ap.add_argument("--fix", action="store_true",
-                    help="rewrite non-portable column types in the schema file(s)")
+                    help="repair non-portable column types and unparsable type syntax in the schema file(s)")
     ap.add_argument("--quick", action="store_true",
                     help="skip the per-literal binary scan of the big data files")
     ap.add_argument("--no-manifest", action="store_true",
                     help="skip the manifest.json row-count cross-check")
+    ap.add_argument("--no-parse", action="store_true",
+                    help="skip the optional sqlglot deep parse of the DDL "
+                         "(it is skipped anyway when sqlglot is not installed)")
     args = ap.parse_args()
 
     if not os.path.isdir(args.dir):
@@ -389,6 +463,7 @@ def main() -> int:
     data_files = [f for f in files if f not in schema_files]
 
     tables: dict[str, dict[str, str]] = {}
+    deep_parsed = 0
     for name in schema_files:
         path = os.path.join(args.dir, name)
         sql = open(path, encoding="utf-8").read()
@@ -397,14 +472,18 @@ def main() -> int:
             # Repair first, then check what is actually on disk, so the report
             # never mixes pre-fix findings with the fixed file.
             fixed, changes = portability.make_schema_portable(sql)
+            fixed, reordered = portability.normalize_type_syntax(fixed)
             fixed, quoted = portability.quote_bare_column_names(fixed)
             if fixed != sql:
                 open(path, "w", encoding="utf-8", newline="\n").write(fixed)
                 rep.fixes.append(f"{path}: rewrote {sum(len(v) for v in changes.values())} "
-                                 f"column type(s), quoted {len(quoted)} identifier(s)")
+                                 f"column type(s), reordered {len(reordered)} misplaced "
+                                 f"UNSIGNED/ZEROFILL, quoted {len(quoted)} identifier(s)")
                 sql = fixed
 
         tables.update(check_schema_file(path, sql, rep))
+        if not args.no_parse:
+            deep_parsed += deep_parse_ddl(path, sql, rep)
 
     counts: dict[str, int] = {}
     for name in data_files:
@@ -428,6 +507,10 @@ def main() -> int:
 
     print(f"[check] {args.dir}: {len(files)} file(s), {len(tables)} table(s), "
           f"{sum(counts.values())} INSERT(s)")
+    if deep_parsed:
+        print(f"  deep-parsed {deep_parsed} DDL statement(s) with sqlglot's MySQL grammar")
+    elif not args.no_parse:
+        print("  (pip install sqlglot to also parse the DDL with a real MySQL grammar)")
     for msg in rep.fixes:
         print(f"  FIXED   {msg}")
     for msg in rep.warnings:

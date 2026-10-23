@@ -69,7 +69,38 @@ TYPE_RULES = [
     (r"\bgeography\b|\bgeometry\b", "TEXT"),
 ]
 
-COMPILED_TYPES = [(re.compile(p, re.IGNORECASE), r) for p, r in TYPE_RULES]
+def _build_type_matcher():
+    """Compile TYPE_RULES into a single regex + replacement table.
+
+    The rules used to be applied one after another over the whole CREATE TABLE
+    body, which let a later rule re-match an *earlier rule's output*: ``[bit]``
+    became ``TINYINT(1)`` and was then hit by the ``tinyint`` rule, producing
+    ``TINYINT UNSIGNED(1)`` -- which MariaDB rejects (the display width has to
+    come *before* UNSIGNED), failing the whole script with error 1064.
+
+    One combined alternation replaces each source type token exactly once, so a
+    replacement can never be rewritten again.  Each rule is wrapped in its own
+    named group, which also keeps rule-local ``|`` alternations from leaking
+    into neighbouring rules.
+    """
+    parts = []
+    table = {}
+    groups_before = 0
+    for index, (pattern, replacement) in enumerate(TYPE_RULES):
+        name = f"rule{index}"
+        parts.append(f"(?P<{name}>{pattern})")
+        # A rule's own group 1 sits at groups_before + 2 in the combined
+        # expression (group 1 of the rule is its wrapper), so shift every
+        # \1-style backreference in the replacement accordingly.
+        base = groups_before + 1
+        table[name] = re.sub(r"\\([1-9])",
+                             lambda m, b=base: "\\" + str(int(m.group(1)) + b),
+                             replacement)
+        groups_before += 1 + len(re.findall(r"(?<!\\)\((?!\?)", pattern))
+    return re.compile("|".join(parts), re.IGNORECASE), table
+
+
+TYPE_MATCHER, TYPE_REPLACEMENTS = _build_type_matcher()
 
 DROP_STATEMENT_PREFIXES = (
     "SET ANSI_NULLS", "SET QUOTED_IDENTIFIER", "SET ANSI_PADDING",
@@ -159,9 +190,10 @@ def bracket_to_backtick(sql: str) -> str:
 
 
 def convert_types(sql: str) -> str:
-    for pat, rep in COMPILED_TYPES:
-        sql = pat.sub(rep, sql)
-    return sql
+    def replace(match: "re.Match[str]") -> str:
+        return match.expand(TYPE_REPLACEMENTS[match.lastgroup])
+
+    return TYPE_MATCHER.sub(replace, sql)
 
 
 def fix_defaults(sql: str) -> str:
@@ -323,6 +355,14 @@ def make_column_types_portable(sql: str) -> str:
         for column, old, reason in table_changes:
             print(f"[converter] {changed_table}.{column}: {old} -> portable type ({reason})",
                   file=sys.stderr)
+    # Belt and braces: convert_types() is a single pass now, so a rule cannot
+    # rewrite another rule's output any more, but a misplaced UNSIGNED used to
+    # slip through as `TINYINT UNSIGNED(1)` - which MariaDB rejects with ERROR
+    # 1064 and which kills the whole CREATE TABLE.
+    fixed, syntax_fixes = portability.normalize_type_syntax(fixed)
+    for old, new in syntax_fixes:
+        print(f"[converter] column type {old} -> {new} (MariaDB wants the width "
+              f"before UNSIGNED)", file=sys.stderr)
     return fixed
 
 
@@ -343,6 +383,11 @@ def convert_create_table(sql: str) -> str:
     # MariaDB does not accept asc/desc inside key column lists.
     sql = re.sub(r"(?i)\s+(ASC|DESC)(\s*[,\)])", r"\2", sql)
     sql = ensure_auto_increment_key(sql)
+    # A column whose name is a type keyword (SN_NEWS.date in the real dump) can
+    # survive bracket_to_backtick unquoted when it sits in type position. It
+    # only works while the keyword happens not to be reserved, so quote it here
+    # instead of leaving the repair to the checker.
+    sql, _ = portability.quote_bare_column_names(sql)
     sql = sql.rstrip().rstrip(";")
     if not re.search(r"(?i)ENGINE\s*=", sql):
         sql += " ENGINE=InnoDB ROW_FORMAT=DYNAMIC"

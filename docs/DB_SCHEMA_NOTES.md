@@ -140,16 +140,41 @@ the multi-minute data import does not look like a hang. `MIGRATION_REPAIR=0` in
 **4. `tools/check_migrations.py` gates all of it without a server.** It encodes
 the limits above plus row size, keyless `AUTO_INCREMENT`, `DEFAULT` on
 BLOB/TEXT, `CREATE DATABASE`/`USE` in a migration, INSERT arity/unknown
-columns, and per-table row counts against `manifest.json`:
+columns, column types MariaDB cannot parse at all, and per-table row counts
+against `manifest.json`:
 
 ```bash
 python3 tools/check_migrations.py           # sql/mysql/kn_online
 python3 tools/check_migrations.py --fix     # rewrite non-portable types
+python3 tools/test_converter.py             # regression tests for the tooling
+pip install sqlglot                         # optional: parse the DDL for real
 ```
 
-Current state: **0 errors**, 140,559 INSERTs verified, and one warning that is
-a source-dump limitation rather than a bug — see the note on
-`BEGINNER_ITEM2.strItem` at the end of this document.
+The regex checks are a stand-in for a parser, so with `sqlglot` installed the
+gate additionally parses every DDL statement with a real MySQL grammar
+(`--no-parse` skips it; the tool stays stdlib-only without it). Both layers
+independently reject the `TINYINT UNSIGNED(1)` column described next — the
+parser reports `Expecting ). Line 16`, the same statement and line MariaDB did.
+
+Current state: **0 errors**, 140,559 INSERTs verified, 319 DDL statements
+deep-parsed, and one warning that is a source-dump limitation rather than a bug
+— see the note on `BEGINNER_ITEM2.strItem` at the end of this document.
+
+**5. A type rule's own output was re-matched by the next rule.** Four columns
+(`MAIL_BOX.bDeleted`, `PUS_ITEMLERI.ExtraItem`/`ItemVer`/`KomutCalistir`)
+shipped as `TINYINT UNSIGNED(1)`. MariaDB reads the display width *before*
+`UNSIGNED`, so `CREATE TABLE MAIL_BOX` died with ERROR 1064 at statement 62 of
+320 and nothing after it existed. `convert_types` used to apply `TYPE_RULES`
+one after another over the whole statement: `[bit]` → `TINYINT(1)` was then
+picked up again by the `tinyint` rule, which inserted `UNSIGNED` in front of
+the width it had just inherited. The rules are now one combined pass, so each
+source token is replaced exactly once and no replacement can be rewritten.
+
+Three guard rails went in with the fix: the checker rejects any declared type
+that is not a spelling MariaDB parses (and `--fix` moves a misplaced
+`UNSIGNED`/`ZEROFILL` behind the width), `make_column_types_portable`
+normalises the same thing on the converter side, and `tools/test_converter.py`
+pins all 30 source-type mappings plus this cascade specifically.
 
 ## The big structural finding: ONE database
 

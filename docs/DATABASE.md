@@ -218,12 +218,16 @@ dotnet run --project src/KnightOnline.LoginServer
   ```bash
   python3 tools/check_migrations.py           # 0 errors = imports cleanly
   python3 tools/check_migrations.py --fix     # rewrite non-portable types
+  python3 tools/test_converter.py             # regression tests for the tooling
   ```
 
   It encodes the limits MariaDB enforces (`CHAR`/`BINARY` ≤ 255 characters,
   `VARCHAR`/`VARBINARY` ≤ 65535 bytes, InnoDB's inline row budget, keyless
-  `AUTO_INCREMENT`, `DEFAULT` on BLOB/TEXT, …) and cross-checks every INSERT
-  against the schema and `manifest.json`. Run it after touching the converter
+  `AUTO_INCREMENT`, `DEFAULT` on BLOB/TEXT, column types MariaDB cannot parse
+  at all, …) and cross-checks every INSERT against the schema and
+  `manifest.json`. With `pip install sqlglot` it also parses every DDL
+  statement with a real MySQL grammar, which is the layer that catches a
+  statement the regex checks read as fine. Run it after touching the converter
   or any artifact under `sql/mysql/`; the rules live in
   `tools/mariadb_portability.py` with their MariaDB source references, and
   `docs/DB_SCHEMA_NOTES.md` records what each one was needed for.
