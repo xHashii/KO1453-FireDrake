@@ -25,6 +25,8 @@ void Check(string name, bool condition, string? detail = null)
     {
         failed++;
         Console.WriteLine($"FAIL  {name}" + (detail is null ? "" : $"\n      {detail}"));
+        if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+            Console.WriteLine($"::error::{name}: {detail?.Replace("\n", " ")}");
     }
 }
 
@@ -422,7 +424,7 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     CheckHex("selection: Moradon uses byte zone without init echo",
         TravelPackets.SelectCharacter(21, 31200, 40200, 0).Payload, "0115300CB40F000000");
     CheckHex("selection: Karus homeland",
-        TravelPackets.SelectCharacter(1, 35400, 161000, 0).Payload, "0101D40AE43E000000");
+        TravelPackets.SelectCharacter(1, 35400, 161000, 0).Payload, "0101D40DE43E000000");
     CheckHex("selection: El Morad homeland",
         TravelPackets.SelectCharacter(2, 167000, 37000, 0).Payload, "01023C41740E000000");
     Check("selection: nine-byte payload", TravelPackets.SelectCharacter(21, 31200, 40200, 0).Length == 9);
