@@ -66,6 +66,12 @@ def report(label: str, referenced: dict[str, str], dropped: dict[str, Path], whe
     miscased = [n for n in sorted(set(referenced) & set(dropped)) if referenced[n] != dropped[n].name]
 
     print(f"{label}: {len(referenced)} referenced by the database, {len(dropped)} present in {where}")
+    if not referenced:
+        # QUEST_HELPER ships empty in the converted database: nothing references
+        # quest scripts yet, so every dropped script would look "stray". Report
+        # the count and validate nothing until quest rows are imported.
+        print(f"  no database references yet - {len(dropped)} file(s) accepted unvalidated")
+        return []
     for name in missing:
         problems.append(f"  MISSING  {referenced[name]}  (referenced by the database, not in {where})")
     for name in stray:
