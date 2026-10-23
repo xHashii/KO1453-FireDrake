@@ -127,6 +127,12 @@ internal sealed class GameSession : KoSession
             case WizOpcode.AllcharInfoReq:
                 AllCharInfo();
                 break;
+            case WizOpcode.SpeedhackCheck:
+                // CUser::SpeedHackTime returns immediately while the user is
+                // not in game yet, so at this gate the original drops the
+                // packet in silence - and so do we. The trace line above still
+                // records it (uint8 flag + float client time).
+                break;
             default:
                 KoLog.Warn($"Unhandled {Name(packet.Opcode)} prior to selecting a character " +
                            "(the original only traced this and carried on).");

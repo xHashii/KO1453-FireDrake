@@ -71,3 +71,38 @@ Notes:
    until quest table data is imported. If your `.lua` pack also ships quest
    table SQL (QUEST_HELPER / QUEST_MENU / QUEST_TALK / QUEST_MONSTER rows),
    keep it: that is the import that wakes the scripts up.
+
+## Getting your content zips to the agent
+
+Two routes, in order of preference:
+
+1. **Chat attachment.** Drag the zip(s) straight into the Arena chat. They
+   land in the agent's sandbox, where they are unpacked, compared and placed
+   for you. Best when every zip is comfortably under ~50 MB.
+2. **Throwaway drop branch** (the `db-drop` pattern, for anything bigger).
+   From your checkout, once per zip - runs on the same branch accumulate:
+
+   ```powershell
+   .\tools\send_dump.ps1 -DumpPath "C:\path\to\first.zip"  -Branch content-drop -BaseBranch arena/7eda6ad8-ko1453-firedrake
+   .\tools\send_dump.ps1 -DumpPath "C:\path\to\second.zip" -Branch content-drop -BaseBranch arena/7eda6ad8-ko1453-firedrake
+   git push   # the script already pushed; this is a no-op safety net
+   ```
+
+   Then tell the agent the drop is complete. It fetches `content-drop`,
+   unpacks, chooses, commits the result to `data/` on the working branch and
+   tells you when to delete `content-drop` on GitHub. The script re-zips what
+   you give it (nested zip is expected and handled) and splits payloads over
+   95 MB automatically.
+
+Either way, send **every** candidate version - the choice between packs is
+made by comparing them, not by guessing:
+
+- how many of the 24 `ZONE_INFO.strZoneName` maps each pack covers
+  (`python tools/check_data_assets.py` after unpacking answers exactly this);
+- whether quest `*.lua` scripts are present and how many, plus any
+  `*.aievt` / `*.evt` event files;
+- whether the pack smuggles in client-only files that do not belong here.
+
+The agent unpacks into a scratch area first, runs the checker against each
+pack, reports the comparison, and only then copies the winner into
+`data/map/`, `data/Quests/` and `data/` and commits.
