@@ -37,8 +37,12 @@ function Fail([string]$msg) { Write-Host "[send_dump] ERROR: $msg" -ForegroundCo
 if (-not (Test-Path -LiteralPath $DumpPath)) { Fail "File not found: $DumpPath" }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail "git is not on PATH. Install Git for Windows first." }
 
-$repoRoot = (git rev-parse --show-toplevel)
-if ($LASTEXITCODE -ne 0) { Fail "Not inside a git repository. Clone the repo first: git clone https://github.com/xHashii/KO1453-FireDrake.git" }
+# try/catch: under $ErrorActionPreference='Stop', PowerShell turns native
+# stderr into a terminating NativeCommandError before $LASTEXITCODE can be
+# checked, so any native call that may *legitimately* fail must be caught
+# (or use a variant that exits 0, see the branch probe below).
+try { $repoRoot = (git rev-parse --show-toplevel) } catch { $repoRoot = $null }
+if (-not $repoRoot) { Fail "Not inside a git repository. Clone the repo first: git clone https://github.com/xHashii/KO1453-FireDrake.git" }
 
 $dump = Get-Item -LiteralPath $DumpPath
 $sizeMB = [math]::Round($dump.Length / 1MB, 1)
@@ -54,8 +58,13 @@ Set-Location -LiteralPath $repoRoot
 git fetch origin
 if ($LASTEXITCODE -ne 0) { Fail "git fetch failed" }
 
-git rev-parse --verify $Branch 1>$null 2>$null
-if ($LASTEXITCODE -eq 0) {
+# NOTE: do NOT probe with `git rev-parse --verify` here - it prints
+# "fatal: Needed a single revision" to stderr when the branch is absent,
+# which PowerShell escalates to a terminating NativeCommandError under
+# $ErrorActionPreference='Stop'. `git branch --list` exits 0 with empty
+# output when the branch does not exist, so it is safe.
+$existingBranch = git branch --list $Branch
+if ($existingBranch) {
     git checkout $Branch
     if ($LASTEXITCODE -ne 0) { Fail "git checkout $Branch failed" }
 } else {
