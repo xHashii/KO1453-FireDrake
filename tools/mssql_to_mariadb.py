@@ -19,12 +19,16 @@ What it does (streaming, so 240 MB+ files are fine):
   * Produces manifest.json with per-table row counts.
 
 Usage:
-  python3 mssql_to_mariadb.py KN_online.sql --database KO_GAME -o out/KO_GAME
-  python3 mssql_to_mariadb.py KO_MAIN.sql   --database KO_MAIN -o out/KO_MAIN
+  python3 mssql_to_mariadb.py 1453db.sql --database KN_Online -o out/KN_Online
 
-Then either let the servers import automatically (DatabaseMigrator) or:
-  mariadb -u root -p < out/KO_GAME/KO_GAME_01_schema.sql
-  mariadb -u root -p < out/KO_GAME/KO_GAME_02_data.sql
+(--database only names the output files/manifest; the SQL itself contains
+no CREATE DATABASE/USE, so it imports into whatever database your server
+config points at.)
+
+Then either let the servers import automatically (DatabaseMigrator) or pick
+the target database yourself (output is name-agnostic on purpose):
+  mariadb -u root -p YOUR_DB_NAME < out/KN_Online/KN_Online_01_schema.sql
+  mariadb -u root -p YOUR_DB_NAME < out/KN_Online/KN_Online_02_data.sql
 """
 import argparse
 import json
@@ -447,7 +451,13 @@ def main() -> int:
     schema_path = os.path.join(args.outdir, f"{db}_01_schema.sql")
     schema = open(schema_path, "w", encoding="utf-8", newline="\n")
     schema.write("-- Auto-converted from SQL Server dump (mssql_to_mariadb.py). Review before production use.\n")
-    schema.write(f"CREATE DATABASE IF NOT EXISTS `{db}`;\nUSE `{db}`;\n")
+    # Deliberately NO "CREATE DATABASE / USE <name>" here: the target database
+    # is chosen by the server configuration (INI/appsettings) and created by
+    # DatabaseMigrator, which already connects to the right database. The
+    # original MSSQL name (e.g. KN_Online) is provenance only - see
+    # manifest.json. For a manual import pick the database on the CLI:
+    #   mariadb -u root -p <your-db-name> < this-file.sql
+    schema.write("-- Target database: chosen by server config / the importing connection (not by this file).\n")
     schema.write("SET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n")
 
     chunk_no = 2
@@ -459,7 +469,7 @@ def main() -> int:
         nonlocal chunk_no, chunk_bytes
         path = os.path.join(args.outdir, f"{db}_{chunk_no:02d}_data.sql")
         fh = open(path, "w", encoding="utf-8", newline="\n")
-        fh.write(f"USE `{db}`;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n")
+        fh.write("-- Target database: chosen by server config / the importing connection (not by this file).\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n")
         data_files.append(path)
         chunk_no += 1
         chunk_bytes = 0
