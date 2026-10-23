@@ -106,3 +106,22 @@ made by comparing them, not by guessing:
 The agent unpacks into a scratch area first, runs the checker against each
 pack, reports the comparison, and only then copies the winner into
 `data/map/`, `data/Quests/` and `data/` and commits.
+
+## Intake record (2026-10-23)
+
+Three candidate packs arrived through the `content-drop` branch (SHA-256
+checked against the dropped MANIFEST.txt). Comparison:
+
+| Pack | Maps `.smd` | Quests `.lua` | Events | Verdict |
+|---|---|---|---|---|
+| Maps & Quests.7z | 24 - exact `ZONE_INFO` match, casing included | 114 (`01_main.lua` + `NPCID_Name.lua`) | 8 `.aievt` room events (what `AIServer/MAP.cpp` loads) | **adopted** |
+| MAP.7z | 22 of an older generation (`karus_0730.smd`, `battle1_1111.smd`...) - no database match | 0 | 8 legacy `.evt` | rejected |
+| QUESTS.7z | 17 of the same older generation | 3 zone-numbered legacy scripts | 19 legacy `.evt` | rejected |
+
+Placed from the adopted pack: `Map/*.smd` -> `data/map/`,
+`Quests/*.lua` -> `data/Quests/`, `Map/*.aievt` -> `data/`. Excluded:
+`Map/map.rar` and `Map/WarpGateEditor.exe` (authoring tools, not server
+content). The two rejected packs belong to an older content generation whose
+map filenames match nothing in this database, and legacy `.evt` files have no
+loader anywhere in this server source - only `%d.aievt` is read - so nothing
+usable was left behind by rejecting them.

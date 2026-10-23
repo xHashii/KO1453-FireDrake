@@ -33,3 +33,67 @@ public sealed record CharacterSelectInfo(
 /// durability only - the count field of the inventory blob is not sent.
 /// </summary>
 public sealed record EquippedItem(uint ItemId, ushort Durability);
+
+/// <summary>
+/// The slice of USERDATA the game-server session needs once a character is
+/// selected (port of the LOAD_USER_DATA result set, trimmed to what the
+/// rewrite consumes so far: identity, stats, spawn point, skill/item/quest
+/// blobs and the manner/monthly-loyalty counters WIZ_MYINFO carries).
+/// PX/PZ/PY are stored world * 100 (DBAgent divides by 100 for the float
+/// world position); the wire sends world * 10, i.e. stored / 10.
+/// </summary>
+public sealed record UserData(
+    byte Nation,
+    byte Race,
+    ushort Class,
+    byte Hair,
+    byte Rank,
+    byte Title,
+    byte Level,
+    int Exp,
+    int Loyalty,
+    byte Face,
+    byte City,
+    short Knights,
+    byte Fame,
+    short Hp,
+    short Mp,
+    short Sp,
+    byte Str,
+    byte Sta,
+    byte Dex,
+    byte Int,
+    byte Cha,
+    byte Authority,
+    short Points,
+    int Gold,
+    ushort Zone,
+    int Px,
+    int Pz,
+    int Py,
+    byte[] Skill,
+    byte[] Items,
+    int MannerPoint,
+    int LoyaltyMonthly,
+    short QuestCount,
+    byte[] Quests);
+
+/// <summary>
+/// The COEFFICIENT row slice SetMaxHp/SetMaxMp and SetUserAbility need for a
+/// class: the HP/MP/SP factors plus the weapon hit coefficients and the
+/// AC/hitrate/evasionrate factors.
+/// </summary>
+public sealed record ClassCoefficient(
+    float Hp,
+    float Mp,
+    float Sp,
+    float ShortSword,
+    float Sword,
+    float Axe,
+    float Club,
+    float Spear,
+    float Bow,
+    float Staff,
+    float Ac,
+    float Hitrate,
+    float Evasionrate);
