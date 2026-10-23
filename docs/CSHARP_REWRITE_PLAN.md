@@ -143,7 +143,10 @@ Key facts driving the rewrite:
   0005 restoring the BEGINNER_ITEM.Skill byte the varchar conversion mangled.
   WIZ_SEL_CHAR is answered too (LOAD_USER_DATA port, spawn point from
   ZONE_INFO, migrations 0005/0006 fixing the skill byte and zone-0 spawns) -
-  the doorway into the world. Remaining: character delete, in-world packets,
+  the doorway into the world. WIZ_GAMESTART answers the loading pull with the
+  WIZ_MYINFO dump, and the equipment subset is live too: WIZ_ITEM_MOVE slot
+  shuffles persist USERDATA.strItem and refresh SetUserAbility-derived stats.
+  Remaining: character delete, region/NPC pushes, save-on-logout, combat,
   enter world (`WIZ_MYINFO`), movement/rotation, region user in/out, chat, time/weather.
 - **M5 — Core gameplay**: combat (`AttackHandler`, `Unit`), magic engine, items/inventory/
   warehouse/trade/merchant/upgrade, parties, EXP/levels/stats.

@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
 using KnightOnline.Database;
+using KnightOnline.Database.Items;
 using KnightOnline.GameServer;
 using KnightOnline.Shared;
 using KnightOnline.Shared.Diagnostics;
@@ -101,6 +102,11 @@ internal sealed class GameSession : KoSession
     private const int SlotMax = 14;
     private const int HaveMax = 28;
     private const int InventoryTotal = 73;
+    private const int CospreStart = 42;   // SLOT_MAX + HAVE_MAX
+    private const int CospreCount = 5;
+    private const int MagicBagStart = 49; // + MBAG_COUNT
+    private const int RightHand = 6;      // equipment position order, ItemBlobs.Describe
+    private const int LeftHand = 8;
 
     /// <summary>Session ids handed out like the C++ socket slots (1000+).</summary>
     private static int _lastSocketId = 1000;
@@ -117,6 +123,20 @@ internal sealed class GameSession : KoSession
 
     /// <summary>GAMESTART opcode 2 flips CUser::m_state to GAME_STATE_INGAME.</summary>
     private bool _inGame;
+
+    // Equipment state: the slots parsed from USERDATA.strItem (DBAgent::
+    // LoadUserData) plus everything SetUserAbility derives from them.
+    private ItemSlotData[] _slots = Array.Empty<ItemSlotData>();
+    private int _slotCount;
+    private IReadOnlyDictionary<uint, ItemProto> _protos = new Dictionary<uint, ItemProto>();
+    private int _currentHp, _currentMp;
+    private short _maxHp, _maxMp;
+    private ushort _totalHit;
+    private short _totalAc;
+    private ushort _maxWeight;
+    private short _itemWeight;
+    private readonly short[] _statBonus = new short[5];
+    private readonly short[] _resist = new short[6];
 
     public GameSession(TcpClient client, MariaDbCharacterRepository characters)
         : base(client, maxPayloadSize: 8192)
@@ -166,6 +186,9 @@ internal sealed class GameSession : KoSession
                 case WizOpcode.Rental:
                     // CUser::RentalSystem reads the sub-opcode, but the premium/PvP
                     // rental handling is commented out in the original: no answer.
+                    break;
+                case WizOpcode.ItemMove:
+                    ItemMove(packet);
                     break;
                 default:
                     KoLog.Warn($"Unhandled {Name(packet.Opcode)} in game - that system is not ported yet (M5+).");
@@ -439,6 +462,13 @@ internal sealed class GameSession : KoSession
         _user = user;
         _charId = charId;
 
+        var parsed = ItemBlobs.ParseExact(user.Items, ReadOnlySpan<byte>.Empty, ReadOnlySpan<byte>.Empty);
+        _slots = parsed.Slots.Length >= InventoryTotal
+            ? parsed.Slots
+            : parsed.Slots.Concat(Enumerable.Repeat(ItemSlotData.Empty, InventoryTotal - parsed.Slots.Length)).ToArray();
+        _slotCount = Math.Max(parsed.SlotCount, InventoryTotal);
+        RecomputeStats(refillWhenEmpty: true);
+
         // GetSPosX() = uint16(world * 10) and the stored PX is world * 100.
         result.WriteByte(1)
             .WriteByte(init)
@@ -479,6 +509,7 @@ internal sealed class GameSession : KoSession
         else if (opcode == 2)
         {
             _inGame = true;
+            RecomputeStats(refillWhenEmpty: false); // CUser::SetUserAbility()
         }
     }
 
@@ -524,24 +555,7 @@ internal sealed class GameSession : KoSession
     private void SendMyInfo()
     {
         var user = _user!;
-        var coefficient = _characters.LoadCoefficientAsync(user.Class).GetAwaiter().GetResult();
         var maxExp = _characters.LoadLevelExpAsync(user.Level).GetAwaiter().GetResult();
-
-        int level = user.Level, str = user.Str, sta = user.Sta, intel = user.Int;
-        var maxHp = (int)user.Hp;
-        var maxMp = (int)user.Mp;
-        if (coefficient is not null)
-        {
-            maxHp = (int)Math.Min(MaxPlayerHp,
-                coefficient.Hp * level * level * sta + 0.1f * level * sta + sta / 5 + 20);
-            maxMp = (int)(coefficient.Mp != 0
-                ? coefficient.Mp * level * level * (intel + 30) + 0.1f * level * 2 * (intel + 30) + (intel + 30) / 5 + 20
-                : coefficient.Sp != 0
-                    ? coefficient.Sp * level * level * sta + 0.1f * level * sta + sta / 5
-                    : 0);
-        }
-
-        var maxWeight = (ushort)Math.Min(32767, (str + level) * 50);
 
         var result = new Packet(WizOpcode.Myinfo);
         result.SByte(); // the character name has a single byte length
@@ -571,21 +585,25 @@ internal sealed class GameSession : KoSession
             .WriteByte(0)
             .WriteUInt16(0xFFFF);
 
-        result.WriteInt16((short)maxHp)
-            .WriteUInt16((ushort)user.Hp)
-            .WriteInt16((short)maxMp)
-            .WriteUInt16((ushort)user.Mp)
-            .WriteUInt16(maxWeight)
-            .WriteUInt16(0) // m_sItemWeight - item system
-            .WriteByte(user.Str).WriteByte(0)
-            .WriteByte(user.Sta).WriteByte(0)
-            .WriteByte(user.Dex).WriteByte(0)
-            .WriteByte(user.Int).WriteByte(0)
-            .WriteByte(user.Cha).WriteByte(0)
-            .WriteUInt16(0) // m_sTotalHit - item system
-            .WriteUInt16(0) // m_sTotalAc - item system
-            .WriteByte(0).WriteByte(0).WriteByte(0) // fire, cold, lightning resist
-            .WriteByte(0).WriteByte(0).WriteByte(0) // magic, disease, poison resist
+        result.WriteInt16(_maxHp)
+            .WriteUInt16((ushort)_currentHp)
+            .WriteInt16(_maxMp)
+            .WriteUInt16((ushort)_currentMp)
+            .WriteUInt16(_maxWeight)
+            .WriteUInt16((ushort)_itemWeight)
+            .WriteByte(user.Str).WriteByte(ClampByte(_statBonus[0]))
+            .WriteByte(user.Sta).WriteByte(ClampByte(_statBonus[1]))
+            .WriteByte(user.Dex).WriteByte(ClampByte(_statBonus[2]))
+            .WriteByte(user.Int).WriteByte(ClampByte(_statBonus[3]))
+            .WriteByte(user.Cha).WriteByte(ClampByte(_statBonus[4]))
+            .WriteUInt16(_totalHit)
+            .WriteUInt16((ushort)_totalAc)
+            .WriteByte(ClampByte(_resist[0]))
+            .WriteByte(ClampByte(_resist[1]))
+            .WriteByte(ClampByte(_resist[2]))
+            .WriteByte(ClampByte(_resist[3]))
+            .WriteByte(ClampByte(_resist[4]))
+            .WriteByte(ClampByte(_resist[5]))
             .WriteUInt32((uint)user.Gold)
             .WriteByte(user.Authority)
             .WriteByte(0) // m_bKnightsRank
@@ -595,11 +613,11 @@ internal sealed class GameSession : KoSession
         for (var i = 0; i < 9; i++)
             result.WriteByte(i < user.Skill.Length ? user.Skill[i] : (byte)0);
 
-        WriteItemSlots(result, user.Items, 0, SlotMax, full: true);
+        WriteSlots(result, 0, SlotMax, full: true);
         // Cospre: the original loops i = 43; i <= 46; i += 3 - slots 43 and 46 only.
-        WriteItemSlots(result, user.Items, 43, 1, full: false);
-        WriteItemSlots(result, user.Items, 46, 1, full: false);
-        WriteItemSlots(result, user.Items, SlotMax, HaveMax, full: true);
+        WriteSlots(result, 43, 1, full: false);
+        WriteSlots(result, 46, 1, full: false);
+        WriteSlots(result, SlotMax, HaveMax, full: true);
 
         result.WriteByte(0) // m_bAccountStatus
             .WriteByte(0) // m_bPremiumType
@@ -610,36 +628,382 @@ internal sealed class GameSession : KoSession
         Send(result);
     }
 
+    private static byte ClampByte(short value) => (byte)Math.Clamp(value, (short)0, (short)255);
+
     /// <summary>
     /// Writes `slots` inventory slots starting at `firstSlot` in the wire
     /// format SendMyInfo uses: uint32 id, uint16 durability, uint16 count,
     /// uint8 flag, uint16 remaining rental time, [uint32 unknown - only in the
-    /// "full" equipped/inventory format], uint32 expiration. Slots read from
-    /// USERDATA.strItem's 8-byte records; missing blob data stays zeroed.
+    /// "full" equipped/inventory format], uint32 expiration.
     /// </summary>
-    private static void WriteItemSlots(Packet result, byte[] blob, int firstSlot, int slots, bool full)
+    private void WriteSlots(Packet result, int firstSlot, int slots, bool full)
     {
         for (var i = 0; i < slots; i++)
         {
-            var slot = firstSlot + i;
-            uint id = 0;
-            ushort duration = 0, count = 0;
-            if (slot < InventoryTotal && blob.Length >= (slot + 1) * 8)
-            {
-                id = BitConverter.ToUInt32(blob, slot * 8);
-                duration = BitConverter.ToUInt16(blob, slot * 8 + 4);
-                count = BitConverter.ToUInt16(blob, slot * 8 + 6);
-            }
-
-            result.WriteUInt32(id)
-                .WriteUInt16(duration)
-                .WriteUInt16(count)
+            var slot = Slot(firstSlot + i);
+            result.WriteUInt32(slot.ItemId)
+                .WriteUInt16((ushort)slot.Durability)
+                .WriteUInt16((ushort)slot.Count)
                 .WriteByte(0) // bFlag (rented etc.) - rental system
                 .WriteUInt16(0); // sRemainingRentalTime
             if (full)
                 result.WriteUInt32(0); // unknown; always 0 in the original
-            result.WriteUInt32(0); // nExpirationTime - strItemTime blob, not ported
+            result.WriteUInt32(slot.ExpirationUnixTime);
         }
+    }
+
+    /// <summary>
+    /// Port of CUser::SetSlotItemValue + CUser::SetUserAbility + SetMaxHp/
+    /// SetMaxMp (User.cpp): item bonuses, weight and resistances from the
+    /// equipped and cospre slots; weapon damage and hit coefficient from the
+    /// two hand slots; the class-group AP formulas for total hit; the AC
+    /// factor; and the derived HP/MP maxima over the COEFFICIENT row. Set
+    /// items, weapon-type AC bonuses, elemental damage maps and passive-skill
+    /// bonuses stay out until their tables/systems are ported.
+    /// refillWhenEmpty carries the port's one documented deviation: the
+    /// original CREATE_NEW_CHAR never writes current HP/MP, so fresh
+    /// characters load at 0/0 - the port fills the bars instead of showing a
+    /// dead character standing in the world.
+    /// </summary>
+    private void RecomputeStats(bool refillWhenEmpty)
+    {
+        var user = _user!;
+        Array.Clear(_statBonus);
+        Array.Clear(_resist);
+        _itemWeight = 0;
+        var maxWeightBonus = 0;
+        short itemAc = 0, itemMaxHp = 0, itemMaxMp = 0, itemHitrate = 100, itemEvasionrate = 100;
+
+        var ids = _slots.Select(slot => slot.ItemId).Where(id => id != 0).Distinct().ToList();
+        _protos = ids.Count == 0
+            ? new Dictionary<uint, ItemProto>()
+            : _characters.LoadItemPrototypesAsync(ids).GetAwaiter().GetResult();
+
+        for (var i = 0; i < _slots.Length; i++)
+        {
+            var slot = _slots[i];
+            if (slot.ItemId == 0 || !_protos.TryGetValue(slot.ItemId, out var proto))
+                continue;
+
+            // Bags increase max weight, they do not weigh anything.
+            if (i == 47 || i == 48)
+                maxWeightBonus += proto.Duration;
+            else
+                _itemWeight += (short)(proto.Weight * slot.Count);
+
+            // Unequipped items (inventory, magic bags) grant nothing.
+            if ((i >= SlotMax && i < CospreStart) || i >= MagicBagStart)
+                continue;
+
+            var ac = proto.Ac;
+            if (slot.Durability == 0)
+                ac /= 10;
+
+            itemMaxHp += proto.MaxHpB;
+            itemMaxMp += proto.MaxMpB;
+            itemAc += ac;
+            _statBonus[0] += proto.StrB;
+            _statBonus[1] += proto.StaB;
+            _statBonus[2] += proto.DexB;
+            _statBonus[3] += proto.IntelB;
+            _statBonus[4] += proto.ChaB;
+            itemHitrate += proto.Hitrate;
+            itemEvasionrate += proto.Evasionrate;
+            _resist[0] += proto.FireR;
+            _resist[1] += proto.ColdR;
+            _resist[2] += proto.LightningR;
+            _resist[3] += proto.MagicR;
+            _resist[4] += proto.CurseR; // disease
+            _resist[5] += proto.PoisonR;
+        }
+
+        var coefficient = _characters.LoadCoefficientAsync(user.Class).GetAwaiter().GetResult();
+        if (coefficient is null)
+            return;
+
+        ushort itemDamage = 0;
+        float hitCoefficient = 0f;
+        var right = SlotProto(RightHand);
+        if (right is not null)
+        {
+            hitCoefficient = WeaponCoefficient(coefficient, right.Group);
+            itemDamage += (ushort)(Slot(RightHand).Durability == 0 ? right.Damage / 2 : right.Damage);
+        }
+
+        var left = SlotProto(LeftHand);
+        if (left is not null)
+        {
+            var damage = Slot(LeftHand).Durability == 0 ? left.Damage / 2 : left.Damage;
+            if (left.IsBow)
+            {
+                hitCoefficient = coefficient.Bow;
+                itemDamage = (ushort)damage;
+            }
+            else
+            {
+                itemDamage += (ushort)(Slot(LeftHand).Durability == 0 ? damage / 2 : damage);
+            }
+        }
+
+        if (itemDamage < 3)
+            itemDamage = 3;
+
+        int level = user.Level;
+        int strTotal = user.Str + _statBonus[0], staTotal = user.Sta + _statBonus[1],
+            dexTotal = user.Dex + _statBonus[2], intTotal = user.Int + _statBonus[3];
+
+        var baseAp = strTotal > 150 ? strTotal - 150 : 0;
+        if (strTotal == 160)
+            baseAp--;
+
+        int apStat;
+        var additionalAp = 3;
+        if (IsRogue())
+        {
+            apStat = dexTotal;
+        }
+        else
+        {
+            apStat = strTotal;
+            additionalAp += baseAp;
+        }
+
+        _totalHit = 0;
+        if (IsWarrior() || IsPriest())
+            _totalHit = (ushort)(0.010f * itemDamage * (apStat + 40) + hitCoefficient * itemDamage * level * apStat);
+        else if (IsRogue())
+            _totalHit = (ushort)(0.007f * itemDamage * (apStat + 40) + hitCoefficient * itemDamage * level * apStat);
+        else if (IsMage())
+            _totalHit = (ushort)(0.005f * itemDamage * (apStat + 40) + hitCoefficient * itemDamage * level);
+        _totalHit = (ushort)((_totalHit + additionalAp) * 100 / 100);
+
+        _totalAc = (short)(coefficient.Ac * (level + itemAc));
+        _maxWeight = (ushort)Math.Min(32767, (strTotal + level) * 50 + maxWeightBonus);
+
+        _maxHp = (short)Math.Min(MaxPlayerHp,
+            coefficient.Hp * level * level * staTotal + 0.1f * level * staTotal + staTotal / 5 + itemMaxHp + 20);
+        _maxMp = (short)(coefficient.Mp != 0
+            ? coefficient.Mp * level * level * (intTotal + 30) + 0.1f * level * 2 * (intTotal + 30) + (intTotal + 30) / 5 + itemMaxMp + 20
+            : coefficient.Sp != 0
+                ? coefficient.Sp * level * level * staTotal + 0.1f * level * staTotal + staTotal / 5 + itemMaxMp
+                : 0);
+
+        if (refillWhenEmpty)
+        {
+            _currentHp = user.Hp > 0 ? user.Hp : _maxHp;
+            _currentMp = user.Mp > 0 ? user.Mp : _maxMp;
+        }
+        else
+        {
+            if (_currentHp > _maxHp)
+                _currentHp = _maxHp;
+            if (_currentMp > _maxMp)
+                _currentMp = _maxMp;
+        }
+    }
+
+    private ItemSlotData Slot(int index) =>
+        index >= 0 && index < _slots.Length ? _slots[index] : ItemSlotData.Empty;
+
+    private ItemProto? SlotProto(int index) =>
+        Slot(index).ItemId != 0 && _protos.TryGetValue(Slot(index).ItemId, out var proto) ? proto : null;
+
+    // Job groups (shared/globals.h ClassType + CUser::JobGroupCheck): the last
+    // digit pair of the class id - 5/6 warrior, 7/8 rogue, 9/10 mage, 11/12 priest.
+    private int JobGroup() => _user!.Class % 100;
+    private bool IsWarrior() => JobGroup() is 5 or 6;
+    private bool IsRogue() => JobGroup() is 7 or 8;
+    private bool IsMage() => JobGroup() is 9 or 10;
+    private bool IsPriest() => JobGroup() is 11 or 12;
+
+    /// <summary>The COEFFICIENT column behind a weapon group (SetUserAbility's switch).</summary>
+    private static float WeaponCoefficient(ClassCoefficient coefficient, int group) => group switch
+    {
+        1 => coefficient.ShortSword,
+        2 => coefficient.Sword,
+        3 => coefficient.Axe,
+        4 or 18 => coefficient.Club,
+        5 => coefficient.Spear,
+        7 or 8 or 10 => coefficient.Bow,
+        11 => coefficient.Staff,
+        _ => 0f,
+    };
+
+    /// <summary>
+    /// Port of CUser::ItemMove (ItemHandler.cpp): uint8 direction, uint32 item
+    /// id, uint8 source, uint8 destination (ItemMovementType enum). The port
+    /// covers equipping, de-equipping, inventory and cospre shuffles with the
+    /// original's validation (prototype exists, the source really holds that
+    /// item, level/stat requirements, slot position validity), swaps or
+    /// overwrites, persists USERDATA.strItem and answers SendItemMove(1) plus
+    /// the weight packet. Zone drop/pickup and magic-bag directions fail
+    /// closed (SendItemMove(0)) until those systems exist.
+    /// </summary>
+    private void ItemMove(Packet packet)
+    {
+        var dir = packet.ReadByte();
+        var itemId = packet.ReadUInt32();
+        var src = packet.ReadByte();
+        var dst = packet.ReadByte();
+
+        if (!TryApplyMove(dir, itemId, src, dst))
+        {
+            SendItemMove(0);
+            return;
+        }
+
+        var (items, _, _) = ItemBlobs.Serialize(_slots);
+        try
+        {
+            _characters.SaveCharacterItemsAsync(_charId, items).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            KoLog.Error($"Saving the item blob for '{_charId}' could not reach the database.", ex);
+        }
+
+        RecomputeStats(refillWhenEmpty: false); // SetUserAbility(false)
+        SendItemMove(1);
+        SendItemWeight();
+        KoLog.Info($"[ ITEM MOVE - {DateTime.Now:HH:mm:ss} ] {_charId} dir={dir} item={itemId} {src} -> {dst}");
+    }
+
+    private bool TryApplyMove(byte dir, uint itemId, byte src, byte dst)
+    {
+        if (itemId == 0 || !_protos.TryGetValue(itemId, out var proto))
+            return false; // C++: GetItemPtr(nullptr) -> fail_return
+
+        int srcIndex, dstIndex;
+        switch (dir)
+        {
+            case 1: // ITEM_INVEN_SLOT
+                if (src >= HaveMax || dst >= SlotMax || !ItemEquipAvailable(proto) || !IsValidSlotPos(proto, dst))
+                    return false;
+                srcIndex = SlotMax + src;
+                dstIndex = dst;
+                break;
+            case 2: // ITEM_SLOT_INVEN
+                if (src >= SlotMax || dst >= HaveMax)
+                    return false;
+                srcIndex = src;
+                dstIndex = SlotMax + dst;
+                break;
+            case 3: // ITEM_INVEN_INVEN
+                if (src >= HaveMax || dst >= HaveMax)
+                    return false;
+                srcIndex = SlotMax + src;
+                dstIndex = SlotMax + dst;
+                break;
+            case 4: // ITEM_SLOT_SLOT
+                if (src >= SlotMax || dst >= SlotMax || !IsValidSlotPos(proto, dst))
+                    return false;
+                srcIndex = src;
+                dstIndex = dst;
+                break;
+            case 7: // ITEM_INVEN_TO_COSP
+                if (src >= HaveMax || dst >= CospreCount)
+                    return false;
+                srcIndex = SlotMax + src;
+                dstIndex = CospreStart + dst;
+                break;
+            case 8: // ITEM_COSP_TO_INVEN
+                if (src >= CospreCount || dst >= HaveMax)
+                    return false;
+                srcIndex = CospreStart + src;
+                dstIndex = SlotMax + dst;
+                break;
+            default:
+                return false;
+        }
+
+        if (Slot(srcIndex).ItemId != itemId)
+            return false; // the original insists the source holds exactly this item
+
+        var source = Slot(srcIndex);
+        var target = Slot(dstIndex);
+        _slots[dstIndex] = source;
+        _slots[srcIndex] = target.ItemId != 0 ? target : ItemSlotData.Empty;
+        return true;
+    }
+
+    /// <summary>Port of CUser::ItemEquipAvailable: level/rank/title/stat requirements.</summary>
+    private bool ItemEquipAvailable(ItemProto proto)
+    {
+        var user = _user!;
+        return user.Level >= proto.ReqLevel
+            && user.Level <= proto.ReqLevelMax
+            && user.Rank >= proto.ReqRank
+            && user.Title >= proto.ReqTitle
+            && user.Str >= proto.ReqStr
+            && user.Sta >= proto.ReqSta
+            && user.Dex >= proto.ReqDex
+            && user.Int >= proto.ReqIntel
+            && user.Cha >= proto.ReqCha;
+    }
+
+    /// <summary>
+    /// Port of CUser::IsValidSlotPos: ItemSlotType enum values to equipment
+    /// positions (the order ItemBlobs.Describe lists). Two-handers additionally
+    /// require the opposite hand to be free; cospre types (>= 100) accept any
+    /// cospre position in the port.
+    /// </summary>
+    private bool IsValidSlotPos(ItemProto proto, int dest)
+    {
+        switch (proto.Slot)
+        {
+            case 0: return dest == RightHand || dest == LeftHand;
+            case 1: return dest == RightHand;
+            case 2: return dest == LeftHand;
+            case 3: return dest == RightHand && Slot(LeftHand).ItemId == 0;
+            case 4: return dest == LeftHand && Slot(RightHand).ItemId == 0;
+            case 5: return dest == 4;  // pauldron -> breast
+            case 6: return dest == 10; // pads -> legs
+            case 7: return dest == 1;  // helmet -> head
+            case 8: return dest == 12; // gloves -> glove
+            case 9: return dest == 13; // boots -> foot
+            case 10: return dest == 0 || dest == 2; // earrings
+            case 11: return dest == 3; // necklace
+            case 12: return dest == 9 || dest == 11; // rings
+            case 13: return dest == 5; // shoulder
+            case 14: return dest == 7; // belt
+            case 25: return dest == 47 || dest == 48; // the magic bags themselves
+            default: return proto.Slot >= 100 && dest >= CospreStart && dest < CospreStart + CospreCount;
+        }
+    }
+
+    /// <summary>Port of CUser::SendItemMove: sub-opcode 0 = failure, else the refreshed stats.</summary>
+    private void SendItemMove(byte subcommand)
+    {
+        var result = new Packet(WizOpcode.ItemMove, subcommand);
+        if (subcommand != 0)
+        {
+            result.WriteUInt16(_totalHit)
+                .WriteUInt16((ushort)_totalAc)
+                .WriteUInt16(_maxWeight)
+                .WriteInt16(_maxHp)
+                .WriteInt16(_maxMp)
+                .WriteUInt16((ushort)_statBonus[0])
+                .WriteUInt16((ushort)_statBonus[1])
+                .WriteUInt16((ushort)_statBonus[2])
+                .WriteUInt16((ushort)_statBonus[3])
+                .WriteUInt16((ushort)_statBonus[4])
+                .WriteUInt16((ushort)_resist[0])
+                .WriteUInt16((ushort)_resist[1])
+                .WriteUInt16((ushort)_resist[2])
+                .WriteUInt16((ushort)_resist[3])
+                .WriteUInt16((ushort)_resist[4])
+                .WriteUInt16((ushort)_resist[5]);
+        }
+
+        Send(result);
+    }
+
+    /// <summary>Port of CUser::SendItemWeight: WIZ_WEIGHT_CHANGE with the carried weight.</summary>
+    private void SendItemWeight()
+    {
+        var result = new Packet(WizOpcode.WeightChange);
+        result.WriteInt16(_itemWeight);
+        Send(result);
     }
 
     /// <summary>

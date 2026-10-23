@@ -553,7 +553,9 @@ public sealed class MariaDbCharacterRepository
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT Hp, Mp, Sp FROM COEFFICIENT WHERE sClass = @class";
+        command.CommandText =
+            "SELECT Hp, Mp, Sp, ShortSword, Sword, Axe, Club, Spear, Bow, Staff, AC, Hitrate, Evasionrate " +
+            "FROM COEFFICIENT WHERE sClass = @class";
         command.Parameters.AddWithValue("@class", characterClass);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -563,7 +565,100 @@ public sealed class MariaDbCharacterRepository
         return new ClassCoefficient(
             Convert.ToSingle(reader.GetValue(0)),
             Convert.ToSingle(reader.GetValue(1)),
-            Convert.ToSingle(reader.GetValue(2)));
+            Convert.ToSingle(reader.GetValue(2)),
+            Convert.ToSingle(reader.GetValue(3)),
+            Convert.ToSingle(reader.GetValue(4)),
+            Convert.ToSingle(reader.GetValue(5)),
+            Convert.ToSingle(reader.GetValue(6)),
+            Convert.ToSingle(reader.GetValue(7)),
+            Convert.ToSingle(reader.GetValue(8)),
+            Convert.ToSingle(reader.GetValue(9)),
+            Convert.ToSingle(reader.GetValue(10)),
+            Convert.ToSingle(reader.GetValue(11)),
+            Convert.ToSingle(reader.GetValue(12)));
+    }
+
+    /// <summary>
+    /// The ITEM rows behind a set of item ids (the _ITEM_TABLE slice the
+    /// session's equipment math consumes). Unknown ids simply stay absent,
+    /// exactly like the C++ prototype lookup returning nullptr.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<uint, ItemProto>> LoadItemPrototypesAsync(
+        IEnumerable<uint> itemIds, CancellationToken cancellationToken = default)
+    {
+        var ids = itemIds.Where(id => id != 0).Distinct().ToList();
+        var result = new Dictionary<uint, ItemProto>();
+        if (ids.Count == 0)
+            return result;
+
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT Num, Kind, Slot, Damage, Weight, Duration, Ac, Hitrate, Evasionrate, " +
+            "StrB, StaB, DexB, IntelB, ChaB, MaxHpB, MaxMpB, FireR, ColdR, LightningR, MagicR, " +
+            "PoisonR, CurseR, ReqLevel, ReqLevelMax, ReqRank, ReqTitle, ReqStr, ReqSta, ReqDex, " +
+            "ReqIntel, ReqCha, Countable FROM ITEM WHERE Num IN (" +
+            string.Join(", ", ids) + ")";
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            var proto = new ItemProto(
+                Convert.ToUInt32(reader.GetValue(0)),
+                Convert.ToByte(reader.GetValue(1)),
+                Convert.ToByte(reader.GetValue(2)),
+                Convert.ToInt16(reader.GetValue(3)),
+                Convert.ToInt16(reader.GetValue(4)),
+                Convert.ToInt16(reader.GetValue(5)),
+                Convert.ToInt16(reader.GetValue(6)),
+                Convert.ToInt16(reader.GetValue(7)),
+                Convert.ToInt16(reader.GetValue(8)),
+                Convert.ToInt16(reader.GetValue(9)),
+                Convert.ToInt16(reader.GetValue(10)),
+                Convert.ToInt16(reader.GetValue(11)),
+                Convert.ToInt16(reader.GetValue(12)),
+                Convert.ToInt16(reader.GetValue(13)),
+                Convert.ToInt16(reader.GetValue(14)),
+                Convert.ToInt16(reader.GetValue(15)),
+                Convert.ToInt16(reader.GetValue(16)),
+                Convert.ToInt16(reader.GetValue(17)),
+                Convert.ToInt16(reader.GetValue(18)),
+                Convert.ToInt16(reader.GetValue(19)),
+                Convert.ToInt16(reader.GetValue(20)),
+                Convert.ToInt16(reader.GetValue(21)),
+                Convert.ToByte(reader.GetValue(22)),
+                Convert.ToByte(reader.GetValue(23)),
+                Convert.ToByte(reader.GetValue(24)),
+                Convert.ToByte(reader.GetValue(25)),
+                Convert.ToByte(reader.GetValue(26)),
+                Convert.ToByte(reader.GetValue(27)),
+                Convert.ToByte(reader.GetValue(28)),
+                Convert.ToByte(reader.GetValue(29)),
+                Convert.ToByte(reader.GetValue(30)),
+                Convert.ToByte(reader.GetValue(31)));
+            result[proto.Num] = proto;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Persists a character's item blob after an inventory change (the
+    /// SaveUserData half of the original's item round-trip; serials and
+    /// expiration times are untouched - the port does not manage them yet).
+    /// </summary>
+    public async Task SaveCharacterItemsAsync(string charId, byte[] itemBlob, CancellationToken cancellationToken = default)
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE USERDATA SET strItem = @blob WHERE strUserID = @charId";
+        command.Parameters.AddWithValue("@blob", itemBlob);
+        command.Parameters.AddWithValue("@charId", charId);
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

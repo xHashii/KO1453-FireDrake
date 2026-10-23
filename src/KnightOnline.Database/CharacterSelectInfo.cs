@@ -78,5 +78,22 @@ public sealed record UserData(
     short QuestCount,
     byte[] Quests);
 
-/// <summary>The COEFFICIENT row slice SetMaxHp/SetMaxMp need for a class.</summary>
-public sealed record ClassCoefficient(float Hp, float Mp, float Sp);
+/// <summary>
+/// The COEFFICIENT row slice SetMaxHp/SetMaxMp and SetUserAbility need for a
+/// class: the HP/MP/SP factors plus the weapon hit coefficients and the
+/// AC/hitrate/evasionrate factors.
+/// </summary>
+public sealed record ClassCoefficient(
+    float Hp,
+    float Mp,
+    float Sp,
+    float ShortSword,
+    float Sword,
+    float Axe,
+    float Club,
+    float Spear,
+    float Bow,
+    float Staff,
+    float Ac,
+    float Hitrate,
+    float Evasionrate);
