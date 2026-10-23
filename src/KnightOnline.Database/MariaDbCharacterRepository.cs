@@ -394,6 +394,23 @@ public sealed class MariaDbCharacterRepository
                 await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
 
+            // The T-SQL INSERT left Zone/PX/PZ/PY to SQL Server defaults the
+            // converted schema lost; a character at zone 0 has no map and can
+            // never enter the world, so the port spawns it at its nation's
+            // home zone init point (ZONE_INFO).
+            await using (var command = connection.CreateCommand())
+            {
+                command.Transaction = transaction;
+                command.CommandText =
+                    "UPDATE USERDATA u JOIN ZONE_INFO z ON z.ZoneNo = @nation AND z.ServerNo = 1 " +
+                    "SET u.Zone = z.ZoneNo, u.PX = z.InitX, u.PZ = z.InitZ, u.PY = z.InitY " +
+                    "WHERE u.strUserID = @charId";
+                command.Parameters.AddWithValue("@nation", nation);
+                command.Parameters.AddWithValue("@charId", charId);
+
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             // Novice bump: branch 1..4 promotes the class by 5..8.
             var bump = branch switch { 1 => 5, 2 => 6, 3 => 7, 4 => 8, _ => 0 };
             if (bump != 0)
@@ -417,5 +434,95 @@ public sealed class MariaDbCharacterRepository
             await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
             return dbError;
         }
+    }
+
+    /// <summary>
+    /// Port of the LOAD_USER_DATA stored procedure: the character must be one
+    /// of the account's three ACCOUNT_CHAR slots, then USERDATA is read for
+    /// the session. The procedure's live fix-up (one class step for level 60+
+    /// novices of the listed classes) runs first, exactly as in the T-SQL.
+    /// Returns null when the character is not this account's, does not exist,
+    /// or the account has no warehouse row - the three loads that gate the
+    /// original's success byte (the warehouse row always exists here because
+    /// NATION_SELECT creates it; premium and saved-magic load nothing until
+    /// those systems are ported).
+    /// </summary>
+    public async Task<UserData?> LoadUserDataAsync(string account, string charId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                "SELECT strCharID1, strCharID2, strCharID3 FROM ACCOUNT_CHAR WHERE strAccountID = @account";
+            command.Parameters.AddWithValue("@account", account);
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                return null;
+
+            var owned = false;
+            for (var i = 0; i < 3 && !owned; i++)
+                owned = !reader.IsDBNull(i) && string.Equals(reader.GetString(i).TrimEnd(), charId, StringComparison.Ordinal);
+            if (!owned)
+                return null;
+        }
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT 1 FROM WAREHOUSE WHERE strAccountID = @account LIMIT 1";
+            command.Parameters.AddWithValue("@account", account);
+            if (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is null)
+                return null;
+        }
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                "UPDATE USERDATA SET Class = Class + 1 WHERE strUserID = @charId AND Level > 59 " +
+                "AND Class IN (105, 107, 109, 111, 205, 207, 209, 211)";
+            command.Parameters.AddWithValue("@charId", charId);
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT Nation, Race, Class, HairRGB, Level, Exp, Loyalty, Face, City, Knights, Fame, " +
+            "Hp, Mp, Sp, Strong, Sta, Dex, Intel, Cha, Authority, Points, Gold, Zone, PX, PZ, PY " +
+            "FROM USERDATA WHERE strUserID = @charId";
+        command.Parameters.AddWithValue("@charId", charId);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            return null;
+
+        return new UserData(
+            Convert.ToByte(reader.GetValue(0)),
+            Convert.ToByte(reader.GetValue(1)),
+            Convert.ToUInt16(reader.GetValue(2)),
+            Convert.ToByte(reader.GetValue(3)),
+            Convert.ToByte(reader.GetValue(4)),
+            Convert.ToInt32(reader.GetValue(5)),
+            Convert.ToInt32(reader.GetValue(6)),
+            Convert.ToByte(reader.GetValue(7)),
+            Convert.ToByte(reader.GetValue(8)),
+            Convert.ToInt16(reader.GetValue(9)),
+            Convert.ToByte(reader.GetValue(10)),
+            Convert.ToInt16(reader.GetValue(11)),
+            Convert.ToInt16(reader.GetValue(12)),
+            Convert.ToInt16(reader.GetValue(13)),
+            Convert.ToByte(reader.GetValue(14)),
+            Convert.ToByte(reader.GetValue(15)),
+            Convert.ToByte(reader.GetValue(16)),
+            Convert.ToByte(reader.GetValue(17)),
+            Convert.ToByte(reader.GetValue(18)),
+            Convert.ToByte(reader.GetValue(19)),
+            Convert.ToInt16(reader.GetValue(20)),
+            Convert.ToInt32(reader.GetValue(21)),
+            Convert.ToUInt16(reader.GetValue(22)),
+            Convert.ToUInt16(reader.GetValue(23)),
+            Convert.ToUInt16(reader.GetValue(24)),
+            Convert.ToUInt16(reader.GetValue(25)));
     }
 }

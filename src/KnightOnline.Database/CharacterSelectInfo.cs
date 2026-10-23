@@ -33,3 +33,37 @@ public sealed record CharacterSelectInfo(
 /// durability only - the count field of the inventory blob is not sent.
 /// </summary>
 public sealed record EquippedItem(uint ItemId, ushort Durability);
+
+/// <summary>
+/// The slice of USERDATA the game-server session needs once a character is
+/// selected (port of the LOAD_USER_DATA result set, trimmed to what the
+/// rewrite consumes so far: identity, stats and the spawn point the
+/// WIZ_SEL_CHAR answer carries).
+/// </summary>
+public sealed record UserData(
+    byte Nation,
+    byte Race,
+    ushort Class,
+    byte Hair,
+    byte Level,
+    int Exp,
+    int Loyalty,
+    byte Face,
+    byte City,
+    short Knights,
+    byte Fame,
+    short Hp,
+    short Mp,
+    short Sp,
+    byte Str,
+    byte Sta,
+    byte Dex,
+    byte Int,
+    byte Cha,
+    byte Authority,
+    short Points,
+    int Gold,
+    ushort Zone,
+    ushort Px,
+    ushort Pz,
+    ushort Py);

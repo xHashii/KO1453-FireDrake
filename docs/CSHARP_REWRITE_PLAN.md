@@ -141,7 +141,9 @@ Key facts driving the rewrite:
   captured decrypted for the increments below. WIZ_NEW_CHAR (character
   creation) is ported too - client gates plus CREATE_NEW_CHAR, with migration
   0005 restoring the BEGINNER_ITEM.Skill byte the varchar conversion mangled.
-  Remaining: character delete/select and world entry,
+  WIZ_SEL_CHAR is answered too (LOAD_USER_DATA port, spawn point from
+  ZONE_INFO, migrations 0005/0006 fixing the skill byte and zone-0 spawns) -
+  the doorway into the world. Remaining: character delete, in-world packets,
   enter world (`WIZ_MYINFO`), movement/rotation, region user in/out, chat, time/weather.
 - **M5 — Core gameplay**: combat (`AttackHandler`, `Unit`), magic engine, items/inventory/
   warehouse/trade/merchant/upgrade, parties, EXP/levels/stats.

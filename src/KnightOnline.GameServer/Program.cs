@@ -137,6 +137,9 @@ internal sealed class GameSession : KoSession
             case WizOpcode.NewChar:
                 NewChar(packet);
                 break;
+            case WizOpcode.SelChar:
+                SelChar(packet);
+                break;
             case WizOpcode.SpeedhackCheck:
                 // CUser::SpeedHackTime returns immediately while the user is
                 // not in game yet, so at this gate the original drops the
@@ -144,7 +147,7 @@ internal sealed class GameSession : KoSession
                 // records it (uint8 flag + float client time).
                 break;
             default:
-                KoLog.Warn($"Unhandled {Name(packet.Opcode)} prior to selecting a character " +
+                KoLog.Warn($"Unhandled {Name(packet.Opcode)} at the current gate " +
                            "(the original only traced this and carried on).");
                 break;
         }
@@ -337,6 +340,59 @@ internal sealed class GameSession : KoSession
 
         var result = new Packet(WizOpcode.NewChar);
         result.WriteByte(code);
+        Send(result);
+    }
+
+    /// <summary>
+    /// Port of CUser::ReqSelectCharacter + the answer half of
+    /// CUser::SelectCharacter (DatabaseThread.cpp). One deliberate deviation:
+    /// the 1453 client prefixes the character name with the account name
+    /// (captured: string account, string char, uint8 init), which the C++
+    /// source - written against a later client - does not read; the capture
+    /// wins, and the account is verified against the session. The success
+    /// answer is the original's: result byte, init echo, zone, spawn X/Z/Y,
+    /// old-victory flag. The warehouse/premium/saved-magic loads that gate
+    /// the original collapse to the warehouse existence check inside
+    /// <see cref="MariaDbCharacterRepository.LoadUserDataAsync"/>.
+    /// </summary>
+    private void SelChar(Packet packet)
+    {
+        var account = packet.ReadString();
+        var charId = packet.ReadString();
+        var init = packet.ReadByte();
+
+        UserData? user = null;
+        if (string.Equals(account, _accountId, StringComparison.Ordinal) && charId.Length > 0)
+        {
+            try
+            {
+                user = _characters.LoadUserDataAsync(account, charId).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                KoLog.Error($"Loading user data for '{charId}' could not reach the database.", ex);
+            }
+        }
+
+        var result = new Packet(WizOpcode.SelChar);
+        if (user is null)
+        {
+            KoLog.Info($"[ SEL CHAR - {DateTime.Now:HH:mm:ss} ] ID={_accountId} char={charId} rejected");
+            result.WriteByte(0);
+            Send(result);
+            return;
+        }
+
+        KoLog.Info($"[ SEL CHAR - {DateTime.Now:HH:mm:ss} ] ID={_accountId} char={charId} " +
+                   $"zone={user.Zone} spawn={user.Px},{user.Pz},{user.Py} level={user.Level}");
+
+        result.WriteByte(1)
+            .WriteByte(init)
+            .WriteUInt16(user.Zone)
+            .WriteUInt16(user.Px)
+            .WriteUInt16(user.Pz)
+            .WriteUInt16(user.Py)
+            .WriteByte(0); // g_pMain->m_byOldVictory
         Send(result);
     }
 
