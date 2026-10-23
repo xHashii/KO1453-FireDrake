@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Text;
 using KnightOnline.Database;
+using KnightOnline.GameServer;
 using KnightOnline.Shared;
 using KnightOnline.Shared.Diagnostics;
 using KnightOnline.Shared.Network;
@@ -26,10 +27,6 @@ using KnightOnline.Shared.Protocol;
 // selecting character" note the original only left in a TRACE. So a client run
 // doubles as a protocol capture: the next packet the log shows (WIZ_NEW_CHAR
 // once you create a character) is the spec for the next increment.
-
-const int DefaultGamePort = 15001; // GameServer/GameServerDlg.cpp [SETTINGS] PORT
-const int MaxIdSize = 20;          // MAX_ID_SIZE, shared/globals.h
-const int MaxPwSize = 28;          // MAX_PW_SIZE, shared/globals.h
 
 Console.Title = $"Game Server for Knight Online v{GameVersion.Version} (.NET)";
 KoLog.ConfigureFile("Logs/GameServer.log");
@@ -82,6 +79,9 @@ internal sealed class GameSession : KoSession
 {
     /// <summary>Bytes of each captured packet to dump; the opening ones are small.</summary>
     private const int DumpLimit = 128;
+
+    private const int MaxIdSize = 20; // MAX_ID_SIZE, shared/globals.h
+    private const int MaxPwSize = 28; // MAX_PW_SIZE, shared/globals.h
 
     private readonly MariaDbCharacterRepository _characters;
 
