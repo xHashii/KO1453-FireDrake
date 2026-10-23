@@ -381,5 +381,27 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     Check("serial: counter increments by 1", (b & 0xFFFF) == ((a & 0xFFFF) + 1) % 0x10000);
 }
 
+// ---------- Boosted-character starter quest compatibility ----------
+{
+    var empty = Array.Empty<byte>();
+    var first = KnightOnline.Database.StarterQuestState.SkipForBoostedCharacter(80, empty, 0);
+    CheckHex("starter quest: boosted character gets completed seed", first.Blob, "F40102");
+    Check("starter quest: count persisted", first.Count == 1 && first.Changed);
+    var again = KnightOnline.Database.StarterQuestState.SkipForBoostedCharacter(80, first.Blob, first.Count);
+    Check("starter quest: reconnect is idempotent", !again.Changed && again.Count == 1);
+    var original = Convert.FromHexString("330002F40101000000");
+    var repaired = KnightOnline.Database.StarterQuestState.SkipForBoostedCharacter(80, original, 2);
+    CheckHex("starter quest: preserve other quests and padding", repaired.Blob, "330002F40102000000");
+    CheckHex("starter quest: input not mutated", original, "330002F40101000000");
+    var progressed = Convert.FromHexString("F40103");
+    Check("starter quest: later progress unchanged",
+        !KnightOnline.Database.StarterQuestState.SkipForBoostedCharacter(80, progressed, 1).Changed);
+    Check("starter quest: level-one characters unchanged",
+        !KnightOnline.Database.StarterQuestState.SkipForBoostedCharacter(1, empty, 0).Changed);
+    var appended = KnightOnline.Database.StarterQuestState.SkipForBoostedCharacter(80, Convert.FromHexString("330002000000"), 1);
+    CheckHex("starter quest: append to existing quest data", appended.Blob, "330002F40102");
+    Check("starter quest: appended count", appended.Count == 2);
+}
+
 Console.WriteLine($"\n{passed} passed, {failed} failed.");
 return failed == 0 ? 0 : 1;

@@ -539,7 +539,9 @@ internal sealed class GameSession : KoSession
     /// count, then (uint16 quest id, uint8 state) per entry - std::map order,
     /// so sorted by id. Entries come from USERDATA.strQuest as 3-byte records
     /// (DBAgent::LoadUserData); the original also seeds STARTER_SEED_QUEST at
-    /// state 1 when it is missing.
+    /// state 1 when it is missing. The repository persists state 2 instead for
+    /// level-boosted characters while the level-one tutorial is unsupported,
+    /// so their initial tutorial/intro trigger is not offered on every login.
     /// </summary>
     private void SendQuestData()
     {

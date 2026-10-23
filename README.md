@@ -105,3 +105,15 @@ It uses the same single configured database via
 - Original bugs are only fixed deliberately, and each fix is commented
   (e.g. the C++ login handler wrote passwords into the user log; the port
   intentionally does not).
+
+### Boosted-character intro compatibility
+
+The bundled `BEGINNER_ITEM` templates create level-80 characters. Until the
+starter tutorial is ported, selecting a character above level 1 now persists
+starter quest 500 at state 2 if it was absent or at state 1. This prevents the
+initial tutorial flag from being offered on every login. Other quest entries,
+blob padding and later states are preserved; genuine level-one characters are
+unchanged. This is a tutorial-skip compatibility policy, not a complete quest
+handler or a claim that the player finished the tutorial. The repair happens
+on character selection (no manual SQL or migration required) and logs
+`[ STARTER QUEST ]` when it changes a row.
