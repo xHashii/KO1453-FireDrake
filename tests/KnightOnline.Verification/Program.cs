@@ -470,6 +470,15 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     var npc = new KnightOnline.Database.World.WorldNpc(10000, proto, 10, 3, 20, 0);
     var reply = new Packet(WizOpcode.ReqNpcin).WriteUInt16(1).WriteUInt16(npc.Id);
     npc.WriteInfo(reply);
+    var karusMerchant = npc with { Prototype = proto with { Nation = 1 } };
+    Check("NPC: Moradon merchant friendly to El Morad", karusMerchant.InteractionNation(21, 2) == 2);
+    Check("NPC: Moradon merchant friendly to Karus", karusMerchant.InteractionNation(21, 1) == 1);
+    Check("NPC: homeland faction unchanged", karusMerchant.InteractionNation(1, 2) == 1);
+    var guard = karusMerchant with { Prototype = karusMerchant.Prototype with { Type = 11 } };
+    Check("NPC: guards retain faction", guard.InteractionNation(21, 2) == 1);
+    var friendly = new Packet(WizOpcode.ReqNpcin).WriteUInt16(1).WriteUInt16(karusMerchant.Id);
+    karusMerchant.WriteInfo(friendly, 21, 2);
+    Check("NPC: shared-service wire nationality", friendly.Payload[25] == 2);
     CheckHex("NPC: full info wire layout", reply.Payload,
         "010010276400C80015D2040000640000000000000000000141020A6400C8001E0000000000000000000000");
 }

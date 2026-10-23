@@ -29,7 +29,7 @@ internal sealed partial class GameSession
             foreach (var npc in batch)
             {
                 reply.WriteUInt16(npc.Id);
-                npc.WriteInfo(reply);
+                npc.WriteInfo(reply, _user!.Zone, _user.Nation);
                 _visibleNpcs.Add(npc.Id);
             }
             Send(reply);
@@ -60,7 +60,7 @@ internal sealed partial class GameSession
         foreach (var npc in nearby.Values.Where(n => !_visibleNpcs.Contains(n.Id)))
         {
             var reply = new Packet(WizOpcode.NpcInout, (byte)1).WriteUInt16(npc.Id);
-            npc.WriteInfo(reply);
+            npc.WriteInfo(reply, _user!.Zone, _user.Nation);
             Send(reply);
             _visibleNpcs.Add(npc.Id);
         }
@@ -78,7 +78,7 @@ internal sealed partial class GameSession
         foreach (var batch in requested.Where(available.ContainsKey).Select(id => available[id]).Chunk(30))
         {
             var reply = new Packet(WizOpcode.ReqNpcin).WriteUInt16((ushort)batch.Length);
-            foreach (var npc in batch) { reply.WriteUInt16(npc.Id); npc.WriteInfo(reply); }
+            foreach (var npc in batch) { reply.WriteUInt16(npc.Id); npc.WriteInfo(reply, _user!.Zone, _user.Nation); }
             Send(reply);
         }
     }
@@ -88,7 +88,18 @@ internal sealed partial class GameSession
         if (!CanTravel() || packet.RemainingToRead < 2) return;
         var id = packet.ReadUInt16();
         var npc = CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == id);
-        if (npc is null || !Near(npc.X, npc.Z, 11)) return;
+        if (npc is null)
+        {
+            KoLog.Warn($"[ NPC REJECT ] {_charId}: id={id} not found in zone={_user!.Zone}");
+            TravelMessage("That NPC is not in your current zone. Reconnect to refresh NPC IDs.");
+            return;
+        }
+        if (!Near(npc.X, npc.Z, 11))
+        {
+            KoLog.Warn($"[ NPC REJECT ] {_charId}: id={id} outside interaction range; player={PlayerX:F1},{PlayerZ:F1} npc={npc.X:F1},{npc.Z:F1}");
+            TravelMessage("Move closer to the NPC and right-click again.");
+            return;
+        }
         KoLog.Info($"[ NPC ] {_charId} opened {npc.Prototype.Name} id={id} type={npc.Prototype.Type} shop={npc.Prototype.SellingGroup}");
         switch (npc.Prototype.Type)
         {

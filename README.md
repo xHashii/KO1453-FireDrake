@@ -284,3 +284,40 @@ python tools/audit_world_npcs.py
 
 The .NET verification project additionally checks NPC-info wire bytes and
 parses every bundled SMD, including the native Moradon warp data.
+
+### Shared Moradon NPC clicks and item-hover diagnostics
+
+Shared Moradon services are now presented with the viewing player's nation.
+The original K_NPC prototypes mix faction 1 and 2 (e.g. Charon is faction 1),
+which can cause a legacy client to treat a service NPC as hostile and never
+send the right-click request. This presentation rule applies to service NPCs
+in zone 21 only, including initial snapshots, movement updates and explicit
+NPC-info requests. It does **not** change stored factions, guards, homeland
+NPCs or warp-gate nation checks. Unknown/out-of-range NPC requests now produce
+`[ NPC REJECT ]` diagnostics instead of silently doing nothing. Valid merchant
+requests still log `[ NPC ] ... shop=...` followed by TradeNpc/RepairNpc.
+Quest, warehouse and other unported services are still not implemented.
+
+The reported 5-FPS item-hover issue is **not established as fixed** by this
+change. This repository has no Windows client renderer or tooltip sources.
+The Open-KO client reference renders tooltips locally; it is not a guaranteed
+match for a modified 1453 executable. Do not substitute another version's
+packet layouts or apply random registry/DLL fixes based on the symptom alone.
+
+To collect read-only client build/asset hashes and Windows/GPU/font metadata:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\collect_client_info.ps1 -ClientRoot "C:\path\to\your\client"
+```
+
+Review `ko-client-info.json` before sharing it. This script does not modify
+client files or Windows settings and does not collect passwords/configuration
+contents. For the next tooltip investigation, also record:
+- whether every item or only specific item IDs causes the drop;
+- whether FPS stays low while holding the cursor still over the item;
+- whether it occurs in both inventory and merchant windows;
+- the GameServer log while clicking a potion merchant and hovering an item.
+If no packet arrives when hovering, that narrows the issue to local client
+rendering/data/driver work, but does not by itself prove the server's initial
+item data is correct. A matching client source/build or its diagnostic log is
+needed to identify and validate a renderer fix.

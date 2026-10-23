@@ -36,3 +36,6 @@ __pycache__/
 # to this branch - send_dump.ps1 pushes it to the throwaway db-drop branch
 # with git add -f, and the agent converts it without merging it here.
 /db-drop/
+
+# Read-only client diagnostic output may contain local hardware metadata.
+/ko-client-info.json
