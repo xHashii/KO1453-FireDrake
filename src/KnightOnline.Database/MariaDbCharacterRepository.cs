@@ -1,3 +1,4 @@
+using KnightOnline.Database.Items;
 using KnightOnline.Shared.Diagnostics;
 using MySqlConnector;
 
