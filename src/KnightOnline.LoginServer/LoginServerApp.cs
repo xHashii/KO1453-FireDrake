@@ -23,6 +23,7 @@ public sealed class LoginServerApp
     private List<VersionInfo> _versionList = new();
     private ushort _latestVersion = GameVersion.Version; // m_sLastVersion starts at __VERSION
     private byte[] _serverListPayload = Array.Empty<byte>();
+    private int _userCountFailures;
     private StreamWriter? _userLog;
 
     public LoginServerApp(LoginServerSettings settings)
@@ -58,7 +59,8 @@ public sealed class LoginServerApp
         {
             try
             {
-                var migrator = new DatabaseMigrator(_settings.Database, _settings.MigrationsPath);
+                var migrator = new DatabaseMigrator(
+                    _settings.Database, _settings.MigrationsPath, _settings.MigrationRepair);
                 await migrator.MigrateAsync(shutdownToken).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -69,7 +71,8 @@ public sealed class LoginServerApp
             }
         }
 
-        if (!await LoadVersionListAsync().ConfigureAwait(false))
+        var databaseReady = await LoadVersionListAsync().ConfigureAwait(false);
+        if (!databaseReady)
         {
             // The C++ server refused to start without the DB. Offline start is
             // a C#-port convenience for testing the client before the database
@@ -82,7 +85,25 @@ public sealed class LoginServerApp
             KoLog.Warn("Starting WITHOUT a database connection (ALLOW_OFFLINE_START=1). Login attempts will fail.");
         }
 
-        KoLog.Info($"Latest version in database: {_latestVersion}");
+        // Saying "latest version in database" when the database was never read
+        // sends you looking in exactly the wrong place.
+        var tableVersion = _latestVersion;
+        if (databaseReady)
+            KoLog.Info($"Latest version in database: {tableVersion}");
+        else
+            KoLog.Warn($"No version list from the database; falling back to the built-in version {tableVersion}.");
+
+        ApplyAdvertisedVersion();
+
+        if (_settings.AdvertiseVersion != 0)
+            KoLog.Info($"Advertising version {_latestVersion} ([SETTINGS] ADVERTISE_VERSION) and offering " +
+                       $"{_versionList.Count} patch file(s); the VERSION table's highest is {tableVersion}.");
+        else if (databaseReady && tableVersion > GameVersion.Version)
+            KoLog.Warn($"The VERSION table advertises {tableVersion} but this port targets {GameVersion.Version}. " +
+                       $"A client older than that asks for the patch files above its own version and then dials " +
+                       $"'{_settings.FtpUrl}{_settings.FtpPath}'; when that host does not exist the client stops " +
+                       $"before the login dialog (its patcher cannot reach the FTP server). Set ADVERTISE_VERSION " +
+                       $"to your client's version in [SETTINGS], e.g. ADVERTISE_VERSION={GameVersion.Version}.");
 
         // Build the first server list synchronously so early clients see data,
         // then refresh every 60 seconds like Timer_UpdateUserCount.
@@ -136,6 +157,21 @@ public sealed class LoginServerApp
         }
     }
 
+    /// <summary>
+    /// Caps both the advertised version and the patch list at
+    /// <see cref="LoginServerSettings.AdvertiseVersion"/> when it is set, so a
+    /// client is never offered patches above the version it was just told to be.
+    /// </summary>
+    private void ApplyAdvertisedVersion()
+    {
+        var cap = _settings.AdvertiseVersion;
+        if (cap == 0)
+            return;
+
+        _versionList = _versionList.Where(info => info.Version <= cap).ToList();
+        _latestVersion = cap;
+    }
+
     private async Task RefreshServerListLoopAsync(CancellationToken token)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(60));
@@ -161,10 +197,24 @@ public sealed class LoginServerApp
                     if (index >= 0 && index < _settings.Servers.Count)
                         _settings.Servers[index].UserCount = (short)count;
                 }
+
+                if (_userCountFailures > 0)
+                {
+                    KoLog.Info($"User counts are loading again after {_userCountFailures} failed attempt(s).");
+                    _userCountFailures = 0;
+                }
             }
             catch (Exception ex)
             {
-                KoLog.Error("Failed to refresh user counts.", ex);
+                // This runs every 60 seconds. A database that is simply down
+                // must not bury the log in identical stack traces, but the
+                // first failure and the fact that it is ongoing stay visible.
+                _userCountFailures++;
+                if (_userCountFailures == 1)
+                    KoLog.Error("Failed to refresh user counts.", ex);
+                else if (_userCountFailures % 30 == 0)
+                    KoLog.Warn($"Still unable to refresh user counts after {_userCountFailures} attempts " +
+                               $"({ex.GetType().Name}: {ex.Message}).");
             }
         }
 

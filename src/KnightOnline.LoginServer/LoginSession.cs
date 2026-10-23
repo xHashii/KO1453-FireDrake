@@ -27,6 +27,11 @@ public sealed class LoginSession : KoSession
 
     protected override bool HandlePacket(Packet packet)
     {
+        // The login exchange is only a handful of packets, and "the client
+        // closed the connection" is undiagnosable without knowing which ones it
+        // actually sent. One line each way turns a client run into a trace.
+        KoLog.Info($"<- {RemoteIp} {OpcodeName(packet.Opcode)} ({packet.Length} byte(s))");
+
         switch (packet.Opcode)
         {
             case LsOpcode.VersionReq: HandleVersion(packet); return true;
@@ -36,14 +41,42 @@ public sealed class LoginSession : KoSession
             case LsOpcode.News: HandleNews(packet); return true;
             case LsOpcode.Cryption: HandleSetEncryptionPublicKey(packet); return true;
             case LsOpcode.UnkF7: HandleUnkF7(packet); return true;
-            default: return false; // unknown packet -> disconnect, as the original
+            default:
+                // Unknown packet -> disconnect, as the original did. Say which
+                // one: silently dropping the client looks like a client crash.
+                KoLog.Warn($"No handler for {OpcodeName(packet.Opcode)} from {RemoteIp}; " +
+                           $"closing the session (the original did the same).");
+                return false;
         }
     }
+
+    public override bool Send(Packet packet)
+    {
+        KoLog.Info($"-> {RemoteIp} {OpcodeName(packet.Opcode)} ({packet.Length} byte(s))");
+        return base.Send(packet);
+    }
+
+    /// <summary>Opcode names from LogInServer/LoginSession.h, for the log.</summary>
+    private static string OpcodeName(byte opcode) => opcode switch
+    {
+        LsOpcode.VersionReq => "LS_VERSION_REQ",
+        LsOpcode.DownloadInfoReq => "LS_DOWNLOADINFO_REQ",
+        LsOpcode.Cryption => "LS_CRYPTION",
+        LsOpcode.LoginReq => "LS_LOGIN_REQ",
+        LsOpcode.MGameLogin => "LS_MGAME_LOGIN",
+        LsOpcode.ServerList => "LS_SERVERLIST",
+        LsOpcode.News => "LS_NEWS",
+        LsOpcode.UnkF7 => "LS_UNKF7",
+        _ => $"opcode 0x{opcode:X2}",
+    };
 
     private void HandleVersion(Packet packet)
     {
         var result = new Packet(packet.Opcode);
         result.WriteUInt16(_app.LatestVersion);
+        // One line per client: comparing this with what the client itself shows
+        // is how you find the number ADVERTISE_VERSION needs.
+        KoLog.Info($"Version check from {RemoteIp}: advertising {_app.LatestVersion}");
         Send(result);
     }
 
@@ -58,6 +91,13 @@ public sealed class LoginSession : KoSession
             if (info.Version > version && info.FileName.Length > 0)
                 downloads.Add(info.FileName);
         }
+
+        // The client only asks for this when the two versions disagree, and the
+        // URL below is what it dials next - so a mismatch deserves a log line of
+        // its own ("Cannot connect to FTP Server" on the client is exactly this).
+        var fileList = downloads.Count > 0 ? ": " + string.Join(", ", downloads) : string.Empty;
+        KoLog.Info($"Patch check from {RemoteIp}: client version {version}, server {_app.LatestVersion}, " +
+                   $"{downloads.Count} file(s) from {_app.Settings.FtpUrl}{_app.Settings.FtpPath}{fileList}");
 
         var result = new Packet(packet.Opcode);
         result.WriteString(_app.Settings.FtpUrl);

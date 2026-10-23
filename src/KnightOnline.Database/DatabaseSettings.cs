@@ -26,8 +26,12 @@ public sealed record DatabaseSettings(
             Database = Database,
             UserID = User,
             Password = Password,
-            // KO's character names / messages predate utf8mb4 everywhere; the
-            // converted schema decides. Connection charset follows the server.
+            // The converted game data is UTF-8 and contains Turkish text, and
+            // DatabaseMigrator creates the database as utf8mb4. Pinning the
+            // connection charset keeps literals in the migration scripts - and
+            // character names on the wire - away from a server whose default
+            // is latin1, which would turn every non-ASCII character into '?'.
+            CharacterSet = "utf8mb4",
             SslMode = MySqlSslMode.None,
             Pooling = true,
         };

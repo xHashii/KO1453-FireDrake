@@ -68,14 +68,142 @@ artifact fixed together:
    `BINARY` at 255; SQL Server allows 8000. 17 columns in 13 tables were
    oversized — the item blobs (`USERDATA.strItem/strSerial` 584,
    `strQuest` 600, `WAREHOUSE.*` 1536, `BEGINNER_ITEM.*`) and
-   `char(1000)` description/talk columns. Oversized `binary`/`char` now
-   widen to `varbinary`/`varchar` (exact bytes preserved; blob readers
-   tolerate the stored length).
+   `char(1000)` description/talk columns. Oversized `binary`/`char` were
+   widened to `varbinary`/`varchar` — which turned out to be only half the
+   fix, see the next section.
 
-Note: a failed first migration leaves partially created tables behind
-(the migrator records a script only after it fully applies), so after a
-schema fix, reset the dev database (`docker compose down -v`) before
-retrying instead of re-running into "table already exists".
+## Second live-import round (2026-10-23): portable types, self-healing migrator
+
+The LoginServer's next run against a live database died with:
+
+```
+MySqlException: Column length too big for column 'strItem' (max = 255);
+                use BLOB or TEXT instead
+```
+
+`max = 255` is the fingerprint of MariaDB's `Type_handler_string`, which ends
+in `check_length(ER_TOO_BIG_FIELDLENGTH, MAX_FIELD_CHARLENGTH)`
+(`sql/sql_type.cc`): **`CHAR`/`BINARY` are capped at 255 characters**, so a
+`binary(600)` column is uncreateable on *every* MySQL-family server, while
+`VARBINARY`/`VARCHAR` are capped at 65535 **bytes**
+(`Column_definition::prepare_blob_field`, `sql/sql_table.cc`). Two things
+followed.
+
+**1. Types are now chosen to be portable, not merely legal on one server.**
+`tools/mariadb_portability.py` holds the rules, used by the converter, by
+`tools/check_migrations.py --fix` and documented there with their source
+references:
+
+| Source type | Becomes | Why |
+|---|---|---|
+| `binary(N>255)` | `blob`/`mediumblob` | ERROR 1074 on every server |
+| `varbinary(N>255)` | `blob`/`mediumblob` | legal on modern servers, but only in row formats that store long columns off-page; BLOB works in every row format *and* engine, and is what `0004_admin_tables.sql` already used for the same blobs |
+| `char(N>255)` | `varchar(N)` (or `text`) | ERROR 1074 |
+| `varchar(N)` with `N*4 > 65535` | `text`/`mediumtext` | VARCHAR byte limit |
+| `varchar(N)` with `N*4 > 8126` | `text`/`mediumtext` | InnoDB's inline row budget: `SN_NEWS` alone declared 50 KB of `varchar(4096)` |
+| `USERDATA.strSkill`, `USERDATA_SKILLSHORTCUT.strSkillData`, `USER_ITEMS.nItemSerial` | `varbinary`/`blob` | packed bytes declared as `varchar` in the source (`EDIT_SKILLS` does `CAST(strSkill AS varbinary(10))`); utf8mb4 mangles every byte > 0x7F. This closes the TODO noted further down. |
+
+Columns that already fit are left byte-for-byte alone, so no index, `DEFAULT`
+or comparison changed. Applied to the committed artifact: 20 columns in 11
+tables (`BEGINNER_ITEM`, `BEGINNER_ITEM2`, `USERDATA`, `WAREHOUSE`,
+`USER_ITEMS`, `USERDATA_SKILLSHORTCUT`, `KING_CANDIDACY_NOTICE_BOARD`,
+`SN_NEWS`, `SN_NEWS_MAIN`, `_Haber`, `_Aktivite`).
+
+**2. `SN_NEWS.date` was not quoted.** SSMS brackets every identifier, and the
+converter treated any bracketed *type keyword* as a type, so the column named
+`date` came out bare. It only worked because `DATE` happens not to be reserved
+in MariaDB, and it was invisible to identifier-based tooling (the new checker
+first reported those 5 `SN_NEWS` INSERTs as naming an unknown column).
+`bracket_to_backtick` now unbrackets a keyword only in type position —
+`[varchar](20)`, `[col] [smallint]`, `CAST(x AS [int])` — and quotes it
+everywhere else.
+
+**3. A failed migration is now recoverable.** This is what actually stranded
+the run above: MariaDB DDL is not transactional, so the failing `CREATE TABLE`
+left ~30 tables behind while `_ko_migrations` still said "not applied", and
+every retry then died on `Table '_Aktivite' already exists`. The old advice was
+`docker compose down -v`. `DatabaseMigrator` now repairs a pending script
+before applying it:
+
+* tables the script creates are dropped **only if they are empty**;
+* static data tables the script fills are truncated, so a retried data script
+  cannot double 140k rows;
+* player tables (`TB_USER`, `USERDATA`, `KNIGHTS*`, `MAIL_BOX`, …) are never
+  touched — if one of them holds rows while its script is still pending, the
+  migrator reports that and stops instead of guessing.
+
+Startup failures also say which script and statement died, the MySQL error
+number, and what to do (`HintFor`). Progress is logged every 25k statements so
+the multi-minute data import does not look like a hang. `MIGRATION_REPAIR=0` in
+`[DATABASE]` turns the repair off.
+
+**4. `tools/check_migrations.py` gates all of it without a server.** It encodes
+the limits above plus row size, keyless `AUTO_INCREMENT`, `DEFAULT` on
+BLOB/TEXT, `CREATE DATABASE`/`USE` in a migration, INSERT arity/unknown
+columns, column types MariaDB cannot parse at all, and per-table row counts
+against `manifest.json`:
+
+```bash
+python3 tools/check_migrations.py           # sql/mysql/kn_online
+python3 tools/check_migrations.py --fix     # rewrite non-portable types
+python3 tools/test_converter.py             # regression tests for the tooling
+pip install sqlglot                         # optional: parse the DDL for real
+```
+
+The regex checks are a stand-in for a parser, so with `sqlglot` installed the
+gate additionally parses every DDL statement with a real MySQL grammar
+(`--no-parse` skips it; the tool stays stdlib-only without it). Both layers
+independently reject the `TINYINT UNSIGNED(1)` column described next — the
+parser reports `Expecting ). Line 16`, the same statement and line MariaDB did.
+
+Current state: **0 errors**, 140,559 INSERTs verified, 319 DDL statements
+deep-parsed, and one warning that is a source-dump limitation rather than a bug
+— see the note on `BEGINNER_ITEM2.strItem` at the end of this document.
+
+**5. A type rule's own output was re-matched by the next rule.** Four columns
+(`MAIL_BOX.bDeleted`, `PUS_ITEMLERI.ExtraItem`/`ItemVer`/`KomutCalistir`)
+shipped as `TINYINT UNSIGNED(1)`. MariaDB reads the display width *before*
+`UNSIGNED`, so `CREATE TABLE MAIL_BOX` died with ERROR 1064 at statement 62 of
+320 and nothing after it existed. `convert_types` used to apply `TYPE_RULES`
+one after another over the whole statement: `[bit]` → `TINYINT(1)` was then
+picked up again by the `tinyint` rule, which inserted `UNSIGNED` in front of
+the width it had just inherited. The rules are now one combined pass, so each
+source token is replaced exactly once and no replacement can be rewritten.
+
+Three guard rails went in with the fix: the checker rejects any declared type
+that is not a spelling MariaDB parses (and `--fix` moves a misplaced
+`UNSIGNED`/`ZEROFILL` behind the width), `make_column_types_portable`
+normalises the same thing on the converter side, and `tools/test_converter.py`
+pins all 30 source-type mappings plus this cascade specifically.
+
+**6. `CAST` has a much smaller vocabulary than `CREATE TABLE`.** The next
+failure was in the *data*: SSMS wraps every `numeric`/`decimal` value it
+exports in a cast, so the single `SERVERS` row arrived as
+
+```sql
+INSERT `SERVERS` (...) VALUES (CAST(1 AS Numeric(18, 0)), 'Heros', '127.0.0.1', 'Heros');
+```
+
+`NUMERIC` is a perfectly good column type and is **not** one of the types
+MariaDB accepts inside `CAST()` — `sql/sql_yacc.yy` lists `cast_type` as
+`BINARY(n)`, `CHAR(n)`, `VARCHAR(n)`, `NCHAR(n)`, `INT`/`SIGNED`/`UNSIGNED`,
+`DECIMAL(M,D)`, `FLOAT`, `DOUBLE(p)`, `DATE`, `TIME(fsp)`, `DATETIME(fsp)` and
+nothing else. ERROR 1064 at statement 69998 of 70633 — and since the `VERSION`
+rows sit 600 statements later, the login server came up with no version list at
+all. `convert_dml` now unwraps a cast around a plain literal (the destination
+column type does exactly the same job) and rewrites the target type of any cast
+that still has an expression inside it: `Numeric(18,2)` → `DECIMAL(18,2)`,
+`money` → `DECIMAL(19,4)`, `nvarchar(50)` → `CHAR(50)`, `varbinary(12)` →
+`BINARY(12)`, `bigint` → `SIGNED`, `datetime2(3)` → `DATETIME`. Text inside a
+string literal is never touched, which matters here: NPC dialogue in this dump
+contains the words `money`, `CAST` and square brackets. The checker rejects any
+cast type outside that grammar, in DDL and DML alike.
+
+**7. Both gates now run in CI.** `.github/workflows/ci.yml` builds the solution,
+runs the golden-vector verifier, runs `tools/test_converter.py` and checks the
+committed migration scripts (with `sqlglot` installed, so the DDL is really
+parsed) on every push and pull request. Findings 5 and 6 both reached a running
+LoginServer before they were caught locally; neither can do that again.
 
 ## The big structural finding: ONE database
 
@@ -165,9 +293,11 @@ our repositories must not assume constraints the source never had.
   at level > 59; and `EXEC` of three rank-update procs on every load.
 - `USERDATA.Exp` is `int` (C++ reads i64 — fine), `HairRGB` is `tinyint`
   (C++ fetches it as the "Hair" byte), and **`strSkill` is `varchar(10)`**
-  holding packed binary skill bytes — in MariaDB this column should become
+  holding packed binary skill bytes — in MariaDB this column must be
   `varbinary(10)` (or be read/written as bytes with a binary-safe charset)
-  or bytes >127 will be mangled by utf8mb4 conversions.
+  or bytes >127 are mangled by utf8mb4 conversions. **Done:** the converter
+  now maps it (and `strSkillData`, `USER_ITEMS.nItemSerial`) to a binary type;
+  see the portability table above.
 - **`ITEM` differs from the C++ recordset**: 61 columns — it has an extra
   `Droprate` and *lacks* `ItemClass`/`ItemExt` (`shared/database/ItemTableSet.h`).
   Always SELECT by column name; treat `ItemClass`/`ItemExt` as optional
@@ -185,5 +315,20 @@ our repositories must not assume constraints the source never had.
 - Website content tables (`SN_NEWS`, `_Haber`, `_Link`, `_DOWNLOADS`) kept
   their rows; user-generated web data (tickets, complaints, votes, IP bans,
   password resets) was excluded.
-- `BEGINNER_ITEM`/`BEGINNER_ITEM2` starter templates converted ✓ (their
-  packed `Skill`/`strItem` blobs are in the data files as hex).
+- `BEGINNER_ITEM`/`BEGINNER_ITEM2` starter templates converted ✓ — but note
+  what *is* and *is not* byte-exact in the committed data files:
+  - `BEGINNER_ITEM.strItem`/`WarehouseData` and `BEGINNER_ITEM2.strItem1` were
+    `binary`/`varbinary` in the source, so SSMS scripted them as `0x…` and they
+    are exact ✓ (`BEGINNER_ITEM` is the table `CREATE_NEW_CHAR` reads).
+  - `BEGINNER_ITEM2.strItem` and `S_ITEM.strItem` were declared
+    `varchar(1200)` in the source while holding the same packed bytes, so SSMS
+    scripted them as quoted text through a UTF-16 file: **those 8 values are
+    already mangled in `1453db.sql` itself** and no conversion can restore
+    them. They stay `varchar` in the schema (faithful to the source) and import
+    fine; `tools/check_migrations.py` reports them as the one open warning.
+    Both tables are legacy 1290-era starter templates that no C# code reads —
+    the live path is `BEGINNER_ITEM`.
+  - A fresh conversion of a dump whose bytes did survive emits them as
+    charset-independent hex automatically (`convert_binary_literals`,
+    `--binary-literals hex|null`), which is what recovered `0x0A12F67E01` from
+    a `'\n\x12ö~\x01'` literal in testing.

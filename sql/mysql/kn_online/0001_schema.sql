@@ -6,7 +6,7 @@ SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';
 CREATE TABLE `_Aktivite`(
  `id` int AUTO_INCREMENT NOT NULL,
  `konu` text NULL,
- `aktivite` varchar(5000) NULL,
+ `aktivite` text NULL,
  `tarih` DATETIME NOT NULL,
  PRIMARY KEY 
 (
@@ -46,7 +46,7 @@ CREATE TABLE `_DOWNLOADS`(
 CREATE TABLE `_Haber`(
  `id` int AUTO_INCREMENT NOT NULL,
  `konu` text NULL,
- `haber` varchar(5000) NULL,
+ `haber` text NULL,
  `tarih` DATETIME NOT NULL,
  PRIMARY KEY 
 (
@@ -171,8 +171,8 @@ CREATE TABLE `BEGINNER_ITEM`(
  `Sta` smallint NOT NULL,
  `Skill` varchar(10) NULL,
  `Gold` int NULL,
- `strItem` varbinary(600) NULL,
- `WarehouseData` varbinary(1536) NULL,
+ `strItem` blob NULL,
+ `WarehouseData` blob NULL,
  `Loyalty` int NULL,
  `Points` smallint NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
@@ -182,7 +182,7 @@ CREATE TABLE `BEGINNER_ITEM2`(
  `strClass` char(10) NULL,
  `Gold` bigint NOT NULL,
  `strItem` varchar(1200) NULL,
- `strItem1` varbinary(1200) NULL
+ `strItem1` blob NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `COEFFICIENT`(
@@ -659,7 +659,7 @@ CREATE TABLE `KING_CANDIDACY_NOTICE_BOARD`(
  `strUserID` char(21) NOT NULL,
  `byNation` TINYINT UNSIGNED NOT NULL,
  `sNoticeLen` smallint NOT NULL,
- `strNotice` varbinary(1024) NOT NULL
+ `strNotice` blob NOT NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `KING_ELECTION_LIST`(
@@ -1010,7 +1010,7 @@ CREATE TABLE `MAIL_BOX`(
  `sDurability` smallint NOT NULL,
  `nSerialNum` bigint NOT NULL,
  `nCoins` int NOT NULL,
- `bDeleted` TINYINT UNSIGNED(1) NOT NULL,
+ `bDeleted` TINYINT(1) NOT NULL,
 PRIMARY KEY 
 (
  `nLetterID`
@@ -1213,7 +1213,7 @@ CREATE TABLE `PUS_CASH`(
 CREATE TABLE `PUS_ITEMLERI`(
  `id` int NOT NULL,
  `PID` int NULL,
- `ExtraItem` TINYINT UNSIGNED(1) NOT NULL,
+ `ExtraItem` TINYINT(1) NOT NULL,
  `ItemIsmi` varchar(50) NULL,
  `ItemResmi` varchar(50) NULL,
  `itemkodu` int NOT NULL,
@@ -1227,8 +1227,8 @@ CREATE TABLE `PUS_ITEMLERI`(
  `kullanim` varchar(250) NULL,
  `kosul` varchar(150) NULL,
  `reqtitle` TINYINT UNSIGNED NOT NULL,
- `ItemVer` TINYINT UNSIGNED(1) NOT NULL,
- `KomutCalistir` TINYINT UNSIGNED(1) NOT NULL,
+ `ItemVer` TINYINT(1) NOT NULL,
+ `KomutCalistir` TINYINT(1) NOT NULL,
  `Komut` varchar(50) NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
@@ -1441,24 +1441,24 @@ CREATE TABLE `SET_ITEM`(
 CREATE TABLE `SN_NEWS`(
  `id` int AUTO_INCREMENT NOT NULL,
  `type` varchar(150) NULL,
- date varchar(50) NULL,
+ `date` varchar(50) NULL,
  `titletr` varchar(80) NULL,
- `newstr` varchar(4096) NULL,
+ `newstr` text NULL,
  `titleen` varchar(80) NULL,
- `newsen` varchar(4096) NULL,
+ `newsen` text NULL,
  `titlees` varchar(80) NULL,
- `newses` varchar(4096) NULL,
+ `newses` text NULL,
  KEY `ix_auto_id` (`id`)
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `SN_NEWS_MAIN`(
  `id` int AUTO_INCREMENT NOT NULL,
  `titletr` varchar(80) NULL,
- `newstr` varchar(4096) NULL,
+ `newstr` text NULL,
  `titleen` varchar(80) NULL,
- `newsen` varchar(4096) NULL,
+ `newsen` text NULL,
  `titlees` varchar(80) NULL,
- `newses` varchar(4096) NULL,
+ `newses` text NULL,
  `newsid` int NULL,
  `newsimage` int NULL,
  KEY `ix_auto_id` (`id`)
@@ -1522,7 +1522,7 @@ CREATE TABLE `USER_DAILY_OP`(
 
 CREATE TABLE `USER_ITEMS`(
  `nItemID` int NULL,
- `nItemSerial` varchar(586) NULL
+ `nItemSerial` blob NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `USER_KNIGHTS_RANK`(
@@ -1636,11 +1636,11 @@ CREATE TABLE `USERDATA`(
  `PZ` int NOT NULL,
  `PY` int NOT NULL,
  `dwTime` int NOT NULL,
- `strSkill` varchar(10) NULL,
- `strItem` varbinary(584) NULL,
- `strSerial` varbinary(584) NULL,
+ `strSkill` varbinary(10) NULL,
+ `strItem` blob NULL,
+ `strSerial` blob NULL,
  `sQuestCount` smallint NOT NULL,
- `strQuest` varbinary(600) NULL,
+ `strQuest` blob NULL,
  `MannerPoint` int NOT NULL,
  `LoyaltyMonthly` int NOT NULL,
  `dtCreateTime` datetime NOT NULL,
@@ -1650,7 +1650,7 @@ CREATE TABLE `USERDATA`(
 CREATE TABLE `USERDATA_SKILLSHORTCUT`(
  `strCharID` char(21) NOT NULL,
  `nCount` smallint NOT NULL,
- `strSkillData` varchar(260) NULL,
+ `strSkillData` blob NULL,
  PRIMARY KEY 
 (
  `strCharID`
@@ -1667,8 +1667,8 @@ CREATE TABLE `WAREHOUSE`(
  `strAccountID` char(21) NOT NULL,
  `nMoney` int NOT NULL,
  `dwTime` int NOT NULL,
- `WarehouseData` varbinary(1536) NULL,
- `strSerial` varbinary(1536) NULL
+ `WarehouseData` blob NULL,
+ `strSerial` blob NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `WEB_ITEMMALL`(

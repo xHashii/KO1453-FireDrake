@@ -36,6 +36,10 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import mariadb_portability as portability  # noqa: E402  (sibling module)
+
 # --------------------------------------------------------------------------
 # Type mapping (applied inside CREATE TABLE bodies only)
 # --------------------------------------------------------------------------
@@ -65,7 +69,38 @@ TYPE_RULES = [
     (r"\bgeography\b|\bgeometry\b", "TEXT"),
 ]
 
-COMPILED_TYPES = [(re.compile(p, re.IGNORECASE), r) for p, r in TYPE_RULES]
+def _build_type_matcher():
+    """Compile TYPE_RULES into a single regex + replacement table.
+
+    The rules used to be applied one after another over the whole CREATE TABLE
+    body, which let a later rule re-match an *earlier rule's output*: ``[bit]``
+    became ``TINYINT(1)`` and was then hit by the ``tinyint`` rule, producing
+    ``TINYINT UNSIGNED(1)`` -- which MariaDB rejects (the display width has to
+    come *before* UNSIGNED), failing the whole script with error 1064.
+
+    One combined alternation replaces each source type token exactly once, so a
+    replacement can never be rewritten again.  Each rule is wrapped in its own
+    named group, which also keeps rule-local ``|`` alternations from leaking
+    into neighbouring rules.
+    """
+    parts = []
+    table = {}
+    groups_before = 0
+    for index, (pattern, replacement) in enumerate(TYPE_RULES):
+        name = f"rule{index}"
+        parts.append(f"(?P<{name}>{pattern})")
+        # A rule's own group 1 sits at groups_before + 2 in the combined
+        # expression (group 1 of the rule is its wrapper), so shift every
+        # \1-style backreference in the replacement accordingly.
+        base = groups_before + 1
+        table[name] = re.sub(r"\\([1-9])",
+                             lambda m, b=base: "\\" + str(int(m.group(1)) + b),
+                             replacement)
+        groups_before += 1 + len(re.findall(r"(?<!\\)\((?!\?)", pattern))
+    return re.compile("|".join(parts), re.IGNORECASE), table
+
+
+TYPE_MATCHER, TYPE_REPLACEMENTS = _build_type_matcher()
 
 DROP_STATEMENT_PREFIXES = (
     "SET ANSI_NULLS", "SET QUOTED_IDENTIFIER", "SET ANSI_PADDING",
@@ -85,6 +120,32 @@ TYPE_KEYWORDS = {
     "smalldatetime", "smallint", "smallmoney", "sql_variant", "text", "time",
     "tinyint", "uniqueidentifier", "varbinary", "varchar", "xml",
 }
+
+
+def _bracket_is_type(sql: str, open_at: int, close_at: int) -> bool:
+    """True when a bracketed token that *looks* like a type name is one.
+
+    SSMS brackets every identifier, including columns whose name collides with
+    a type keyword - the real KN_Online dump has `SN_NEWS.[date]`. Treating
+    every bracketed type keyword as a type emitted a bare, unquoted `date`
+    column (legal only because DATE happens not to be reserved in MariaDB, and
+    it made the column invisible to identifier-based tooling). A bracketed
+    keyword is a type only in type position:
+
+      [varchar](20)          -> followed by "("
+      [col] [smallint]       -> preceded by an identifier
+      CAST(x AS [int])       -> preceded by AS
+    """
+    after = sql[close_at + 1:close_at + 2]
+    if after == "(":
+        return True
+
+    before = sql[:open_at].rstrip()
+    if not before:
+        return False
+    if before[-1] in ("]", "`", ")"):
+        return True
+    return re.search(r"(?i)\bAS$", before) is not None
 
 
 def bracket_to_backtick(sql: str) -> str:
@@ -115,7 +176,7 @@ def bracket_to_backtick(sql: str) -> str:
                 i += 1
             else:
                 name = sql[i + 1:end].replace("]]", "]")
-                if name.lower() in TYPE_KEYWORDS:
+                if name.lower() in TYPE_KEYWORDS and _bracket_is_type(sql, i, end):
                     out.append(name)
                 else:
                     out.append("`" + name.replace("`", "``") + "`")
@@ -129,9 +190,10 @@ def bracket_to_backtick(sql: str) -> str:
 
 
 def convert_types(sql: str) -> str:
-    for pat, rep in COMPILED_TYPES:
-        sql = pat.sub(rep, sql)
-    return sql
+    def replace(match: "re.Match[str]") -> str:
+        return match.expand(TYPE_REPLACEMENTS[match.lastgroup])
+
+    return TYPE_MATCHER.sub(replace, sql)
 
 
 def fix_defaults(sql: str) -> str:
@@ -266,24 +328,46 @@ def ensure_auto_increment_key(sql: str) -> str:
     return prefix + insertion + sql[close_index:]
 
 
-def fix_oversized_fixed_types(sql: str) -> str:
-    """MariaDB caps CHAR/BINARY at 255 (ERROR 1074); SQL Server allows 8000.
+def make_column_types_portable(sql: str) -> str:
+    """Rewrite column types that a MySQL-family server may refuse to create.
 
-    Widen oversized fixed-length columns to their variable-length twins
-    (binary(600) -> varbinary(600), char(1000) -> varchar(1000)). The item
-    blobs (USERDATA.strItem/strSerial/strQuest, WAREHOUSE.*) are the main
-    binary victims; variable-length storage preserves their exact bytes,
-    and the readers tolerate the stored length either way.
+    SQL Server allows CHAR/BINARY/VARCHAR up to 8000 bytes; MySQL-family
+    servers do not, and the limits depend on the row format the server ends up
+    using (which we cannot fully control from DDL):
+
+      * ERROR 1074 "Column length too big for column 'x' (max = 255)":
+        InnoDB COMPACT/REDUNDANT and MyISAM cap *any* variable-length column -
+        VARBINARY included - at 255 bytes. ROW_FORMAT=DYNAMIC only helps on
+        servers that honour it.
+      * ERROR 1118 "Row size too large": VARCHAR/CHAR count their full utf8mb4
+        byte length toward the 65535-byte row limit (varchar(4096) = 16 KB!).
+      * utf8mb4 conversion mangles packed binary stored in varchar columns
+        (USERDATA.strSkill, BEGINNER_ITEM2.strItem, ...).
+
+    BLOB/TEXT live off-page (20-byte pointer), so they are legal in every row
+    format and engine, and VARBINARY keeps binary columns binary-safe.
+    Columns that already fit in 255 bytes are left exactly as they are, so
+    indexes, defaults and comparisons do not change. See mariadb_portability.py
+    for the full rule set; every change is reported to stderr.
     """
-    def repl(m: re.Match[str]) -> str:
-        n = int(m.group(2))
-        if n <= 255:
-            return m.group(0)
-        widened = "varbinary" if m.group(1).lower() == "binary" else "varchar"
-        return f"{widened}({n})"
+    fixed, changes = portability.make_schema_portable(sql)
+    for changed_table, table_changes in changes.items():
+        for column, old, reason in table_changes:
+            print(f"[converter] {changed_table}.{column}: {old} -> portable type ({reason})",
+                  file=sys.stderr)
+    # Belt and braces: convert_types() is a single pass now, so a rule cannot
+    # rewrite another rule's output any more, but a misplaced UNSIGNED used to
+    # slip through as `TINYINT UNSIGNED(1)` - which MariaDB rejects with ERROR
+    # 1064 and which kills the whole CREATE TABLE.
+    fixed, syntax_fixes = portability.normalize_type_syntax(fixed)
+    for old, new in syntax_fixes:
+        print(f"[converter] column type {old} -> {new} (MariaDB wants the width "
+              f"before UNSIGNED)", file=sys.stderr)
+    return fixed
 
-    # The leading \b keeps varchar/varbinary from matching their suffixes.
-    return re.sub(r"\b(binary|char)\s*\(\s*(\d+)\s*\)", repl, sql, flags=re.I)
+
+# Old name kept for callers/notes that referenced the previous 255-only fix.
+fix_oversized_fixed_types = make_column_types_portable
 
 
 def convert_create_table(sql: str) -> str:
@@ -299,6 +383,11 @@ def convert_create_table(sql: str) -> str:
     # MariaDB does not accept asc/desc inside key column lists.
     sql = re.sub(r"(?i)\s+(ASC|DESC)(\s*[,\)])", r"\2", sql)
     sql = ensure_auto_increment_key(sql)
+    # A column whose name is a type keyword (SN_NEWS.date in the real dump) can
+    # survive bracket_to_backtick unquoted when it sits in type position. It
+    # only works while the keyword happens not to be reserved, so quote it here
+    # instead of leaving the repair to the checker.
+    sql, _ = portability.quote_bare_column_names(sql)
     sql = sql.rstrip().rstrip(";")
     if not re.search(r"(?i)ENGINE\s*=", sql):
         sql += " ENGINE=InnoDB ROW_FORMAT=DYNAMIC"
@@ -353,13 +442,263 @@ def convert_create_index(sql: str) -> str:
     return sql.rstrip(";") + ";"
 
 
-def convert_dml(sql: str) -> str:
+# --------------------------------------------------------------------------
+# Binary payloads that SQL Server stored in "string" columns
+# --------------------------------------------------------------------------
+# SSMS writes those bytes as a quoted literal, so after the UTF-16 -> text
+# decode they arrive here as a str that is really a byte blob. Inserting that
+# into a VARBINARY/BLOB column as '...' runs it through the connection charset
+# (utf8mb4) and either mangles every byte > 0x7F or fails outright with
+# "Incorrect string value". 0x.. hex literals are charset-independent.
+
+_CONTROL_CHARS = frozenset(chr(c) for c in range(0x20) if c != 0x09) | {"\x7f"}
+
+_INSERT_HEAD_RE = re.compile(
+    r"(?is)^\s*INSERT\s+(?:INTO\s+)?(?:`[^`]+`\s*\.\s*)?`?(?P<table>[A-Za-z0-9_]+)`?\s*"
+    r"(?:\((?P<columns>[^)]*)\))?")
+
+#: "table.column" -> count of literals whose bytes the export had already lost.
+BINARY_LITERAL_LOST: dict[str, int] = {}
+#: "table.column" -> count of literals re-emitted as charset-independent 0x.. hex.
+BINARY_LITERAL_HEXED: dict[str, int] = {}
+
+
+def unescape_sql_literal(raw: str) -> str:
+    """Resolve MySQL backslash escapes and doubled quotes inside a literal."""
+    if "''" not in raw and "\\" not in raw:
+        return raw
+    out: list[str] = []
+    i = 0
+    while i < len(raw):
+        ch = raw[i]
+        if ch == "\\" and i + 1 < len(raw):
+            nxt = raw[i + 1]
+            out.append({"n": "\n", "r": "\r", "t": "\t", "0": "\0",
+                        "b": "\b", "Z": "\x1a", "\\": "\\"}.get(nxt, nxt))
+            i += 2
+            continue
+        if ch == "'" and raw[i + 1:i + 2] == "'":
+            out.append("'")
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def literal_is_binary(text: str) -> bool:
+    """True when a string literal is really a byte blob, not text."""
+    if any(ch in _CONTROL_CHARS for ch in text):
+        return True
+    if any("\u0080" <= ch <= "\u009f" for ch in text):
+        return True
+    # U+FFFD is what the lossy UTF-16 decode left behind for unmappable bytes.
+    return "\ufffd" in text
+
+
+def literal_to_bytes(text: str) -> bytes | None:
+    """Best-effort recovery of the original bytes of a binary literal.
+
+    The export was decoded as text, so byte values that are not representable
+    as Latin-1 code points were already lost before we got here. Returns None
+    when nothing faithful can be produced.
+    """
+    try:
+        return text.encode("latin-1")
+    except UnicodeEncodeError:
+        return None
+
+
+def _iter_string_literals(values: str):
+    """Yield (start, end_exclusive, inner_text) for each top-level '...' literal."""
+    i = 0
+    n = len(values)
+    while i < n:
+        if values[i] != "'":
+            i += 1
+            continue
+        j = i + 1
+        while j < n:
+            ch = values[j]
+            if ch == "\\":
+                j += 2
+                continue
+            if ch == "'":
+                if values[j + 1:j + 2] == "'":
+                    j += 2
+                    continue
+                break
+            j += 1
+        end = min(j, n - 1)
+        yield i, end + 1, values[i + 1:end]
+        i = end + 1
+
+
+def convert_binary_literals(sql: str, policy: str) -> str:
+    """Make binary payloads in an INSERT safe for VARBINARY/BLOB columns.
+
+    policy="hex"  -> 0x.. when the original bytes survived the export, else
+                     NULL (a mangled literal would silently poison the column).
+    policy="null" -> NULL for every binary literal. Use for dumps whose text
+                     export already destroyed the bytes (the committed
+                     sql/mysql/kn_online artifacts are that case for
+                     BEGINNER_ITEM2/S_ITEM.strItem).
+    """
+    head = _INSERT_HEAD_RE.match(sql)
+    if not head or not head.group("columns"):
+        return sql
+
+    table = head.group("table")
+    columns = [c.strip().strip("`") for c in head.group("columns").split(",")]
+
+    values_at = sql.upper().find("VALUES", head.end())
+    if values_at < 0:
+        return sql
+    open_paren = sql.find("(", values_at)
+    if open_paren < 0:
+        return sql
+
+    body = sql[open_paren + 1:]
+    # Everything up to and including "(" is kept verbatim; only the offending
+    # literal is replaced.
+    pieces: list[str] = [sql[:open_paren + 1]]
+    cursor = open_paren + 1
+    column_index = 0
+    scanned = 0
+    changed = False
+
+    for start, end, inner in _iter_string_literals(body):
+        # Count the separating commas *between* literals only, so a comma
+        # inside a previous value cannot shift the column mapping.
+        column_index += body[scanned:start].count(",")
+        scanned = end
+        if column_index >= len(columns):
+            continue
+
+        text = unescape_sql_literal(inner)
+        if not literal_is_binary(text):
+            continue
+
+        column = columns[column_index]
+        raw = literal_to_bytes(text)
+        key = f"{table}.{column}"
+        if raw is not None and policy == "hex":
+            replacement = "0x" + raw.hex().upper()
+            BINARY_LITERAL_HEXED[key] = BINARY_LITERAL_HEXED.get(key, 0) + 1
+        else:
+            replacement = "NULL"
+            BINARY_LITERAL_LOST[key] = BINARY_LITERAL_LOST.get(key, 0) + 1
+
+        abs_start, abs_end = open_paren + 1 + start, open_paren + 1 + end
+        pieces.append(sql[cursor:abs_start])
+        pieces.append(replacement)
+        cursor = abs_end
+        changed = True
+
+    if not changed:
+        return sql
+    pieces.append(sql[cursor:])
+    return "".join(pieces)
+
+
+#: T-SQL CAST target type -> (MariaDB CAST target, keep the length argument).
+#:
+#: MariaDB's grammar (sql/sql_yacc.yy: `cast_type`, `cast_type_numeric`,
+#: `cast_type_temporal`) accepts only BINARY(n), CHAR(n), VARCHAR(n), NCHAR(n),
+#: INT, SIGNED, UNSIGNED, DECIMAL(M,D), FLOAT, DOUBLE(p), DATE, TIME(fsp) and
+#: DATETIME(fsp). A name being a valid *column* type says nothing about CAST:
+#: NUMERIC, MONEY, NVARCHAR, VARBINARY and DATETIME2 are all fine in CREATE
+#: TABLE and all ERROR 1064 inside CAST() - which is how SSMS's
+#: `VALUES (CAST(1 AS Numeric(18, 0)), ...)` stranded a data script.
+CAST_TYPE_MAP: dict[str, tuple[str, bool]] = {
+    "numeric": ("DECIMAL", True),
+    "decimal": ("DECIMAL", True),
+    "money": ("DECIMAL(19,4)", False),
+    "smallmoney": ("DECIMAL(10,4)", False),
+    "bit": ("UNSIGNED", False),
+    "tinyint": ("UNSIGNED", False),
+    "smallint": ("SIGNED", False),
+    "bigint": ("SIGNED", False),
+    "int": ("SIGNED", False),
+    "integer": ("SIGNED", False),
+    "real": ("DOUBLE", False),
+    "float": ("DOUBLE", False),
+    "nvarchar": ("CHAR", True),
+    "nchar": ("CHAR", True),
+    "varchar": ("CHAR", True),
+    "char": ("CHAR", True),
+    "character": ("CHAR", True),
+    "ntext": ("CHAR", False),
+    "text": ("CHAR", False),
+    "xml": ("CHAR", False),
+    "sql_variant": ("CHAR", False),
+    "uniqueidentifier": ("CHAR(36)", False),
+    "varbinary": ("BINARY", True),
+    "binary": ("BINARY", True),
+    "image": ("BINARY", False),
+    "datetime2": ("DATETIME", False),
+    "datetimeoffset": ("DATETIME", False),
+    "smalldatetime": ("DATETIME", False),
+    "datetime": ("DATETIME", False),
+    "date": ("DATE", False),
+    "time": ("TIME", False),
+}
+
+_CAST_RE = re.compile(
+    r"(?is)\bCAST\s*\(\s*(?P<expr>.*?)\s+AS\s+"
+    r"(?P<type>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\(\s*(?P<args>[^()]*)\))?\s*\)")
+
+
+def _map_outside_literals(sql: str, transform) -> str:
+    """Apply `transform` to everything that is not a '...' string literal.
+
+    Item names and NPC dialogue in this dump contain brackets, keywords and
+    even the word CAST; rewriting inside a literal would corrupt player-visible
+    text, so the literal spans are copied through untouched.
+    """
+    pieces = []
+    cursor = 0
+    for start, end, _ in _iter_string_literals(sql):
+        pieces.append(transform(sql[cursor:start]))
+        pieces.append(sql[start:end])
+        cursor = end
+    pieces.append(transform(sql[cursor:]))
+    return "".join(pieces)
+
+
+def convert_cast_types(sql: str) -> str:
+    """Rewrite CAST target types to the vocabulary MariaDB's parser accepts."""
+
+    def repl(m: re.Match[str]) -> str:
+        mapping = CAST_TYPE_MAP.get(m.group("type").lower())
+        if mapping is None:
+            return m.group(0)  # DATE/TIME/SIGNED/... or something unknown
+        target, keep_length = mapping
+        args = re.sub(r"\s+", "", m.group("args") or "")
+        # "(max)" and friends are not a CAST length; drop them (bare CHAR and
+        # bare BINARY are both legal, VARCHAR is not - hence CHAR above).
+        if keep_length and re.fullmatch(r"\d+(?:,\d+)?", args):
+            target = f"{target}({args})"
+        return f"CAST({m.group('expr').strip()} AS {target})"
+
+    return _map_outside_literals(sql, lambda part: _CAST_RE.sub(repl, part))
+
+
+def convert_dml(sql: str, binary_literals: str = "hex") -> str:
     sql = bracket_to_backtick(sql)
     # CAST(0xAB.. AS VarBinary(123)) -> 0xAB.. ; CAST(N'x' AS ...) -> 'x'
     sql = re.sub(r"(?i)CAST\s*\(\s*(0x[0-9A-Fa-f]+)\s+AS\s+[A-Za-z]+\s*(?:\(\s*[\d,\s]+\))?\s*\)", r"\1", sql)
     sql = re.sub(r"(?i)CAST\s*\(\s*(N?'(?:[^']|'')*')\s+AS\s+[A-Za-z]+\s*(?:\(\s*[\d,\s]+\))?\s*\)", r"\1", sql)
+    # SSMS wraps every numeric/decimal value in a CAST to pin its exactness;
+    # for a literal the column type already does that, so unwrap it. This is
+    # what `INSERT SERVERS ... VALUES (CAST(1 AS Numeric(18, 0)), ...)` needed.
+    sql = re.sub(r"(?i)CAST\s*\(\s*(-?\d+(?:\.\d+)?)\s+AS\s+[A-Za-z]+\s*(?:\(\s*[\d,\s]+\))?\s*\)", r"\1", sql)
+    # Anything left has a real expression inside, so keep the CAST and only
+    # translate its target type.
+    sql = convert_cast_types(sql)
     # N'unicode' literal -> plain (MariaDB connection charset decides storage)
     sql = re.sub(r"\bN'((?:[^']|'')*)'", r"'\1'", sql)
+    sql = convert_binary_literals(sql, binary_literals)
     return sql.rstrip(";") + ";"
 
 
@@ -566,6 +905,13 @@ def main() -> int:
                     help="Skip INSERTs for account/character tables (TB_USER, USERDATA, WAREHOUSE, ...) so output is safe to commit")
     ap.add_argument("--exclude", action="append", default=[], metavar="TABLE",
                     help="Additionally skip INSERTs for this table (repeatable)")
+    ap.add_argument("--binary-literals", choices=("hex", "null"), default="hex",
+                    help="How to emit binary payloads that the dump stored as quoted "
+                         "string literals (BEGINNER_ITEM2.strItem, S_ITEM.strItem, ...). "
+                         "'hex' (default) writes 0x.. so VARBINARY/BLOB columns keep the "
+                         "exact bytes; 'null' writes NULL for every one of them - use it "
+                         "when the text export already destroyed the bytes and you would "
+                         "rather have an honest NULL than mangled data")
     args = ap.parse_args()
 
     db = args.database
@@ -656,7 +1002,7 @@ def main() -> int:
                             excluded_rows[tm.group(1)] = excluded_rows.get(tm.group(1), 0) + 1
                             skipped += 1
                             continue
-                        out = convert_dml(text)
+                        out = convert_dml(text, args.binary_literals)
                         data.write(out + "\n")
                         chunk_bytes += len(out) + 1
                         if kw == "INSERT":
@@ -691,6 +1037,8 @@ def main() -> int:
         "statement_errors": errors,
         "tables_with_rows": dict(sorted(row_counts.items())),
         "excluded_tables_rows_skipped": dict(sorted(excluded_rows.items())),
+        "binary_literals_to_hex": dict(sorted(BINARY_LITERAL_HEXED.items())),
+        "binary_literals_unrecoverable": dict(sorted(BINARY_LITERAL_LOST.items())),
         "routines_extracted": routines,
     }
     with open(os.path.join(args.outdir, "manifest.json"), "w", encoding="utf-8") as mf:

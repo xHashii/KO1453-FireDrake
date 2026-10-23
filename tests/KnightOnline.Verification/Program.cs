@@ -329,6 +329,44 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
         statements.Count == 4 && statements[1].Contains("'x;y'"));
 }
 
+// ---------- Migration script object scan (partial-apply repair) ----------
+{
+    // DatabaseMigrator uses this to clean up a script that died halfway: the
+    // tables it creates are dropped when empty, the tables it fills are
+    // truncated. Both lists come from this scan, so they must be exact.
+    var schema = """
+        SET FOREIGN_KEY_CHECKS=0;
+        CREATE TABLE `_Aktivite`(
+         `id` int AUTO_INCREMENT NOT NULL
+        ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
+
+        CREATE TABLE IF NOT EXISTS `VERSION`(
+         `sVersion` smallint NOT NULL
+        ) ENGINE=InnoDB;
+        CREATE TABLE bare_name (a INT);
+        ALTER TABLE `VERSION` ALTER COLUMN `sVersion` SET DEFAULT 0;
+        """;
+    var created = MigrationScriptObjects.CreatedTables(schema);
+    Check("migration scan: created tables",
+        created.Count == 3 && created[0] == "_Aktivite" && created[1] == "VERSION" && created[2] == "bare_name",
+        string.Join(" | ", created));
+
+    var data = """
+        INSERT `ITEM` (`ItemID`, `strName`) VALUES (1, 'Sword');
+        INSERT INTO `ITEM` (`ItemID`) VALUES (2);
+        INSERT `MAGIC` (`iNum`) VALUES (3);
+        INSERT `ITEM` (`ItemID`) VALUES (4);
+        """;
+    var filled = MigrationScriptObjects.FilledTables(data);
+    Check("migration scan: filled tables are distinct and ordered",
+        filled.Count == 2 && filled[0] == "ITEM" && filled[1] == "MAGIC",
+        string.Join(" | ", filled));
+    Check("migration scan: a schema script fills nothing",
+        MigrationScriptObjects.FilledTables(schema).Count == 0);
+    Check("migration scan: identifiers are quoted for generated DDL",
+        MigrationScriptObjects.Quote("a`b") == "`a``b`");
+}
+
 // ---------- Item serial generator (CGameServerDlg::GenerateItemSerial) ----------
 {
     var gen = new ItemSerialGenerator(serverNo: 1);

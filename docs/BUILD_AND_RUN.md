@@ -146,7 +146,73 @@ then `docker compose up -d` again.
 
 5. Point your 1453 client at `127.0.0.1` port **15100**. Expect version
    check / server list / account login to answer; character select & world
-   entry arrive with the GameServer milestones.
+   entry arrive with the GameServer milestones (`KnightOnline.GameServer` is
+   still the M4 stub, so the client has nowhere to go after the server list).
+
+   **Set `ADVERTISE_VERSION` to your client's version.** `VERSION` carries the
+   patch chain of the server this dump came from (1453 → 1456), and the
+   LoginServer answers a version request with the highest `sVersion` in that
+   table (`GameVersion.Version` = 1453 is only the fallback used when the table
+   cannot be read). A client older than the answer asks for the patch files
+   `patch1454.zip` … `patch1456.zip` from `[DOWNLOAD] URL` — and a URL that
+   does not exist stops it *before the login dialog appears*, with
+   **"Cannot connect to FTP Server"**.
+
+   `ADVERTISE_VERSION=1453` in `[SETTINGS]` (the sample's default) caps both
+   the advertised version and the patch list, so the client is never offered a
+   patch above the version it was just told to be. Don't know your client's
+   number? Start the server, connect the client once and read the log:
+
+   ```
+   [INFO ] Patch check from 127.0.0.1: client version 1453, server 1456, 3 file(s) from ftp.yoursite.net/: patch1454.zip, ...
+   ```
+
+   Alternatives, if you would rather not use the knob: `DELETE FROM VERSION
+   WHERE sVersion > 1453;` (survives until the next fresh database), or host
+   the real patch files under `[DOWNLOAD] URL`/`PATH`. Nothing else in the seed
+   depends on those rows.
+
+6. Reading the client exchange. Every login packet is logged in both
+   directions, so a client run is a readable trace instead of a guess:
+
+   ```
+   [INFO ] <- 127.0.0.1 LS_CRYPTION (8 byte(s))
+   [INFO ] -> 127.0.0.1 LS_CRYPTION (8 byte(s))
+   [INFO ] <- 127.0.0.1 LS_VERSION_REQ (0 byte(s))
+   [INFO ] [ LOGIN - 13:37:38 ] ID=test Authentication=SUCCESS
+   [INFO ] <- 127.0.0.1 LS_SERVERLIST (0 byte(s))
+   ```
+
+   An opcode with no handler is logged before the session is closed (the
+   original closed it silently, which looks exactly like a client crash).
+
+   After the LoginServer answers, the client dials the **game server** on 15001.
+   `KnightOnline.GameServer` implements the opening of `CUser::HandlePacket`
+   gate by gate: `WIZ_VERSION_CHECK` (0x2B — `uint16(1453)` + JvCryption key +
+   enable crypto, which is what ends *"Connecting. Please wait."*), `WIZ_LOGIN`
+   (0x01 — `GAME_LOGIN` semantics: int8 nation, −1 rejects, 0 for a fresh
+   account), `WIZ_SEL_NATION` (0x05 — `NATION_SELECT`) and
+   `WIZ_ALLCHAR_INFO_REQ` (0x0C — three zero-filled character slots for an
+   account without characters, which opens the create-character screen).
+   Everything later — character creation first — is logged decrypted and not
+   answered yet, so each client run captures the spec for the next increment.
+
+   The GameServer reads `GameServer.ini` from its project directory; copy the
+   sample once and make `[DATABASE]` match your `LogInServer.ini`:
+
+   ```powershell
+   copy src\KnightOnline.GameServer\GameServer.sample.ini src\KnightOnline.GameServer\GameServer.ini
+   notepad src\KnightOnline.GameServer\GameServer.ini        # set UID / PWD
+   dotnet run --project src\KnightOnline.GameServer           # listens on 15001
+   ```
+
+   Run it next to the LoginServer and log in: the client should reach the
+   nation-select dialog, then the (empty) character-create screen.
+
+   Game content (zone maps, quest scripts, event files) has its own drop zone
+   in `data/` with a step-by-step guide in `data/README.md`; nothing reads it
+   yet, and `python tools/check_data_assets.py` verifies what you placed
+   against the database before you commit it.
 
 ## 7. AdminPanel (the website)
 
@@ -206,6 +272,7 @@ single file over 100 MB (and warns over 50 MB).
 | Port | Service |
 |---|---|
 | 15100 | LoginServer (game client) |
+| 15001 | GameServer prototype (login, nation select, char list), see §6 step 6 |
 | 5100 | AdminPanel (browser, localhost only) |
 | 3306 | MariaDB in Docker (127.0.0.1 only) |
 
@@ -218,8 +285,10 @@ single file over 100 MB (and warns over 50 MB).
   DB down (`docker compose ps`), `LogInServer.ini` missing (= placeholder
   credentials), or passwords changed in one place but not the others.
 - **First start looks hung** → it's applying 114 MB of migrations
-  (one-time). Watch the log; don't kill it mid-import — if you do, reset
-  with `docker compose down -v` and start clean.
+  (one-time). The log prints a line per script plus progress every 25,000
+  statements, so you can see it moving. Killing it mid-import is no longer
+  fatal: the next start repairs the half-applied script (see below) — but let
+  it finish if you can.
 - **`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`**
   → Docker Desktop isn't running. Start it from the Start menu, wait for
   the tray whale to settle, verify with `docker ps`, then re-run
@@ -237,6 +306,54 @@ single file over 100 MB (and warns over 50 MB).
   AdminPanel `GameDatabase` connection string (`Port=3307`), and HeidiSQL.
 - **Panel opens but shows DB offline** → same DB checks; also confirm the
   database name matches in all three places (§5).
+- **`Auto-migration failed` + `Table '…' already exists`** → an earlier run
+  stopped halfway through a script (MariaDB DDL is not transactional, so the
+  tables it had already created survive it while `_ko_migrations` still lists
+  the script as pending). The migrator repairs this on the next start: it drops
+  the *empty* tables that pending script creates and truncates the static data
+  tables it fills, then applies it again — just start the server once more. It
+  refuses (and says why) when a table involved holds rows, and it never
+  truncates player tables (`TB_USER`, `USERDATA`, `KNIGHTS*`, `MAIL_BOX`, …).
+  `[DATABASE] MIGRATION_REPAIR=0` turns the repair off.
+- **`Auto-migration failed` + `Column length too big for column '…' (max = 255)`**
+  (or `Row size too large`, `Incorrect table definition`) → a column type this
+  server refuses to create; the log names the script, statement number and
+  MySQL error number. Check the committed SQL with
+  `python3 tools/check_migrations.py` and repair it with `--fix`: oversized
+  `CHAR`/`BINARY`/`VARBINARY` become `BLOB` and over-wide `VARCHAR` becomes
+  `TEXT`, which every MySQL-family server accepts in any row format. If your
+  `bin/…/sql/kn_online/*.sql` copy is stale, rebuild (`dotnet build`) so the
+  fixed scripts are copied next to the executable, then start again — the
+  half-created tables are cleaned up automatically.
+- **`Auto-migration failed` + `You have an error in your SQL syntax … (1064)`**
+  → a statement the server cannot parse at all; the log names the script and
+  the statement number (e.g. `statement 62/320`). Run
+  `python3 tools/check_migrations.py`: it reports the offending column and
+  line, and `--fix` repairs the type syntax. Then start the server again — the
+  tables the aborted run created are cleaned up automatically.
+  `python3 tools/test_converter.py` covers the converter rules that produce
+  those statements. In a *data* script the usual culprit is a `CAST`: SSMS
+  wraps every numeric value as `CAST(1 AS Numeric(18, 0))`, and `NUMERIC` is a
+  valid column type but not a valid `CAST` target — the checker reports those
+  too. Both gates run in CI (`.github/workflows/ci.yml`).
+- **`Session N (…) failed: … forcibly closed by the remote host` right after a
+  successful login** → that is the *client* closing the LoginServer socket,
+  which is what it does when it moves on to the game server. Read the trace
+  above it (§6 step 6): if `LS_SERVERLIST`/`LS_NEWS` were served, the login
+  server did its whole job and the client is now dialing 15001. Run the
+  GameServer prototype alongside: it answers the opening `WIZ_VERSION_CHECK`,
+  the game login, nation select and the character list, and records everything
+  after that (§6 step 6).
+- **Game login rejected although the LoginServer accepted the account**, or the
+  GameServer log shows database errors → `GameServer.ini` is missing or its
+  `[DATABASE]` section does not match MariaDB; copy `GameServer.sample.ini`
+  and reuse the credentials from `LogInServer.ini` (§6 step 6).
+- **Client: "Cannot connect to FTP Server" (`ftp.yoursite.net`)** → the client
+  was told a higher version than its own, so it is trying to download patch
+  files. The log line `Patch check from …: client version NNNN, server MMMM,
+  K file(s)` shows both numbers. Set `ADVERTISE_VERSION=NNNN` in `[SETTINGS]`
+  and restart — see §6 step 5. (The seeded `VERSION` table advertises 1456;
+  this port targets 1453.)
 - **Migration checksum error after a pull** → an already-applied script
   changed upstream. During development the cheap fix is a fresh volume:
   `docker compose down -v` → `up -d` (all test data is recreated from the

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Both jobs are deliberately server-free: the point is that a broken migration
+# script or a drifted protocol port is caught before anyone starts MariaDB.
+# Two bugs that reached a running LoginServer (TINYINT UNSIGNED(1) and
+# CAST(1 AS Numeric(18, 0))) are exactly what the second job exists for.
+jobs:
+  server:
+    name: Build + golden vectors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build KnightOnline.Net.sln --nologo
+
+      # tests/KnightOnline.Verification is a console app on purpose: it exits
+      # non-zero when the packet/crypto/blob ports drift from the C behaviour.
+      - name: Verify wire protocol against the C golden vectors
+        run: dotnet run --project tests/KnightOnline.Verification --no-build --nologo
+
+  migrations:
+    name: Migration SQL gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Optional dependency of tools/check_migrations.py: with it, every DDL
+      # statement is also parsed by a real MySQL grammar instead of only by the
+      # checker's own regexes.
+      - name: Install sqlglot
+        run: pip install sqlglot
+
+      - name: Converter and checker regression tests
+        run: python tools/test_converter.py
+
+      - name: Check the committed migration scripts
+        run: python tools/check_migrations.py --quick
+
+      - name: Check the data drop zone against the database
+        run: python tools/check_data_assets.py
