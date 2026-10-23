@@ -55,6 +55,15 @@ public sealed class LoginServerSettings
 
     public static LoginServerSettings Load(string path = ConfigFileName)
     {
+        // Working directory first (dotnet run from the repo root), then next
+        // to the executable (running the built exe from its output folder).
+        if (!Path.IsPathRooted(path) && !File.Exists(path))
+        {
+            var nextToExe = Path.Combine(AppContext.BaseDirectory, path);
+            if (File.Exists(nextToExe))
+                path = nextToExe;
+        }
+
         var ini = new IniFile(path);
 
         var settings = new LoginServerSettings

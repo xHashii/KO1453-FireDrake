@@ -26,7 +26,20 @@ public sealed class DatabaseMigrator
     public DatabaseMigrator(DatabaseSettings settings, string scriptsDirectory)
     {
         _settings = settings;
-        _scriptsDirectory = scriptsDirectory;
+        _scriptsDirectory = ResolveScriptsDirectory(scriptsDirectory);
+    }
+
+    // Relative script paths ("sql/kn_online") are tried against the working
+    // directory first, then next to the executable (where the .csproj copies
+    // the scripts at build time). This makes `dotnet run` from the repo root
+    // and running the built exe from its output folder behave the same.
+    private static string ResolveScriptsDirectory(string scriptsDirectory)
+    {
+        if (Path.IsPathRooted(scriptsDirectory) || Directory.Exists(scriptsDirectory))
+            return scriptsDirectory;
+
+        var nextToExe = Path.Combine(AppContext.BaseDirectory, scriptsDirectory);
+        return Directory.Exists(nextToExe) ? nextToExe : scriptsDirectory;
     }
 
     /// <summary>Applies pending scripts. Returns the number applied now.</summary>

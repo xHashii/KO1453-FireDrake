@@ -16,7 +16,9 @@ GameServer.ini
 AIServer.ini
 
 # Local data drop zone until we decide on Git LFS (map/*.smd, Quests/*.Lua)
-data/
+# Everything under data/ is ignored except that folder's README.
+data/*
+!data/README.md
 
 # Legacy Visual C++ cruft (the copies already tracked stay tracked until the
 # C++ tree is moved under legacy/; this keeps new ones out)

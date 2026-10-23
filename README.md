@@ -48,8 +48,11 @@ src/
 
 ## Building
 
-Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
-(or Visual Studio with the .NET 10 workload).
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
+In Visual Studio that means **VS 2026** — VS 2022 cannot target `net10.0`
+(CLI builds work anywhere). Full step-by-step (build, DB, LoginServer,
+AdminPanel, where `map/*.smd` / `Quests/*.Lua` go):
+**[docs/BUILD_AND_RUN.md](docs/BUILD_AND_RUN.md)**.
 
 ```bash
 dotnet build KnightOnline.Net.sln -c Release

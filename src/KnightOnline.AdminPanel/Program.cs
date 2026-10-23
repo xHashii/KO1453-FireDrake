@@ -66,7 +66,15 @@ async Task RunMigratorAsync(string connectionString, string scriptsFolder)
         var csb = new MySqlConnectionStringBuilder(connectionString);
         var settings = new DatabaseSettings(
             csb.Server, csb.Port, csb.Database, csb.UserID, csb.Password);
+        // Under `dotnet run`, ContentRootPath is the project folder, but the
+        // scripts are copied next to the executable - check both places.
         var fullPath = Path.Combine(app.Environment.ContentRootPath, scriptsFolder);
+        if (!Directory.Exists(fullPath))
+        {
+            var nextToExe = Path.Combine(AppContext.BaseDirectory, scriptsFolder);
+            if (Directory.Exists(nextToExe))
+                fullPath = nextToExe;
+        }
         await new DatabaseMigrator(settings, fullPath).MigrateAsync();
     }
     catch (Exception ex)
