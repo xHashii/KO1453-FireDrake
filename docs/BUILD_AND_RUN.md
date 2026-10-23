@@ -209,6 +209,11 @@ then `docker compose up -d` again.
    Run it next to the LoginServer and log in: the client should reach the
    nation-select dialog, then the (empty) character-create screen.
 
+   Game content (zone maps, quest scripts, event files) has its own drop zone
+   in `data/` with a step-by-step guide in `data/README.md`; nothing reads it
+   yet, and `python tools/check_data_assets.py` verifies what you placed
+   against the database before you commit it.
+
 ## 7. AdminPanel (the website)
 
 1. Config lives in `src\KnightOnline.AdminPanel\appsettings.json`:

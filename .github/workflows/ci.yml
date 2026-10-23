@@ -49,3 +49,6 @@ jobs:
 
       - name: Check the committed migration scripts
         run: python tools/check_migrations.py --quick
+
+      - name: Check the data drop zone against the database
+        run: python tools/check_data_assets.py
