@@ -397,13 +397,15 @@ public sealed class MariaDbCharacterRepository
             // The T-SQL INSERT left Zone/PX/PZ/PY to SQL Server defaults the
             // converted schema lost; a character at zone 0 has no map and can
             // never enter the world, so the port spawns it at its nation's
-            // home zone init point (ZONE_INFO).
+            // home zone init point. ZONE_INFO stores world * 100 (ZoneInfoSet
+            // divides by 100); USERDATA and the WIZ_SEL_CHAR answer carry
+            // world * 10, hence / 10.
             await using (var command = connection.CreateCommand())
             {
                 command.Transaction = transaction;
                 command.CommandText =
                     "UPDATE USERDATA u JOIN ZONE_INFO z ON z.ZoneNo = @nation AND z.ServerNo = 1 " +
-                    "SET u.Zone = z.ZoneNo, u.PX = z.InitX, u.PZ = z.InitZ, u.PY = z.InitY " +
+                    "SET u.Zone = z.ZoneNo, u.PX = z.InitX / 10, u.PZ = z.InitZ / 10, u.PY = z.InitY / 10 " +
                     "WHERE u.strUserID = @charId";
                 command.Parameters.AddWithValue("@nation", nation);
                 command.Parameters.AddWithValue("@charId", charId);
