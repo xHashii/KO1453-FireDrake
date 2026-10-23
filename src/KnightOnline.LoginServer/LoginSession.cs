@@ -27,6 +27,11 @@ public sealed class LoginSession : KoSession
 
     protected override bool HandlePacket(Packet packet)
     {
+        // The login exchange is only a handful of packets, and "the client
+        // closed the connection" is undiagnosable without knowing which ones it
+        // actually sent. One line each way turns a client run into a trace.
+        KoLog.Info($"<- {RemoteIp} {OpcodeName(packet.Opcode)} ({packet.Length} byte(s))");
+
         switch (packet.Opcode)
         {
             case LsOpcode.VersionReq: HandleVersion(packet); return true;
@@ -36,9 +41,34 @@ public sealed class LoginSession : KoSession
             case LsOpcode.News: HandleNews(packet); return true;
             case LsOpcode.Cryption: HandleSetEncryptionPublicKey(packet); return true;
             case LsOpcode.UnkF7: HandleUnkF7(packet); return true;
-            default: return false; // unknown packet -> disconnect, as the original
+            default:
+                // Unknown packet -> disconnect, as the original did. Say which
+                // one: silently dropping the client looks like a client crash.
+                KoLog.Warn($"No handler for {OpcodeName(packet.Opcode)} from {RemoteIp}; " +
+                           $"closing the session (the original did the same).");
+                return false;
         }
     }
+
+    public override bool Send(Packet packet)
+    {
+        KoLog.Info($"-> {RemoteIp} {OpcodeName(packet.Opcode)} ({packet.Length} byte(s))");
+        return base.Send(packet);
+    }
+
+    /// <summary>Opcode names from LogInServer/LoginSession.h, for the log.</summary>
+    private static string OpcodeName(byte opcode) => opcode switch
+    {
+        LsOpcode.VersionReq => "LS_VERSION_REQ",
+        LsOpcode.DownloadInfoReq => "LS_DOWNLOADINFO_REQ",
+        LsOpcode.Cryption => "LS_CRYPTION",
+        LsOpcode.LoginReq => "LS_LOGIN_REQ",
+        LsOpcode.MGameLogin => "LS_MGAME_LOGIN",
+        LsOpcode.ServerList => "LS_SERVERLIST",
+        LsOpcode.News => "LS_NEWS",
+        LsOpcode.UnkF7 => "LS_UNKF7",
+        _ => $"opcode 0x{opcode:X2}",
+    };
 
     private void HandleVersion(Packet packet)
     {

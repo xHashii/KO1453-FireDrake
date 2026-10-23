@@ -172,6 +172,34 @@ then `docker compose up -d` again.
    the real patch files under `[DOWNLOAD] URL`/`PATH`. Nothing else in the seed
    depends on those rows.
 
+6. Reading the client exchange. Every login packet is logged in both
+   directions, so a client run is a readable trace instead of a guess:
+
+   ```
+   [INFO ] <- 127.0.0.1 LS_CRYPTION (8 byte(s))
+   [INFO ] -> 127.0.0.1 LS_CRYPTION (8 byte(s))
+   [INFO ] <- 127.0.0.1 LS_VERSION_REQ (0 byte(s))
+   [INFO ] [ LOGIN - 13:37:38 ] ID=test Authentication=SUCCESS
+   [INFO ] <- 127.0.0.1 LS_SERVERLIST (0 byte(s))
+   ```
+
+   An opcode with no handler is logged before the session is closed (the
+   original closed it silently, which looks exactly like a client crash).
+
+   After the LoginServer answers, the client dials the **game server** on
+   15001 — which is milestone M4 and does not exist yet. So that M4 can be
+   written against real packets rather than guesses, `KnightOnline.GameServer`
+   currently runs a *handshake recorder*: it accepts the connection, logs every
+   packet the client sends (opcode + hexdump) and answers nothing.
+
+   ```powershell
+   dotnet run --project src\KnightOnline.GameServer     # listens on 15001
+   ```
+
+   Run it next to the LoginServer, log in, and `Logs\GameServer.log` holds the
+   client's opening game-server sequence. The client will wait and then give up:
+   that is expected, it is a recorder, not a server.
+
 ## 7. AdminPanel (the website)
 
 1. Config lives in `src\KnightOnline.AdminPanel\appsettings.json`:
@@ -230,6 +258,7 @@ single file over 100 MB (and warns over 50 MB).
 | Port | Service |
 |---|---|
 | 15100 | LoginServer (game client) |
+| 15001 | GameServer — currently a handshake *recorder*, see §6 step 6 |
 | 5100 | AdminPanel (browser, localhost only) |
 | 3306 | MariaDB in Docker (127.0.0.1 only) |
 
@@ -293,6 +322,12 @@ single file over 100 MB (and warns over 50 MB).
   wraps every numeric value as `CAST(1 AS Numeric(18, 0))`, and `NUMERIC` is a
   valid column type but not a valid `CAST` target — the checker reports those
   too. Both gates run in CI (`.github/workflows/ci.yml`).
+- **`Session N (…) failed: … forcibly closed by the remote host` right after a
+  successful login** → that is the *client* closing the LoginServer socket,
+  which is what it does when it moves on to the game server. Read the trace
+  above it (§6 step 6): if `LS_SERVERLIST`/`LS_NEWS` were served, the login
+  server did its whole job and the client is now dialing 15001, where nothing
+  real listens yet (M4). Run the handshake recorder to see what it asks for.
 - **Client: "Cannot connect to FTP Server" (`ftp.yoursite.net`)** → the client
   was told a higher version than its own, so it is trying to download patch
   files. The log line `Patch check from …: client version NNNN, server MMMM,
