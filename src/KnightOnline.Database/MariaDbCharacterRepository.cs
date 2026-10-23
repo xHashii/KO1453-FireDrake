@@ -375,7 +375,7 @@ public sealed class MariaDbCharacterRepository
                 var items = reader.IsDBNull(4) ? DBNull.Value : reader.GetValue(4);
                 var loyalty = Convert.ToInt32(reader.GetValue(5));
                 var points = Convert.ToInt16(reader.GetValue(6));
-                await reader.CloseAsync(cancellationToken).ConfigureAwait(false);
+                await reader.CloseAsync().ConfigureAwait(false);
 
                 command.Parameters.Clear();
                 command.CommandText =
