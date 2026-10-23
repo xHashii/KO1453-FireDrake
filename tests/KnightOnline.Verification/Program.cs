@@ -483,5 +483,25 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
         "010010276400C80015D2040000640000000000000000000141020A6400C8001E0000000000000000000000");
 }
 
+// ---------- Character preview recovery and fixed-slot layout ----------
+{
+    var gear = Enumerable.Repeat(new KnightOnline.Database.EquippedItem(123456789, 14000), 8).ToArray();
+    var character = new KnightOnline.Database.CharacterSelectInfo("Hashii", 12, 206, 80, 1, 2, 21, gear);
+    var slots = new[] { character, KnightOnline.Database.CharacterSelectInfo.Empty, KnightOnline.Database.CharacterSelectInfo.Empty };
+    var safe = KnightOnline.Database.CharacterListPackets.Build(slots, false);
+    var normal = KnightOnline.Database.CharacterListPackets.Build(slots, true);
+    Check("char preview: preserve 178-byte three-slot layout", safe.Length == 178 && normal.Length == 178);
+    var decoded = Packet.FromReceived(safe.Opcode, safe.Payload);
+    Check("char preview: success", decoded.ReadByte() == 1);
+    Check("char preview: name and identity preserved", decoded.ReadString() == "Hashii" && decoded.ReadByte() == 12 && decoded.ReadUInt16() == 206);
+    Check("char preview: appearance preserved", decoded.ReadByte() == 80 && decoded.ReadByte() == 1 && decoded.ReadByte() == 2 && decoded.ReadByte() == 21);
+    var blank = true;
+    for (var i = 0; i < 8; i++) blank &= decoded.ReadUInt32() == 0 && decoded.ReadUInt16() == 0;
+    Check("char preview: suppress only model references", blank);
+    Check("char preview: saved equipment untouched", character.VisibleEquipment.All(item => item.ItemId == 123456789 && item.Durability == 14000));
+    Check("char preview: null-filled empty equipment safe", KnightOnline.Database.CharacterListPackets.Build(Array.Empty<KnightOnline.Database.CharacterSelectInfo>(), true).Length == 172);
+    Check("char preview: opt-in restores equipment", !normal.Payload.SequenceEqual(safe.Payload));
+}
+
 Console.WriteLine($"\n{passed} passed, {failed} failed.");
 return failed == 0 ? 0 : 1;

@@ -80,7 +80,7 @@ catch (Exception ex)
     KoLog.Error("World NPC/map loading failed. Fix the reported asset or data reference before starting.", ex);
     return 1;
 }
-var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world));
+var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment));
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -149,6 +149,7 @@ internal sealed partial class GameSession : KoSession
     private static int _lastSocketId = 1000;
 
     private readonly MariaDbCharacterRepository _characters;
+    private readonly bool _characterPreviewEquipment;
     private readonly ushort _socketId;
 
     /// <summary>Port of m_strAccountID: empty until GAME_LOGIN accepts us.</summary>
@@ -180,10 +181,11 @@ internal sealed partial class GameSession : KoSession
     private readonly byte[] _stats = new byte[5];
     private short _points;
 
-    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world)
+    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment)
         : base(client, maxPayloadSize: 8192)
     {
         _characters = characters;
+        _characterPreviewEquipment = characterPreviewEquipment;
         _world = world;
         _socketId = unchecked((ushort)Interlocked.Increment(ref _lastSocketId));
     }
@@ -432,22 +434,16 @@ internal sealed partial class GameSession : KoSession
             slots = new[] { CharacterSelectInfo.Empty, CharacterSelectInfo.Empty, CharacterSelectInfo.Empty };
         }
 
-        var result = new Packet(WizOpcode.AllcharInfoReq);
-        result.WriteByte(1);
-        foreach (var slot in slots)
+        var result = CharacterListPackets.Build(slots, _characterPreviewEquipment);
+        KoLog.Info($"[ CHAR PREVIEW ] equipmentModels={(_characterPreviewEquipment ? "enabled" : "suppressed (recovery mode)")}; saved inventory unchanged");
+        for (var i = 0; i < slots.Count; i++)
         {
-            result.WriteString(slot.CharacterId)
-                .WriteByte(slot.Race)
-                .WriteUInt16(slot.Class)
-                .WriteByte(slot.Level)
-                .WriteByte(slot.Face)
-                .WriteByte(slot.Hair)
-                .WriteByte(slot.Zone);
-
-            foreach (var item in slot.VisibleEquipment)
-                result.WriteUInt32(item.ItemId).WriteUInt16(item.Durability);
+            var slot = slots[i];
+            if (slot.CharacterId.Length == 0) continue;
+            KoLog.Info($"[ CHAR PREVIEW ] slot={i} char={slot.CharacterId} race={slot.Race} class={slot.Class} level={slot.Level} face={slot.Face} hair={slot.Hair} zone={slot.Zone} " +
+                $"savedEquipment={string.Join(",", slot.VisibleEquipment.Select(item => item?.ItemId ?? 0))}");
         }
-
+        KoLog.Info($"[ CHAR PREVIEW ] reply={Convert.ToHexString(result.Payload)}");
         Send(result);
     }
 

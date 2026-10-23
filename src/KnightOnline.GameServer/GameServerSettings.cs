@@ -10,7 +10,7 @@ namespace KnightOnline.GameServer;
 /// file is not an error: every key falls back to the default below, so the
 /// server still starts and only database access needs real values.
 /// </summary>
-public sealed record GameServerSettings(int Port, DatabaseSettings Database)
+public sealed record GameServerSettings(int Port, DatabaseSettings Database, bool CharacterPreviewEquipment = false)
 {
     public const string ConfigFileName = "GameServer.ini";
 
@@ -24,6 +24,7 @@ public sealed record GameServerSettings(int Port, DatabaseSettings Database)
                 (uint)ini.GetInt("DATABASE", "PORT", 3306),
                 ini.GetString("DATABASE", "DATABASE", "KN_Online"),
                 ini.GetString("DATABASE", "UID", "username"),
-                ini.GetString("DATABASE", "PWD", "password")));
+                ini.GetString("DATABASE", "PWD", "password")),
+            ini.GetInt("SETTINGS", "CHARACTER_PREVIEW_EQUIPMENT", 0) != 0);
     }
 }

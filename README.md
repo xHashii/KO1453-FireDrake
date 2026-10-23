@@ -321,3 +321,31 @@ If no packet arrives when hovering, that narrows the issue to local client
 rendering/data/driver work, but does not by itself prove the server's initial
 item data is correct. A matching client source/build or its diagnostic log is
 needed to identify and validate a renderer fix.
+
+### Character-screen crash recovery
+
+If the connection closes immediately after `AllcharInfoReq`, before `SelChar`,
+the in-world NPC handlers have not run. Do not reset NPC tables or inventories
+based on that log alone. It identifies the stage, not the client's crash cause.
+
+The default character preview now suppresses its eight equipped-model references
+on the wire. This is a **reversible recovery/isolation measure for equipment
+asset failures**, not proof that an item model caused the crash. Names, character
+identity, face/hair, levels and zones are preserved, as is the three-slot packet
+layout. Saved equipment/inventory and world-entry equipment are not modified.
+The same serializer also safely handles null-filled empty-slot equipment lists.
+
+To restore equipment models on the character screen after verifying client
+assets, set this in the actual `GameServer.ini` used to launch the server:
+
+```ini
+[SETTINGS]
+CHARACTER_PREVIEW_EQUIPMENT=1
+```
+
+The default is `0`, even if the setting is absent. Restart and reconnect to
+apply it. `[ CHAR PREVIEW ]` logs state the active mode, original equipment IDs,
+appearance fields and the exact response payload. If the client still crashes
+with preview equipment suppressed, retain that log and obtain the client crash
+log/Windows Application Error entry: the client renderer and assets are not in
+this server repository, so this patch cannot claim to fix every client crash.
