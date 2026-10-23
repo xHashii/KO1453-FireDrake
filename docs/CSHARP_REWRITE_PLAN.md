@@ -132,11 +132,13 @@ Key facts driving the rewrite:
   verified against a live client.
 - **M3 — Data layer** ⏳ in progress: real MSSQL export converted to MariaDB and LoginServer/AdminPanel rewired to one configurable database; ~40 game-data tables load into cache at startup
   (items, magic 1–9, NPCs, drops, quests, zones…); account/char/USERDATA CRUD.
-- **M4 — GameServer vertical slice** ⏳ started: the opening handshake is
-  implemented and verified against a real client (`WIZ_VERSION_CHECK` 0x2B →
-  `uint16(1453)` + JvCryption key + `EnableCrypto`, per `CUser::VersionCheck`),
-  and `KnightOnline.GameServer` captures every packet after it, decrypted, for
-  the increments below. Remaining: game login, character CRUD, nation select,
+- **M4 — GameServer vertical slice** ⏳ in progress: the pre-character-select
+  part of `CUser::HandlePacket` is ported and client-verified gate by gate —
+  `WIZ_VERSION_CHECK` (0x2B, handshake + crypto), `WIZ_LOGIN` (0x01,
+  `GAME_LOGIN`), `WIZ_SEL_NATION` (0x05, `NATION_SELECT`) and
+  `WIZ_ALLCHAR_INFO_REQ` (0x0C, `GetAllCharID` + `LoadCharInfo`), with
+  `MariaDbCharacterRepository` holding the SQL. Packets beyond that gate are
+  captured decrypted for the increments below. Remaining: character CRUD,
   enter world (`WIZ_MYINFO`), movement/rotation, region user in/out, chat, time/weather.
 - **M5 — Core gameplay**: combat (`AttackHandler`, `Unit`), magic engine, items/inventory/
   warehouse/trade/merchant/upgrade, parties, EXP/levels/stats.

@@ -186,23 +186,28 @@ then `docker compose up -d` again.
    An opcode with no handler is logged before the session is closed (the
    original closed it silently, which looks exactly like a client crash).
 
-   After the LoginServer answers, the client dials the **game server** on 15001
-   and opens with `WIZ_VERSION_CHECK` (0x2B, payload `FF FF` — the int16 −1 the
-   original's commented-out code used to read). `KnightOnline.GameServer`
-   answers that one packet exactly as `CUser::VersionCheck` does —
-   `uint16(1453)` plus the JvCryption public key — and then enables crypto,
-   which is what moves the client past *"Connecting. Please wait."* Everything
-   after the handshake is logged (decrypted, opcode + hexdump) and **not**
-   answered, so the client stops one step further on, at `WIZ_LOGIN`:
+   After the LoginServer answers, the client dials the **game server** on 15001.
+   `KnightOnline.GameServer` implements the opening of `CUser::HandlePacket`
+   gate by gate: `WIZ_VERSION_CHECK` (0x2B — `uint16(1453)` + JvCryption key +
+   enable crypto, which is what ends *"Connecting. Please wait."*), `WIZ_LOGIN`
+   (0x01 — `GAME_LOGIN` semantics: int8 nation, −1 rejects, 0 for a fresh
+   account), `WIZ_SEL_NATION` (0x05 — `NATION_SELECT`) and
+   `WIZ_ALLCHAR_INFO_REQ` (0x0C — three zero-filled character slots for an
+   account without characters, which opens the create-character screen).
+   Everything later — character creation first — is logged decrypted and not
+   answered yet, so each client run captures the spec for the next increment.
+
+   The GameServer reads `GameServer.ini` from its project directory; copy the
+   sample once and make `[DATABASE]` match your `LogInServer.ini`:
 
    ```powershell
-   dotnet run --project src\KnightOnline.GameServer     # listens on 15001
+   copy src\KnightOnline.GameServer\GameServer.sample.ini src\KnightOnline.GameServer\GameServer.ini
+   notepad src\KnightOnline.GameServer\GameServer.ini        # set UID / PWD
+   dotnet run --project src\KnightOnline.GameServer           # listens on 15001
    ```
 
-   Run it next to the LoginServer and log in; `Logs\GameServer.log` then holds
-   the client's opening game-server sequence, which is what the rest of M4 is
-   being written from. The client sitting at "Connecting." after the handshake
-   is expected until the login handler exists.
+   Run it next to the LoginServer and log in: the client should reach the
+   nation-select dialog, then the (empty) character-create screen.
 
 ## 7. AdminPanel (the website)
 
@@ -262,7 +267,7 @@ single file over 100 MB (and warns over 50 MB).
 | Port | Service |
 |---|---|
 | 15100 | LoginServer (game client) |
-| 15001 | GameServer prototype (opening handshake only), see §6 step 6 |
+| 15001 | GameServer prototype (login, nation select, char list), see §6 step 6 |
 | 5100 | AdminPanel (browser, localhost only) |
 | 3306 | MariaDB in Docker (127.0.0.1 only) |
 
@@ -331,8 +336,13 @@ single file over 100 MB (and warns over 50 MB).
   which is what it does when it moves on to the game server. Read the trace
   above it (§6 step 6): if `LS_SERVERLIST`/`LS_NEWS` were served, the login
   server did its whole job and the client is now dialing 15001. Run the
-  GameServer prototype alongside: it answers the opening `WIZ_VERSION_CHECK`
-  and records everything after it (§6 step 6).
+  GameServer prototype alongside: it answers the opening `WIZ_VERSION_CHECK`,
+  the game login, nation select and the character list, and records everything
+  after that (§6 step 6).
+- **Game login rejected although the LoginServer accepted the account**, or the
+  GameServer log shows database errors → `GameServer.ini` is missing or its
+  `[DATABASE]` section does not match MariaDB; copy `GameServer.sample.ini`
+  and reuse the credentials from `LogInServer.ini` (§6 step 6).
 - **Client: "Cannot connect to FTP Server" (`ftp.yoursite.net`)** → the client
   was told a higher version than its own, so it is trying to download patch
   files. The log line `Patch check from …: client version NNNN, server MMMM,
