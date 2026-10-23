@@ -40,6 +40,34 @@ public sealed class MariaDbCharacterRepository
     }
 
     /// <summary>
+    /// Restores shipped starter prototypes missing from a partial data import.
+    /// Runs once at server startup, atomically, without changing existing rows.
+    /// The embedded seed is independent of the launch directory and publish layout.
+    /// </summary>
+    public async Task<int> RepairStarterItemPrototypesAsync(CancellationToken cancellationToken = default)
+    {
+        using var stream = typeof(MariaDbCharacterRepository).Assembly.GetManifestResourceStream(
+            "KnightOnline.Database.Items.StarterItemRepair.sql")
+            ?? throw new InvalidOperationException("Embedded starter-item repair data is missing.");
+        using var reader = new StreamReader(stream);
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var restored = 0;
+        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+        {
+            if (!line.StartsWith("INSERT INTO `ITEM` ", StringComparison.Ordinal))
+                continue;
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = line;
+            restored += await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return restored;
+    }
+
+    /// <summary>
     /// Port of the GAME_LOGIN stored procedure: -1 when the account is unknown
     /// or the password does not match, otherwise the account's nation - 0 when
     /// it has not chosen one yet (no ACCOUNT_CHAR row), which is what sends a

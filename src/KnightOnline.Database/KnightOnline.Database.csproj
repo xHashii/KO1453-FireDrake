@@ -14,6 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Items/StarterItemRepair.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\KnightOnline.Shared\KnightOnline.Shared.csproj" />
   </ItemGroup>
 

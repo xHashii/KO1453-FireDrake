@@ -38,6 +38,16 @@ if (!File.Exists(GameServerSettings.ConfigFileName))
                "copy GameServer.sample.ini and set [DATABASE] to your LogInServer.ini credentials.");
 
 var characters = new MariaDbCharacterRepository(settings.Database);
+try
+{
+    var restored = await characters.RepairStarterItemPrototypesAsync();
+    KoLog.Info($"Starter-item definitions: restored {restored} missing ITEM row(s); existing definitions unchanged.");
+}
+catch (Exception ex)
+{
+    KoLog.Error("Starter-item repair failed. Check the configured database and ITEM table permissions before retrying.", ex);
+    return 1;
+}
 
 var port = settings.Port;
 if (args.Length > 0 && int.TryParse(args[0], out var parsedPort) && parsedPort is > 0 and < 65536)
