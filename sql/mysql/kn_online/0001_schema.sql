@@ -25,7 +25,8 @@ CREATE TABLE `_Anket`(
  `Oy3` int NOT NULL,
  `Tarih` DATETIME NULL,
  `Haber_ID` int NULL,
- `Yer` varchar(50) NULL
+ `Yer` varchar(50) NULL,
+ KEY `ix_auto_Anket_ID` (`Anket_ID`)
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `_Anket_Oylayanlar`(
@@ -38,7 +39,8 @@ CREATE TABLE `_DOWNLOADS`(
  `titletr` varchar(250) NULL,
  `titleen` varchar(250) NULL,
  `url` varchar(250) NULL,
- `tarih` varchar(250) NULL
+ `tarih` varchar(250) NULL,
+ KEY `ix_auto_id` (`id`)
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `_Haber`(
@@ -61,7 +63,8 @@ CREATE TABLE `_IP_Engelliler`(
  `Char_3` varchar(21) NULL,
  `Tarih_Default` DATETIME NOT NULL,
  `Tarih` varchar(50) NULL,
- `Silinme_Tarihi` varchar(50) NULL
+ `Silinme_Tarihi` varchar(50) NULL,
+ KEY `ix_auto_id` (`id`)
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `_K2DLoyalty`(
@@ -79,7 +82,8 @@ CREATE TABLE `_Link`(
  `adi` varchar(150) NULL,
  `link` varchar(300) NULL,
  `indirilme` int NOT NULL,
- `tarih` DATETIME NOT NULL
+ `tarih` DATETIME NOT NULL,
+ KEY `ix_auto_id` (`id`)
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `_Mail`(
@@ -125,7 +129,8 @@ CREATE TABLE `_Ticket`(
  `ticket` varchar(50) NULL,
  `kim` varchar(50) NULL,
  `tarih` DATETIME NULL,
- `durum` int NULL
+ `durum` int NULL,
+ KEY `ix_auto_id` (`id`)
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `_Ticket_Cevap`(
@@ -1025,7 +1030,8 @@ CREATE TABLE `MAIL_ITEM`(
  `nNum` int NULL,
  `sCount` smallint NULL,
  `sTime` DATETIME NULL,
- `bDay` TINYINT UNSIGNED NULL
+ `bDay` TINYINT UNSIGNED NULL,
+ KEY `ix_auto_ID` (`ID`)
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `MAKE_DEFENSIVE`(
@@ -1382,7 +1388,7 @@ CREATE TABLE `SERVER_RESOURCE`(
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `SERVERS`(
- `sNum` numeric(18, 0) AUTO_INCREMENT NOT NULL,
+ `sNum` bigint AUTO_INCREMENT NOT NULL,
  `sName` char(250) NULL,
  `sIP` char(15) NULL,
  `DatabaseName` char(100) NULL,
@@ -1441,7 +1447,8 @@ CREATE TABLE `SN_NEWS`(
  `titleen` varchar(80) NULL,
  `newsen` varchar(4096) NULL,
  `titlees` varchar(80) NULL,
- `newses` varchar(4096) NULL
+ `newses` varchar(4096) NULL,
+ KEY `ix_auto_id` (`id`)
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `SN_NEWS_MAIN`(
@@ -1453,7 +1460,8 @@ CREATE TABLE `SN_NEWS_MAIN`(
  `titlees` varchar(80) NULL,
  `newses` varchar(4096) NULL,
  `newsid` int NULL,
- `newsimage` int NULL
+ `newsimage` int NULL,
+ KEY `ix_auto_id` (`id`)
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `START_POSITION`(
@@ -1496,7 +1504,8 @@ CREATE TABLE `TB_USER`(
  `Nick` varchar(21) NULL,
  `Access` varchar(12) NULL,
  `ulke` varchar(50) NULL,
- `PremiumExpire` datetime NULL
+ `PremiumExpire` datetime NULL,
+ KEY `ix_auto_ID` (`ID`)
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `USER_DAILY_OP`(

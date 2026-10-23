@@ -48,6 +48,28 @@ including accounts, re-run the converter locally without
 3. **Exclusion list widened** from the real schema (e.g. `USER_SAVED_MAGIC`,
    `WEB_ITEMMALL_LOG`, `_Sifre_Degistir` — password-reset e-mails/hashes).
 
+## First live MariaDB import fixes (2026-10-23)
+
+The converted `0001_schema.sql` had never actually been executed until
+the first LoginServer run against MariaDB 11.4. Two SQL Server-isms were
+legal in the source but are hard errors in MariaDB — converter + committed
+artifact fixed together:
+
+1. **Keyless IDENTITY** (ERROR 1075): 9 tables (`_Anket`, `_DOWNLOADS`,
+   `_IP_Engelliler`, `_Link`, `_Ticket`, `MAIL_ITEM`, `SN_NEWS`,
+   `SN_NEWS_MAIN`, `TB_USER`) had IDENTITY columns with no key at all.
+   MariaDB requires the auto column to be indexed; the converter now adds
+   a plain non-unique `KEY ix_auto_<col>` (non-unique preserves IDENTITY
+   semantics and cannot fail data loads on duplicate identity values).
+2. **IDENTITY on `numeric(18,0)`** (ERROR 1063): `SERVERS.sNum`. MariaDB
+   allows AUTO_INCREMENT on integer types only; scale-0 with precision
+   ≤ 18 now converts to `bigint` (same value range).
+
+Note: a failed first migration leaves partially created tables behind
+(the migrator records a script only after it fully applies), so after a
+schema fix, reset the dev database (`docker compose down -v`) before
+retrying instead of re-running into "table already exists".
+
 ## The big structural finding: ONE database
 
 There is no separate account/game DB. Everything — `TB_USER`, `USERDATA`,

@@ -161,6 +161,111 @@ def strip_table_options(sql: str) -> str:
     return sql
 
 
+def _find_matching_paren(sql: str, open_index: int) -> int:
+    depth = 0
+    in_single = False
+    in_backtick = False
+    i = open_index
+    while i < len(sql):
+        ch = sql[i]
+        if in_single:
+            if ch == chr(92):  # backslash escape inside a string literal
+                i += 2
+                continue
+            if ch == "'":
+                if i + 1 < len(sql) and sql[i + 1] == "'":
+                    i += 2
+                    continue
+                in_single = False
+        elif in_backtick:
+            if ch == "`":
+                in_backtick = False
+        else:
+            if ch == "'":
+                in_single = True
+            elif ch == "`":
+                in_backtick = True
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    return i
+        i += 1
+    return -1
+
+
+def _key_columns(body: str) -> set[str]:
+    cols: set[str] = set()
+    norm = re.sub(r"\s+", " ", body)
+    for m in re.finditer(
+        r"(?:PRIMARY\s+KEY|UNIQUE(?:\s+(?:KEY|INDEX))?(?:\s+`[^`]+`)?|"
+        r"(?:KEY|INDEX)(?:\s+`[^`]+`)?)\s*\(([^)]*)\)",
+        norm,
+        re.I,
+    ):
+        cols.update(c.lower() for c in re.findall(r"`([^`]+)`", m.group(1)))
+    for line in body.splitlines():
+        m = re.match(r"\s*`([^`]+)`.*\b(?:PRIMARY\s+KEY|UNIQUE)\b", line, re.I)
+        if m:
+            cols.add(m.group(1).lower())
+    return cols
+
+
+def ensure_auto_increment_key(sql: str) -> str:
+    """Add a KEY for keyless AUTO_INCREMENT columns.
+
+    SQL Server permits IDENTITY on a table with no key at all; MariaDB
+    rejects that with ERROR 1075 ("there can be only one auto column and
+    it must be defined as a key"). If a converted AUTO_INCREMENT column is
+    not already part of a PRIMARY/UNIQUE/KEY definition, add a plain
+    (non-unique) KEY for it. Non-unique is deliberate: it preserves
+    IDENTITY semantics and cannot fail data loads on duplicate identity
+    values that were legal in SQL Server.
+    """
+    # MariaDB allows AUTO_INCREMENT on integer types only (DECIMAL/NUMERIC
+    # give ERROR 1063). SQL Server happily puts IDENTITY on numeric(18,0)
+    # (e.g. SERVERS.sNum); scale-0 with precision <= 18 fits in a signed
+    # BIGINT, so convert just those columns.
+    sql = re.sub(
+        r"(?im)^(\s*`[^`]+`\s+)(?:decimal|numeric)\(\s*(?:[1-9]|1[0-8])\s*,\s*0\s*\)(?=[^\n]*\bAUTO_INCREMENT\b)",
+        r"\1bigint",
+        sql,
+    )
+
+    m = re.search(r"(?is)CREATE\s+TABLE\s+`[^`]+`\s*\(", sql)
+    if not m:
+        return sql
+    open_index = m.end() - 1
+    close_index = _find_matching_paren(sql, open_index)
+    if close_index < 0:
+        return sql
+
+    body = sql[open_index + 1:close_index]
+    autos: list[str] = []
+    for line in body.splitlines():
+        cm = re.match(r"\s*`([^`]+)`.*\bAUTO_INCREMENT\b", line, re.I)
+        if cm and cm.group(1).lower() not in [a.lower() for a in autos]:
+            autos.append(cm.group(1))
+    if not autos:
+        return sql
+
+    key_cols = _key_columns(body)
+    missing = [c for c in autos if c.lower() not in key_cols]
+    if not missing:
+        return sql
+
+    key_defs: list[str] = []
+    for col in missing:
+        index_name = ("ix_auto_" + col.replace("`", "``"))[:64].rstrip("`") or "ix_auto"
+        key_defs.append(f"KEY `{index_name}` (`{col}`)")
+
+    prefix = sql[:close_index].rstrip()
+    sep = "\n " if prefix.endswith(",") else ",\n "
+    insertion = sep + ",\n ".join(key_defs) + "\n"
+    return prefix + insertion + sql[close_index:]
+
+
 def convert_create_table(sql: str) -> str:
     sql = bracket_to_backtick(sql)
     sql = strip_table_options(sql)
@@ -172,6 +277,7 @@ def convert_create_table(sql: str) -> str:
     sql = re.sub(r"[ \t]+", " ", sql)
     # MariaDB does not accept asc/desc inside key column lists.
     sql = re.sub(r"(?i)\s+(ASC|DESC)(\s*[,\)])", r"\2", sql)
+    sql = ensure_auto_increment_key(sql)
     sql = sql.rstrip().rstrip(";")
     if not re.search(r"(?i)ENGINE\s*=", sql):
         sql += " ENGINE=InnoDB ROW_FORMAT=DYNAMIC"

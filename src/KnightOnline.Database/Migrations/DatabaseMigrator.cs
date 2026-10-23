@@ -151,6 +151,16 @@ public sealed class DatabaseMigrator
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         command.CommandTimeout = 0; // huge converted data files may take a while
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (MySqlException ex)
+        {
+            // A bare MySqlException from one of ~140k statements is useless
+            // without knowing which statement actually failed.
+            var snippet = sql.Length <= 200 ? sql : sql[..200] + "...";
+            throw new InvalidOperationException($"Migration statement failed: {snippet}", ex);
+        }
     }
 }
