@@ -1,3 +1,4 @@
+using KnightOnline.Shared.Diagnostics;
 using MySqlConnector;
 
 namespace KnightOnline.Database;
@@ -335,7 +336,7 @@ public sealed class MariaDbCharacterRepository
                     "VALUES (@charId, @nation, @race, @class, @hair, @face, " +
                     "@strong, @sta, @dex, @intel, @cha, " +
                     "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, " +
-                    "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NOW())";
+                    "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NOW())";
                 command.Parameters.AddWithValue("@charId", charId);
                 command.Parameters.AddWithValue("@nation", nation);
                 command.Parameters.AddWithValue("@race", race);
@@ -409,8 +410,10 @@ public sealed class MariaDbCharacterRepository
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return 0;
         }
-        catch
+        catch (Exception ex)
         {
+            // The client only ever sees NEWCHAR_DB_ERROR; the log must say why.
+            KoLog.Error($"CREATE_NEW_CHAR for '{charId}' (account {account}) failed at the database.", ex);
             await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
             return dbError;
         }
