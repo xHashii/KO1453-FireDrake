@@ -171,8 +171,8 @@ CREATE TABLE `BEGINNER_ITEM`(
  `Sta` smallint NOT NULL,
  `Skill` varchar(10) NULL,
  `Gold` int NULL,
- `strItem` binary(600) NULL,
- `WarehouseData` binary(1536) NULL,
+ `strItem` varbinary(600) NULL,
+ `WarehouseData` varbinary(1536) NULL,
  `Loyalty` int NULL,
  `Points` smallint NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
@@ -182,7 +182,7 @@ CREATE TABLE `BEGINNER_ITEM2`(
  `strClass` char(10) NULL,
  `Gold` bigint NOT NULL,
  `strItem` varchar(1200) NULL,
- `strItem1` binary(1200) NULL
+ `strItem1` varbinary(1200) NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `COEFFICIENT`(
@@ -811,7 +811,7 @@ CREATE TABLE `MAGIC`(
  `MagicNum` int NOT NULL,
  `EnName` char(250) NULL,
  `KrName` char(250) NULL,
- `Description` char(1000) NULL,
+ `Description` varchar(1000) NULL,
  `BeforeAction` int NOT NULL,
  `TargetAction` TINYINT UNSIGNED NOT NULL,
  `SelfEffect` TINYINT UNSIGNED NOT NULL,
@@ -837,7 +837,7 @@ CREATE TABLE `MAGIC`(
 CREATE TABLE `MAGIC_TYPE1`(
  `iNum` int NOT NULL,
  `Name` char(250) NULL,
- `Description` char(1000) NULL,
+ `Description` varchar(1000) NULL,
  `Type` TINYINT UNSIGNED NOT NULL,
  `HitRate` smallint NOT NULL,
  `Hit` smallint NOT NULL,
@@ -911,7 +911,7 @@ CREATE TABLE `MAGIC_TYPE4`(
 CREATE TABLE `MAGIC_TYPE5`(
  `iNum` int NOT NULL,
  `Name` char(250) NULL,
- `Description` char(1000) NULL,
+ `Description` varchar(1000) NULL,
  `Type` TINYINT UNSIGNED NOT NULL,
  `ExpRecover` TINYINT UNSIGNED NOT NULL,
  `NeedStone` smallint NOT NULL
@@ -920,7 +920,7 @@ CREATE TABLE `MAGIC_TYPE5`(
 CREATE TABLE `MAGIC_TYPE6`(
  `iNum` int NOT NULL,
  `Name` char(250) NULL,
- `Description` char(1000) NULL,
+ `Description` varchar(1000) NULL,
  `Size` smallint NOT NULL,
  `TransformID` smallint NOT NULL,
  `Duration` smallint NOT NULL,
@@ -953,7 +953,7 @@ CREATE TABLE `MAGIC_TYPE6`(
 CREATE TABLE `MAGIC_TYPE7`(
  `nIndex` int NOT NULL,
  `strName` char(250) NULL,
- `strNote` char(1000) NULL,
+ `strNote` varchar(1000) NULL,
  `byValidGroup` TINYINT UNSIGNED NOT NULL,
  `byNatoinChange` TINYINT UNSIGNED NOT NULL,
  `shMonsterNum` smallint NOT NULL,
@@ -970,7 +970,7 @@ CREATE TABLE `MAGIC_TYPE7`(
 CREATE TABLE `MAGIC_TYPE8`(
  `iNum` int NOT NULL,
  `Name` char(250) NULL,
- `Description` char(1000) NULL,
+ `Description` varchar(1000) NULL,
  `Target` TINYINT UNSIGNED NOT NULL,
  `Radius` smallint NOT NULL,
  `WarpType` TINYINT UNSIGNED NOT NULL,
@@ -981,7 +981,7 @@ CREATE TABLE `MAGIC_TYPE8`(
 CREATE TABLE `MAGIC_TYPE9`(
  `iNum` int NOT NULL,
  `Name` char(250) NULL,
- `Description` char(1000) NULL,
+ `Description` varchar(1000) NULL,
  `ValidGroup` TINYINT UNSIGNED NOT NULL,
  `NationChange` TINYINT UNSIGNED NOT NULL,
  `MonsterNum` smallint NOT NULL,
@@ -1315,7 +1315,7 @@ CREATE TABLE `QUEST_MONSTER`(
 
 CREATE TABLE `QUEST_TALK`(
  `iNum` int NOT NULL,
- `strTalk` char(1000) NOT NULL
+ `strTalk` varchar(1000) NOT NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `RENTAL_ITEM`(
@@ -1522,7 +1522,7 @@ CREATE TABLE `USER_DAILY_OP`(
 
 CREATE TABLE `USER_ITEMS`(
  `nItemID` int NULL,
- `nItemSerial` CHAR(586) NULL
+ `nItemSerial` varchar(586) NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `USER_KNIGHTS_RANK`(
@@ -1637,10 +1637,10 @@ CREATE TABLE `USERDATA`(
  `PY` int NOT NULL,
  `dwTime` int NOT NULL,
  `strSkill` varchar(10) NULL,
- `strItem` binary(584) NULL,
- `strSerial` binary(584) NULL,
+ `strItem` varbinary(584) NULL,
+ `strSerial` varbinary(584) NULL,
  `sQuestCount` smallint NOT NULL,
- `strQuest` binary(600) NULL,
+ `strQuest` varbinary(600) NULL,
  `MannerPoint` int NOT NULL,
  `LoyaltyMonthly` int NOT NULL,
  `dtCreateTime` datetime NOT NULL,
@@ -1667,8 +1667,8 @@ CREATE TABLE `WAREHOUSE`(
  `strAccountID` char(21) NOT NULL,
  `nMoney` int NOT NULL,
  `dwTime` int NOT NULL,
- `WarehouseData` binary(1536) NULL,
- `strSerial` binary(1536) NULL
+ `WarehouseData` varbinary(1536) NULL,
+ `strSerial` varbinary(1536) NULL
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;
 
 CREATE TABLE `WEB_ITEMMALL`(

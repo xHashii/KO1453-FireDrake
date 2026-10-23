@@ -64,6 +64,13 @@ artifact fixed together:
 2. **IDENTITY on `numeric(18,0)`** (ERROR 1063): `SERVERS.sNum`. MariaDB
    allows AUTO_INCREMENT on integer types only; scale-0 with precision
    ≤ 18 now converts to `bigint` (same value range).
+3. **Fixed-length types over 255** (ERROR 1074): MariaDB caps `CHAR` and
+   `BINARY` at 255; SQL Server allows 8000. 17 columns in 13 tables were
+   oversized — the item blobs (`USERDATA.strItem/strSerial` 584,
+   `strQuest` 600, `WAREHOUSE.*` 1536, `BEGINNER_ITEM.*`) and
+   `char(1000)` description/talk columns. Oversized `binary`/`char` now
+   widen to `varbinary`/`varchar` (exact bytes preserved; blob readers
+   tolerate the stored length).
 
 Note: a failed first migration leaves partially created tables behind
 (the migrator records a script only after it fully applies), so after a

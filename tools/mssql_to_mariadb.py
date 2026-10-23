@@ -266,10 +266,31 @@ def ensure_auto_increment_key(sql: str) -> str:
     return prefix + insertion + sql[close_index:]
 
 
+def fix_oversized_fixed_types(sql: str) -> str:
+    """MariaDB caps CHAR/BINARY at 255 (ERROR 1074); SQL Server allows 8000.
+
+    Widen oversized fixed-length columns to their variable-length twins
+    (binary(600) -> varbinary(600), char(1000) -> varchar(1000)). The item
+    blobs (USERDATA.strItem/strSerial/strQuest, WAREHOUSE.*) are the main
+    binary victims; variable-length storage preserves their exact bytes,
+    and the readers tolerate the stored length either way.
+    """
+    def repl(m: re.Match[str]) -> str:
+        n = int(m.group(2))
+        if n <= 255:
+            return m.group(0)
+        widened = "varbinary" if m.group(1).lower() == "binary" else "varchar"
+        return f"{widened}({n})"
+
+    # The leading \b keeps varchar/varbinary from matching their suffixes.
+    return re.sub(r"\b(binary|char)\s*\(\s*(\d+)\s*\)", repl, sql, flags=re.I)
+
+
 def convert_create_table(sql: str) -> str:
     sql = bracket_to_backtick(sql)
     sql = strip_table_options(sql)
     sql = convert_types(sql)
+    sql = fix_oversized_fixed_types(sql)
     sql = fix_defaults(sql)
     # Named default constraints inline: CONSTRAINT `DF_x` DEFAULT 0 -> DEFAULT 0
     sql = re.sub(r"(?i)CONSTRAINT\s+`[^`]+`\s+(DEFAULT|PRIMARY\s+KEY|UNIQUE|CHECK)",
