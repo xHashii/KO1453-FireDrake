@@ -227,3 +227,60 @@ SMD terrain dimensions, and checks repair repeatability/custom preservation.
 This verifies bounds, not collision walkability or a modified client's own
 map tables. Zones without START_POSITION still need authored spawn data;
 this change does not invent event mechanics or open restricted routes.
+
+### Static NPC world, native gates and right-click browsing
+
+GameServer now loads hosted zones from `ZONE_INFO`, prototypes from `K_NPC`,
+**NPC** spawns from `K_NPCPOS` (`ActType >= 100`, as in AIServer), and map
+objects from `K_OBJECTPOS`. Monster rows (`ActType < 100`) are deliberately
+not turned into shop NPCs. All spawn counts (`NumNPC`) are preserved. Static
+NPC groups are placed deterministically inside their authored rectangles;
+patrol/guard AI, fighting and event scheduling are not simulated yet.
+
+The shipped data has **1,436 NPC spawn instances across the 31 hosted zones**,
+including **57 ordinary NPCs in Moradon**, plus object proxies such as its
+anvil (object/prototype 5001). Runtime NPC IDs occupy a separate 10000–19999
+band and are shared by sessions. NPCs are streamed on entry, zone changes,
+same-map warps and walking, with same-zone request/interaction checks. The
+startup `[ WORLD ] zone=... NPCs=... objects=... warps=...` lines report the
+actual loaded data, and missing prototypes/out-of-bounds placements fail
+startup rather than silently dropping spawn rows.
+
+Maps are copied to `data/map` in build/publish output. The SMD loader reads
+terrain heights and skips the original collision-cell structures to load
+native warp records. NPC spawn heights are interpolated from terrain;
+object heights come from K_OBJECTPOS. This is not a movement collision or
+pathfinding implementation. Empty/missing world tables or map files cause
+an actionable startup error.
+
+Native warp gates now use `ObjectEvent` to identify the nearby authored gate,
+its nation and its control group. The warp window lists that group's SMD
+entries (names, exact destinations and coin fees), filtered by currently
+supported public travel rules. Selections must have been offered, remain in
+range of that same gate, match nation/level requirements and have sufficient
+coins. Coin deduction and saved destination are committed in one transaction;
+replayed or fabricated warp selections cannot reuse the cleared menu.
+Moradon object **4013** (the captured `AD 0F D4 00` request) opens group **212**,
+including warp **2121** to El Morad at **1595,412** for **5,000 coins**.
+Other native object services (binds, war levers, artifacts) remain unported.
+
+Right-click merchants/tinkers send the original `WIZ_TRADE_NPC` /
+`WIZ_REPAIR_NPC` selling-group replies so the **client's item tables** display
+what that merchant sells. Clicking the anvil sends `WIZ_ITEM_UPGRADE` request
+1 with the validated runtime anvil ID. These are **browsing windows only**:
+purchases, sales, repairs, upgrades and exchanges are explicitly rejected
+without modifying items or coins. Quest/warehouse/clan/other service NPCs
+are visible but report that their service is not implemented; they do not
+pretend to provide a working transaction. Full skills/combat are also not
+part of this change.
+
+Data regression checks (no DB required):
+
+```sh
+python tools/test_world_npcs.py
+python tools/test_world_coordinates.py
+python tools/audit_world_npcs.py
+```
+
+The .NET verification project additionally checks NPC-info wire bytes and
+parses every bundled SMD, including the native Moradon warp data.

@@ -13,6 +13,8 @@ public static class TravelRules
         1 or 2 => zone == nation,
         11 or 12 => zone == nation + 10 && level >= 60,
         71 => level >= 60,
+        30 or 31 or 32 or 33 or 34 => true,
+        72 => level >= 45 && level <= 59,
         _ => false
     };
 
@@ -90,22 +92,28 @@ public sealed partial class MariaDbCharacterRepository
         return result;
     }
 
-    public async Task SaveTravelPositionAsync(string charId, TravelDestination target)
+    public async Task<int> SaveTravelPositionAsync(string charId, TravelDestination target, int fee = 0)
     {
+        if (fee < 0) throw new ArgumentOutOfRangeException(nameof(fee));
         await using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync().ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync().ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = "UPDATE USERDATA SET Zone=@zone, PX=@x, PZ=@z, PY=@y WHERE strUserID=@id";
+        command.CommandText = "UPDATE USERDATA SET Zone=@zone, PX=@x, PZ=@z, PY=@y, Gold=Gold-@fee WHERE strUserID=@id AND Gold>=@fee";
         command.Parameters.AddWithValue("@id", charId);
+        command.Parameters.AddWithValue("@fee", fee);
         command.Parameters.AddWithValue("@zone", target.Zone);
         command.Parameters.AddWithValue("@x", target.Px);
         command.Parameters.AddWithValue("@z", target.Pz);
         command.Parameters.AddWithValue("@y", target.Py);
-        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        if (await command.ExecuteNonQueryAsync().ConfigureAwait(false) != 1)
+            throw new InvalidOperationException("Character missing or insufficient coins; travel was not saved.");
+        command.CommandText = "SELECT Gold FROM USERDATA WHERE strUserID=@id";
+        var gold = Convert.ToInt32(await command.ExecuteScalarAsync().ConfigureAwait(false));
         command.CommandText = "INSERT INTO KO_WORLD_TRAVEL (strUserID) VALUES (@id) ON DUPLICATE KEY UPDATE strUserID = VALUES(strUserID)";
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         await transaction.CommitAsync().ConfigureAwait(false);
+        return gold;
     }
 }

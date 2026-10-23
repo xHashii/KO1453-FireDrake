@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'arena/**']
 
 # Both jobs are deliberately server-free: the point is that a broken migration
 # script or a drifted protocol port is caught before anyone starts MariaDB.
@@ -52,3 +52,9 @@ jobs:
 
       - name: Check the data drop zone against the database
         run: python tools/check_data_assets.py
+
+      - name: Verify world NPCs, native warps and coordinate repairs
+        run: |
+          python tools/test_world_npcs.py
+          python tools/test_world_coordinates.py
+          python tools/test_starter_item_repair.py

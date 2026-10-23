@@ -449,5 +449,28 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     Check("recovery: original elapsed > 5 second cadence", KnightOnline.Database.RecoveryRules.IntervalSeconds == 6);
 }
 
+// ---------- Static world NPC/SMD loading ----------
+{
+    var maps = KnightOnline.Database.World.WorldCatalog.FindMapDirectory();
+    var map = new KnightOnline.Database.World.SmdMap(Path.Combine(maps, "moradon_20060124.smd"));
+    Check("SMD: Moradon terrain dimensions", map.Extent == 512);
+    Check("SMD: all ten authored Moradon warps", map.Warps.Count == 10);
+    var elmo = map.Warps.Single(w => w.Id == 2121);
+    Check("SMD: El Morad gate destination/fee/nation", elmo.Zone == 2 && elmo.X == 1595 && elmo.Z == 412 && elmo.Fee == 5000 && elmo.Nation == 2);
+    Check("SMD: town height finite", float.IsFinite(map.Height(306, 352)));
+    Check("SMD: reject outside map", !map.Contains(513, 100));
+    foreach (var path in Directory.GetFiles(maps, "*.smd"))
+    {
+        var loaded = new KnightOnline.Database.World.SmdMap(path);
+        Check($"SMD: parses {Path.GetFileName(path)}", loaded.Extent > 0);
+    }
+    var proto = new KnightOnline.Database.World.NpcPrototype(100, "A", 200, 100, 0, 0, 2, 21, 1234, 10);
+    var npc = new KnightOnline.Database.World.WorldNpc(10000, proto, 10, 3, 20, 0);
+    var reply = new Packet(WizOpcode.ReqNpcin).WriteUInt16(1).WriteUInt16(npc.Id);
+    npc.WriteInfo(reply);
+    CheckHex("NPC: full info wire layout", reply.Payload,
+        "010010276400C80015D2040000640000000000000000000141020A6400C8001E0000000000000000000000");
+}
+
 Console.WriteLine($"\n{passed} passed, {failed} failed.");
 return failed == 0 ? 0 : 1;

@@ -11,6 +11,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="../../data/map/*.smd" Link="data/map/%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\KnightOnline.Shared\KnightOnline.Shared.csproj" />
     <ProjectReference Include="..\KnightOnline.Database\KnightOnline.Database.csproj" />
   </ItemGroup>

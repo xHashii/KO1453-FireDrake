@@ -127,6 +127,7 @@ internal sealed partial class GameSession
         if (!CanTravel()) return;
         TravelSafely(() =>
         {
+            ClearGate();
             _offeredTravel.Clear();
             var destinations = _characters.LoadTravelDestinationsAsync(_user!.Nation, _user.Level).GetAwaiter().GetResult();
             // Prototype travel menu: synthetic warp IDs are zone IDs, never arbitrary client coordinates.
@@ -147,24 +148,31 @@ internal sealed partial class GameSession
     {
         if (!CanTravel() || packet.RemainingToRead != 2) return;
         var id = packet.ReadUInt16();
+        if (SelectGateWarp(id)) return;
         // Do not mistake native map warp IDs for our synthetic menu IDs.
         if (!_offeredTravel.TryGetValue(id, out var target)
             || !TravelRules.CanEnter(target.Zone, _user!.Nation, _user.Level)) return;
         TravelSafely(() => BeginTravel(target));
     }
 
-    private void BeginTravel(TravelDestination target)
+    private void BeginTravel(TravelDestination target, int fee = 0)
     {
         // Persist before changing session state or notifying the client. A DB failure
         // must not leave client/session and the saved zone disagreeing.
-        _characters.SaveTravelPositionAsync(_charId, target).GetAwaiter().GetResult();
+        if (!_world.Zones.TryGetValue(target.Zone, out var destination) || !destination.Map.Contains(target.Px / 100f, target.Pz / 100f))
+            throw new InvalidOperationException("Destination is outside the loaded world.");
+        target = target with { Py = (int)(destination.Map.Height(target.Px / 100f, target.Pz / 100f) * 100) };
+        var gold = _characters.SaveTravelPositionAsync(_charId, target, fee).GetAwaiter().GetResult();
         var sameZone = target.Zone == _user!.Zone;
-        _user = _user with { Zone = target.Zone, Px = target.Px, Pz = target.Pz, Py = target.Py };
+        _user = _user with { Zone = target.Zone, Px = target.Px, Pz = target.Pz, Py = target.Py, Gold = gold };
         _offeredTravel.Clear();
+        ClearGate();
         _sitting = false;
+        if (fee > 0) Send(new Packet(WizOpcode.GoldChange, (byte)2).WriteUInt32((uint)fee).WriteUInt32((uint)gold));
         if (sameZone)
         {
             Send(TravelPackets.Warp(target.Px, target.Pz));
+            SendWorldNpcs();
         }
         else
         {
@@ -180,9 +188,9 @@ internal sealed partial class GameSession
         var phase = packet.ReadByte();
         if (phase == 1 && _travelStage == 1)
         {
-            // Empty region snapshots: entities/AI are not yet ported.
+            // Player/merchant regions remain empty; NPC records come from the static world.
             Send(new Packet(WizOpcode.Regionchange).WriteUInt16(0));
-            Send(new Packet(WizOpcode.ReqNpcin).WriteUInt16(0));
+            SendWorldNpcs();
             Send(new Packet(WizOpcode.MerchantInout, (byte)1).WriteUInt16(0));
             Send(new Packet(WizOpcode.ZoneChange, (byte)2));
             _travelStage = 2;

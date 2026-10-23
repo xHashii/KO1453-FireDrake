@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using KnightOnline.Database;
 using KnightOnline.Database.Items;
+using KnightOnline.Database.World;
 using KnightOnline.GameServer;
 using KnightOnline.Shared;
 using KnightOnline.Shared.Diagnostics;
@@ -69,7 +70,17 @@ var port = settings.Port;
 if (args.Length > 0 && int.TryParse(args[0], out var parsedPort) && parsedPort is > 0 and < 65536)
     port = parsedPort;
 
-var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters));
+WorldCatalog world;
+try
+{
+    world = new WorldCatalog(await characters.LoadWorldDataAsync(), WorldCatalog.FindMapDirectory());
+}
+catch (Exception ex)
+{
+    KoLog.Error("World NPC/map loading failed. Fix the reported asset or data reference before starting.", ex);
+    return 1;
+}
+var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world));
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -80,8 +91,8 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 KoLog.Warn($"GameServer prototype on port {port}: version check, game login, nation select, the " +
-           "character list, creation/selection and the world-entry info dump (MYINFO) are implemented; " +
-           "deeper world systems are logged and not answered yet (docs/CSHARP_REWRITE_PLAN.md, M4/M5).");
+           "character list, creation/selection, static NPCs, shop browsing, anvil windows and native warp gates are implemented; " +
+           "shop/upgrade transactions, quests and combat/AI remain unported (docs/CSHARP_REWRITE_PLAN.md, M4/M5).");
 KoLog.Info("Milestone order: wire core -> LoginServer (done) -> data layer (done) -> login/char-select vertical slice.");
 
 try
@@ -169,10 +180,11 @@ internal sealed partial class GameSession : KoSession
     private readonly byte[] _stats = new byte[5];
     private short _points;
 
-    public GameSession(TcpClient client, MariaDbCharacterRepository characters)
+    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world)
         : base(client, maxPayloadSize: 8192)
     {
         _characters = characters;
+        _world = world;
         _socketId = unchecked((ushort)Interlocked.Increment(ref _lastSocketId));
     }
 
@@ -228,8 +240,27 @@ internal sealed partial class GameSession : KoSession
                     // rental handling is commented out in the original: no answer.
                     break;
                 case WizOpcode.Move:
-                    if (_inGame && packet.Length == 9 && (packet.Payload[6] != 0 || packet.Payload[7] != 0))
-                        _sitting = false;
+                    WorldMove(packet);
+                    break;
+                case WizOpcode.ObjectEvent:
+                    WorldObjectEvent(packet);
+                    break;
+                case WizOpcode.NpcEvent:
+                    WorldNpcEvent(packet);
+                    break;
+                case WizOpcode.ReqNpcin:
+                    WorldNpcRequest(packet);
+                    break;
+                case WizOpcode.ItemTrade:
+                    Send(new Packet(WizOpcode.ItemTrade).WriteByte(0).WriteByte(1));
+                    TravelMessage("Shop browsing is available. Purchases/sales are not implemented yet; no items or coins changed.");
+                    break;
+                case WizOpcode.ItemRepair:
+                    Send(new Packet(WizOpcode.ItemRepair).WriteByte(0).WriteUInt32((uint)_user.Gold));
+                    TravelMessage("Repair processing is not implemented yet; no coins or items changed.");
+                    break;
+                case WizOpcode.ItemUpgrade:
+                    RejectWorldUpgrade(packet);
                     break;
                 case WizOpcode.StateChange:
                     BasicStateChange(packet);
@@ -563,6 +594,7 @@ internal sealed partial class GameSession : KoSession
             SendNotice();
             SendTime();
             SendWeather();
+            SendWorldNpcs();
             Send(new Packet(WizOpcode.Gamestart));
         }
         else if (opcode == 2)
