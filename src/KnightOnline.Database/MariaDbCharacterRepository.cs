@@ -488,43 +488,45 @@ public sealed class MariaDbCharacterRepository
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        await using var command = connection.CreateCommand();
-        command.CommandText =
+        // Distinct names on purpose: C# forbids reusing 'command'/'reader' at
+        // method scope when enclosed blocks already used them (CS0136).
+        await using var select = connection.CreateCommand();
+        select.CommandText =
             "SELECT Nation, Race, Class, HairRGB, Level, Exp, Loyalty, Face, City, Knights, Fame, " +
             "Hp, Mp, Sp, Strong, Sta, Dex, Intel, Cha, Authority, Points, Gold, Zone, PX, PZ, PY " +
             "FROM USERDATA WHERE strUserID = @charId";
-        command.Parameters.AddWithValue("@charId", charId);
+        select.Parameters.AddWithValue("@charId", charId);
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        await using var row = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await row.ReadAsync(cancellationToken).ConfigureAwait(false))
             return null;
 
         return new UserData(
-            Convert.ToByte(reader.GetValue(0)),
-            Convert.ToByte(reader.GetValue(1)),
-            Convert.ToUInt16(reader.GetValue(2)),
-            Convert.ToByte(reader.GetValue(3)),
-            Convert.ToByte(reader.GetValue(4)),
-            Convert.ToInt32(reader.GetValue(5)),
-            Convert.ToInt32(reader.GetValue(6)),
-            Convert.ToByte(reader.GetValue(7)),
-            Convert.ToByte(reader.GetValue(8)),
-            Convert.ToInt16(reader.GetValue(9)),
-            Convert.ToByte(reader.GetValue(10)),
-            Convert.ToInt16(reader.GetValue(11)),
-            Convert.ToInt16(reader.GetValue(12)),
-            Convert.ToInt16(reader.GetValue(13)),
-            Convert.ToByte(reader.GetValue(14)),
-            Convert.ToByte(reader.GetValue(15)),
-            Convert.ToByte(reader.GetValue(16)),
-            Convert.ToByte(reader.GetValue(17)),
-            Convert.ToByte(reader.GetValue(18)),
-            Convert.ToByte(reader.GetValue(19)),
-            Convert.ToInt16(reader.GetValue(20)),
-            Convert.ToInt32(reader.GetValue(21)),
-            Convert.ToUInt16(reader.GetValue(22)),
-            Convert.ToUInt16(reader.GetValue(23)),
-            Convert.ToUInt16(reader.GetValue(24)),
-            Convert.ToUInt16(reader.GetValue(25)));
+            Convert.ToByte(row.GetValue(0)),
+            Convert.ToByte(row.GetValue(1)),
+            Convert.ToUInt16(row.GetValue(2)),
+            Convert.ToByte(row.GetValue(3)),
+            Convert.ToByte(row.GetValue(4)),
+            Convert.ToInt32(row.GetValue(5)),
+            Convert.ToInt32(row.GetValue(6)),
+            Convert.ToByte(row.GetValue(7)),
+            Convert.ToByte(row.GetValue(8)),
+            Convert.ToInt16(row.GetValue(9)),
+            Convert.ToByte(row.GetValue(10)),
+            Convert.ToInt16(row.GetValue(11)),
+            Convert.ToInt16(row.GetValue(12)),
+            Convert.ToInt16(row.GetValue(13)),
+            Convert.ToByte(row.GetValue(14)),
+            Convert.ToByte(row.GetValue(15)),
+            Convert.ToByte(row.GetValue(16)),
+            Convert.ToByte(row.GetValue(17)),
+            Convert.ToByte(row.GetValue(18)),
+            Convert.ToByte(row.GetValue(19)),
+            Convert.ToInt16(row.GetValue(20)),
+            Convert.ToInt32(row.GetValue(21)),
+            Convert.ToUInt16(row.GetValue(22)),
+            Convert.ToUInt16(row.GetValue(23)),
+            Convert.ToUInt16(row.GetValue(24)),
+            Convert.ToUInt16(row.GetValue(25)));
     }
 }
