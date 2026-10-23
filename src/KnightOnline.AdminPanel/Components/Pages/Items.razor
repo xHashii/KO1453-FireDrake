@@ -1,0 +1,92 @@
+@page "/items"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject ICharacterAdminRepository Repo
+
+<PageTitle>Items — KO 1453 Admin</PageTitle>
+
+<h1>Item browser</h1>
+<p class="muted">Read-only view over the <code>ITEM</code> table (editing game data comes with a later milestone).</p>
+
+<div class="search-row">
+    <input class="input" placeholder="Search by name or numeric item ID…" @bind="_term" @bind:event="oninput" @onkeydown="OnKeyDown" />
+    <button type="button" class="btn btn-primary" @onclick="Search">Search</button>
+</div>
+
+@if (_searching)
+{
+    <p class="muted">Searching…</p>
+}
+else if (_results is not null)
+{
+    @if (_results.Count == 0)
+    {
+        <p class="alert alert-warning">No items found. (If the game DB isn't converted yet, the ITEM table doesn't exist.)</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr><th>ID</th><th>Name</th><th>Kind</th><th>Slot</th><th>Req. level</th><th>Durability</th><th>Stackable</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var item in _results)
+                {
+                    <tr>
+                        <td>@item.Num</td>
+                        <td>@item.Name</td>
+                        <td>@item.Kind</td>
+                        <td>@item.Slot</td>
+                        <td>@item.ReqLevel</td>
+                        <td>@item.Duration</td>
+                        <td>@(item.Countable ? "yes" : "no")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <div class="pager">
+            <button type="button" class="btn" disabled="@(_page == 0)" @onclick="Prev">← Prev</button>
+            <span class="muted">page @(_page + 1)</span>
+            <button type="button" class="btn" disabled="@(_results.Count < PageSize)" @onclick="Next">Next →</button>
+        </div>
+    }
+}
+
+@code {
+    private const int PageSize = 50;
+
+    private string _term = "";
+    private List<ItemSearchResult>? _results;
+    private bool _searching;
+    private int _page;
+
+    protected override async Task OnInitializedAsync() => await Search();
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Search();
+    }
+
+    private async Task Search()
+    {
+        _page = 0;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _searching = true;
+        try
+        {
+            _results = (await Repo.SearchItemsAsync(_term, PageSize, _page * PageSize)).ToList();
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+
+    private async Task Next() { _page++; await Load(); }
+    private async Task Prev() { if (_page > 0) _page--; await Load(); }
+}

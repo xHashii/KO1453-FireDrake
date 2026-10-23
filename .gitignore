@@ -1,0 +1,38 @@
+# .NET
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# Server runtime output (C# and C++)
+Logs/
+*.log
+
+# Local configs - commit the *.sample.ini files only
+LogInServer.ini
+GameServer.ini
+AIServer.ini
+
+# Server runtime assets under data/ are committed on this branch
+# (owner decision 2026-10-23): do not ignore data/map, data/Quests, or
+# data/*.aievt / data/*.evt.
+
+# Legacy Visual C++ cruft (the copies already tracked stay tracked until the
+# C++ tree is moved under legacy/; this keeps new ones out)
+*.sdf
+*.opensdf
+*.VC.db
+ipch/
+Debug/
+Release/
+x64/
+
+# Python (tools/)
+__pycache__/
+
+# Raw database transfer payload (dump zip / parts) must NEVER be committed
+# to this branch - send_dump.ps1 pushes it to the throwaway db-drop branch
+# with git add -f, and the agent converts it without merging it here.
+/db-drop/

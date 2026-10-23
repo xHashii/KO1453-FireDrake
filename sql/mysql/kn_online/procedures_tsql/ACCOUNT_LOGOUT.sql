@@ -1,0 +1,5 @@
+CREATE PROCEDURE [dbo].[ACCOUNT_LOGOUT]
+@strAccountID varchar(21)
+AS
+
+DELETE FROM CURRENTUSER WHERE strAccountID = @strAccountID

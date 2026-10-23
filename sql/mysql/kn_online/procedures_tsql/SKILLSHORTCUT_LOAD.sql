@@ -1,0 +1,4 @@
+CREATE PROCEDURE [dbo].[SKILLSHORTCUT_LOAD]
+@strCharID varchar(21)
+AS
+SELECT nCount, strSkillData FROM dbo.USERDATA_SKILLSHORTCUT WHERE  strCharID = @strCharID

@@ -1,0 +1,42 @@
+CREATE PROCEDURE [dbo].[LOAD_ACCOUNT_CHARID]
+@AccountID 	char(21)
+AS
+/*
+Author : AKUMA
+Update : 01.07.2009 - 14:49
+*/
+DECLARE @CharID1 char(21)
+DECLARE @CharID2 char(21)
+DECLARE @CharID3 char(21)
+
+SELECT @CharID1 = strCharID1, @CharID2 = strCharID2, @CharID3 = strCharID3 FROM ACCOUNT_CHAR WHERE strAccountID = @AccountID
+	
+IF @CharID1 IS NOT NULL
+BEGIN
+	EXEC CHECK_USER_JOB_CHANGE_QUEUE @CharID1
+END
+
+IF @CharID2 IS NOT NULL
+BEGIN
+	EXEC CHECK_USER_JOB_CHANGE_QUEUE @CharID2
+END
+	
+IF @CharID3 IS NOT NULL
+BEGIN
+	EXEC CHECK_USER_JOB_CHANGE_QUEUE @CharID3
+END
+
+UPDATE USERDATA SET Nation = 1 WHERE Race < 11 AND Nation = 0 AND strUserId = @CharID1
+UPDATE USERDATA SET Nation = 2 WHERE Race >= 11 AND Nation = 0 AND strUserId = @CharID1
+UPDATE USERDATA SET Level = 83 WHERE Level < 82 AND strUserId = @CharID1
+
+UPDATE USERDATA SET Nation = 1 WHERE Race < 11 AND Nation = 0 AND strUserId = @CharID2
+UPDATE USERDATA SET Nation = 2 WHERE Race >= 11 AND Nation = 0 AND strUserId = @CharID2
+UPDATE USERDATA SET Level = 83 WHERE Level < 82 AND strUserId = @CharID2
+
+UPDATE USERDATA SET Nation = 1 WHERE Race < 11 AND Nation = 0 AND strUserId = @CharID3
+UPDATE USERDATA SET Nation = 2 WHERE Race >= 11 AND Nation = 0 AND strUserId = @CharID3
+UPDATE USERDATA SET Level = 83 WHERE Level < 82 AND strUserId = @CharID3
+
+SELECT strCharID1, strCharID2, strCharID3, strCharID4, strCharID5  FROM ACCOUNT_CHAR WHERE strAccountID = @AccountID
+RETURN @@ROWCOUNT

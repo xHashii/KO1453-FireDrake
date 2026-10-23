@@ -1,0 +1,488 @@
+{
+  "database": "KN_Online",
+  "source": "1453db.sql",
+  "input_encoding": "utf-16",
+  "schema_file": "0001_schema.sql",
+  "data_files": [
+    "0002_data.sql",
+    "0003_data.sql"
+  ],
+  "statements_converted": 140876,
+  "statements_skipped": 7919,
+  "statement_errors": 0,
+  "tables_with_rows": {
+    "BATTLE": 1,
+    "BEGINNER_ITEM": 4,
+    "BEGINNER_ITEM2": 4,
+    "COEFFICIENT": 24,
+    "CONCURRENT": 1,
+    "EVENT": 32,
+    "EVENT_TRIGGER": 100,
+    "HOME": 2,
+    "ITEM": 102884,
+    "ITEMUP_PROBABILITY": 1,
+    "ITEM_EXCHANGE": 974,
+    "ITEM_GROUP": 7,
+    "ITEM_OP": 1190,
+    "ITEM_UPGRADE": 8421,
+    "KING_SYSTEM": 2,
+    "K_MONSTER": 790,
+    "K_MONSTER_ITEM": 756,
+    "K_NPC": 511,
+    "K_NPCPOS": 2600,
+    "K_OBJECTEVENT": 64,
+    "K_OBJECTPOS": 199,
+    "K_WARPINFO": 89,
+    "LEVEL_UP": 80,
+    "MAGIC": 1837,
+    "MAGIC_TYPE1": 203,
+    "MAGIC_TYPE2": 77,
+    "MAGIC_TYPE3": 707,
+    "MAGIC_TYPE4": 648,
+    "MAGIC_TYPE5": 38,
+    "MAGIC_TYPE6": 183,
+    "MAGIC_TYPE7": 18,
+    "MAGIC_TYPE8": 32,
+    "MAGIC_TYPE9": 35,
+    "MAKE_DEFENSIVE": 20,
+    "MAKE_ITEM": 10000,
+    "MAKE_ITEM_GRADECODE": 9,
+    "MAKE_ITEM_GROUP": 69,
+    "MAKE_ITEM_LARECODE": 25,
+    "MAKE_WEAPON": 20,
+    "MONSTER_CHALLENGE": 3,
+    "MONSTER_CHALLENGE_SUMMON_LIST": 224,
+    "MONSTER_RESPAWN_LIST": 7,
+    "MONSTER_RESPAWN_LIST_INFORMATION": 19,
+    "MONSTER_SUMMON_LIST": 72,
+    "MONSTER_SUMMON_LIST_ZONE": 42,
+    "PREMIUM_ITEM": 11,
+    "PREMIUM_ITEM_EXP": 16,
+    "PUS_ITEMLERI": 32,
+    "QUEST_HELPER": 3461,
+    "QUEST_MENU": 278,
+    "QUEST_MONSTER": 150,
+    "QUEST_TALK": 2803,
+    "SERVERS": 1,
+    "SERVER_RESOURCE": 138,
+    "SET_ITEM": 541,
+    "SN_NEWS": 5,
+    "SN_NEWS_MAIN": 1,
+    "START_POSITION": 36,
+    "START_POSITION_RANDOM": 16,
+    "S_ITEM": 4,
+    "VERSION": 4,
+    "ZONE_INFO": 31,
+    "_DOWNLOADS": 3,
+    "_Haber": 1,
+    "_Link": 3
+  },
+  "excluded_tables_rows_skipped": {
+    "ACCOUNT_CHAR": 378,
+    "CURRENTUSER": 3,
+    "FRIEND_LIST": 27,
+    "KNIGHTS": 56,
+    "KNIGHTS_CAPE": 56,
+    "KNIGHTS_RATING": 56,
+    "KNIGHTS_USER": 144,
+    "MAIL_BOX": 348,
+    "SEALED_ITEMS": 21,
+    "TB_USER": 426,
+    "USERDATA": 418,
+    "USERDATA_SKILLSHORTCUT": 299,
+    "USER_DAILY_OP": 33,
+    "USER_KNIGHTS_RANK": 100,
+    "USER_PERSONAL_RANK": 200,
+    "USER_SAVED_MAGIC": 408,
+    "WAREHOUSE": 378,
+    "WEB_ITEMMALL": 11,
+    "WEB_ITEMMALL_LOG": 3894
+  },
+  "routines_extracted": [
+    {
+      "type": "FUNCTION",
+      "name": "GET_ACCOUNT_NAME",
+      "signature": ""
+    },
+    {
+      "type": "FUNCTION",
+      "name": "GET_RACE_FOR_ACCOUNT_NATION_TRANSFER",
+      "signature": ""
+    },
+    {
+      "type": "FUNCTION",
+      "name": "HashPasswordString",
+      "signature": "(@inputPassword varchar(50)) RETURNS varchar(50)"
+    },
+    {
+      "type": "FUNCTION",
+      "name": "IsValidCharacters",
+      "signature": "varchar(8000)) RETURNS INT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "ACCOUNT_LOGIN",
+      "signature": "@strAccountID varchar(21), @strPasswd varchar(28)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "ACCOUNT_LOGOUT",
+      "signature": "@strAccountID varchar(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "ACCOUNT_PREMIUM",
+      "signature": "@strAccountID char(20)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "ADD_KESN_CODES",
+      "signature": "@Owner int, @KCID int, @KESNCodeCount int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "ADD_KNIGHT_CASH",
+      "signature": "@AccountID varchar(30), @Knight_Cash int, @OID int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "CHANGE_HAIR",
+      "signature": "@strAccountID varchar(21), @strCharID varchar(21), @bType tinyint, @bFace tinyint, @nHair int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "CHANGE_NEW_ID",
+      "signature": "@byType char(21), @AccountID char(21), @OldCharID char(21), @NewCharID char(21), @nRet smallint output"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "CLEAR_REMAIN_USERS",
+      "signature": "@strServerIP varchar(50)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "CREATE_INSERT_SCRIPT",
+      "signature": "@Table varchar(50)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "CREATE_KNIGHTS",
+      "signature": "@sClanID smallint, @bNation tinyint, @bFlag tinyint, @strKnightsName char(21), @strChief char(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "CREATE_NEW_CHAR",
+      "signature": "@strAccountID varchar(21), @index tinyint, @strCharID varchar(21), @bRace tinyint, @sClass smallint, @nHair int, @bFace tinyint, @bStr tinyint, @bSta tinyint, @bDex tinyint, @bIntel tinyint, @bCha tinyint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "DELETE_ACCOUNT",
+      "signature": "@AccountID char(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "DELETE_FRIEND_LIST",
+      "signature": "@strUserID char(21), @strFriend char(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "DELETE_KNIGHTS",
+      "signature": "@sClanID smallint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "DELETE_USER",
+      "signature": "@strUserId char(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "DONATE_CLAN_POINTS",
+      "signature": "@strUserID char(21), @sClanID smallint, @nNationalPoints int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "EDIT_QUEST",
+      "signature": "( @strUserId varchar(21), @sQuestId smallint, @bQuestStatus tinyint )"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "EDIT_SKILLS",
+      "signature": "( @strUserId varchar(21), @newFree tinyint = null, @newCat1 tinyint = null, @newCat2 tinyint = null, @newCat3 tinyint = null, @newMasters tinyint = null )"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "GAME_LOGIN",
+      "signature": "@strAccountID varchar(21), @strPasswd varchar(28)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "INSERT_FRIEND_LIST",
+      "signature": "@strUserID char(21), @strFriend char(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "INSERT_UPGRADE",
+      "signature": "@itemname varchar(50), -- NAME OF ITEM TO UPGRADE @index int, -- RANDOMNUMBER"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "INSERT_USER_DAILY_OP",
+      "signature": "@strCharID char(21), @iChaosMapTime int, @iUserRankRewardTime int, @iPersonalRankRewardTime int, @iKingWingTime int, @iWarderKillerTime1 int, @iWarderKillerTime2 int, @iKeeperKillerTime int, @iUserLoyaltyWingRewardTime int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "LOAD_ACCOUNT_CHARID",
+      "signature": "@AccountID char(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "LOAD_CHAR_INFO",
+      "signature": "@CharId varchar(21), @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "LOAD_KNIGHTS_MEMBERS",
+      "signature": "@knightsindex smallint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "LOAD_PET_DATA",
+      "signature": "@id char(21), @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "LOAD_PREMIUM_SERVICE_USER123",
+      "signature": "@strAccountID char(20), @bType tinyint OUTPUT, @sTime smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "LOAD_RENTAL_DATA",
+      "signature": "@strAccountID char(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "LOAD_SAVED_MAGIC",
+      "signature": "@strUserId char(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "LOAD_SEALED_ITEM_DATA",
+      "signature": "@strAccountID char(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "LOAD_USER_DATA",
+      "signature": "@strAccountID varchar(21), @strCharID varchar(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "LOAD_WEB_ITEMMALL",
+      "signature": "@strCharID char(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIL_BOX_CHECK_COUNT",
+      "signature": "@strRecipientID char(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIL_BOX_DELETE_LETTER",
+      "signature": "@strRecipientID varchar(21), @nLetterID int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIL_BOX_GET_ITEM",
+      "signature": "@strRecipientID char(21), @nLetterID int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIL_BOX_READ",
+      "signature": "@strRecipientID char(21), @nLetterID int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIL_BOX_REQUEST_LIST",
+      "signature": "@strRecipientID char(21), @bNewLettersOnly tinyint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIL_BOX_SEND",
+      "signature": "@strSenderID char(21), @strRecipientID char(21), @strSubject char(31), @strMessage char(128), @bType tinyint, @nItemID int, @sCount smallint, @sDurability smallint, @nSerialNum bigint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIL_CHECK_NEWLETTER",
+      "signature": "@strUserId varchar(21), @Status tinyint, @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIL_CHECK_USER",
+      "signature": "@strUserID varchar(21), @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIL_DELETE_OLDLETTER",
+      "signature": "@strUserId varchar(21), @ID int, @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIL_OPEN_NEWLETTER",
+      "signature": "@strUserId varchar(21), @ID int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIL_TAKE_LETTERITEM",
+      "signature": "@strUserId char(21), @ID int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "MAIN_LOGIN",
+      "signature": "@AccountID varchar(21), @Password varchar(32), @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "NATION_SELECT",
+      "signature": "@strAccountID varchar(21), @bNation tinyint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "PRE_VER",
+      "signature": "@strUserId varchar(30)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "RENTAL_ITEM_CANCEL",
+      "signature": "@AccountID char(21), @CharID char(21), @nRentalIndex int, @nItemNumber int, @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "RENTAL_ITEM_DESTORY",
+      "signature": "@AccountID char(21), @CharID char(21), @nItemNumber int, @nRentalIndex int, @nDurability smallint, @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "RENTAL_ITEM_DURABILITY_UPDATE",
+      "signature": "@nRentalIndex int, @nDurability int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "RENTAL_ITEM_LEND",
+      "signature": "@AccountID char(21), -- \ub300\uc5ec\uc790 \uacc4\uc815 @CharID char(21), -- \ub300\uc5ec\uc790 \uce90\ub9ad \uc544\uc774\ub514 @nRentalIndex int, @nItemNumber int, @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "RENTAL_ITEM_REGISTER",
+      "signature": "@charID char(21), @AccountID char(21), @sRentalTime smallint, @nItemID int, @sDurability smallint, @nMoney int, @bGameBangType tinyint, @bItemType tinyint, @bItemClass tinyint, @nSerialNumber bigint, @nRet_Index int OUTPUT, @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "RESET_LOYALTY_MONTHLY",
+      "signature": ""
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "SAVE_PREMIUM_SERVICE_USER",
+      "signature": "@strAccountID char(20), @strCharID char(20), @bType tinyint, @sTime smallint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "SET_LOGIN_INFO",
+      "signature": "@strAccountID varchar(20), @strCharID varchar(20), @nServerno smallint, @strServerIP varchar(50), @strClientIP varchar(50), @bInit tinyint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "SHOPPINGMALL_BUY",
+      "signature": "@nRet smallint OUTPUT, @strCharID char(21), @strAccountID char(21), @nItemID int, @sCount smallint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "SKILLSHORTCUT_LOAD",
+      "signature": "@strCharID varchar(21)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "SKILLSHORTCUT_SAVE",
+      "signature": "@strCharID varchar(21), @nCount smallint, @strSkillData varchar(260)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_KNIGHTS",
+      "signature": "@bType tinyint, @strCharID char(21), @sClanID smallint, @bDomination tinyint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_KNIGHTS_ALLIANCE",
+      "signature": "@byType tinyint, @shAlliancIndex smallint, @shKnightsIndex smallint, @byEmptyIndex tinyint, @bySiegeFlag tinyint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_KNIGHTS_CAPE",
+      "signature": "@KnightsIndex smallint, @sCapeC smallint, @sCapeR smallint, @sCapeG smallint, @sCapeB smallint, @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_KNIGHTS_MARK",
+      "signature": "@IDNum smallint, @MarkVersion smallint, @MarkLen smallint, @KnightMark varbinary(2400), @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_KNIGHTS_RATING",
+      "signature": ""
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_RANKS",
+      "signature": ""
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_SAVED_MAGIC",
+      "signature": "@strCharID varchar(21), @Skill1 int, @During1 smallint, @Skill2 int, @During2 smallint, @Skill3 int, @During3 smallint, @Skill4 int, @During4 smallint, @Skill5 int, @During5 smallint, @Skill6 int, @During6 smallint, @Skill7 int, @During7 smallint, @Skill8 int, @During8 smallint, @Skill9 int, @During9 smallint, @Skill10 int, @During10 smallint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_USER_DAILY_OP",
+      "signature": "@strCharID char(21), @bType tinyint, @iUnixTime int"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_USER_DATA",
+      "signature": "@strCharID char(21), @bNation tinyint, @bRace tinyint, @sClass smallint, @nHair int, @bRank tinyint, @bTitle tinyint, @bLevel tinyint, @iExp bigint, @nLoyalty int, @bFace tinyint, @bCity tinyint, @sClanID smallint, @bFame tinyint, @sHp smallint, @sMp smallint, @sSp smallint, @bStr tinyint, @bSta tinyint, @bDex tinyint, @bIntel tinyint, @bCha tinyint, @bAuthority tinyint, @sPoints smallint, @nCoins"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_USER_KNIGHTS_RANK",
+      "signature": ""
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_USER_PERSONAL_RANK",
+      "signature": ""
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_USER_STYLE",
+      "signature": "@strUserId char(21), @Face tinyint, @HairR smallint, @HairG smallint, @HairB smallint, @HairColor tinyint, @nRet smallint OUTPUT"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "UPDATE_WAREHOUSE",
+      "signature": "@accountid varchar(21), @Money int, @dwTime int, @strItem binary(1536), @strSerial binary(1536)"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "USER_ITEM_SEAL",
+      "signature": "@strAccountID char(21), @strCharID char(21), @strPasswd char(8), @nItemSerial bigint, @nItemID int, @bSealType tinyint"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "VIEW_QUESTS",
+      "signature": "( @strUserId varchar(21) )"
+    },
+    {
+      "type": "PROCEDURE",
+      "name": "VIEW_SKILLS",
+      "signature": "( @strUserId varchar(21) )"
+    }
+  ]
+}

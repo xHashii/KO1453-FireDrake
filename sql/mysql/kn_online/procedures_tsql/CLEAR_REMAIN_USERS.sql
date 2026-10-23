@@ -1,0 +1,5 @@
+CREATE PROCEDURE [dbo].[CLEAR_REMAIN_USERS]
+@strServerIP varchar(50)
+AS
+
+DELETE FROM CURRENTUSER WHERE strServerIP = @strServerIP

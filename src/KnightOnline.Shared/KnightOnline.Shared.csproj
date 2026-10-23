@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>KnightOnline.Shared</RootNamespace>
+    <!--
+      The wire protocol ports (JvCryption, LZF) intentionally rely on unchecked
+      integer wraparound, exactly like the original C code.
+    -->
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+  </PropertyGroup>
+
+  <!-- No external packages: the protocol core is 100% BCL on purpose. -->
+
+</Project>

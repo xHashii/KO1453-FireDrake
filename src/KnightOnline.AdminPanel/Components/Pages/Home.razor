@@ -1,0 +1,67 @@
+@page "/"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject ICharacterAdminRepository Repo
+
+<PageTitle>Dashboard — KO 1453 Admin</PageTitle>
+
+<h1>Dashboard</h1>
+
+@if (_stats is null)
+{
+    <p class="muted">Loading server status…</p>
+}
+else
+{
+    @if (_stats.Error is not null)
+    {
+        <p class="alert alert-danger">⚠️ @_stats.Error<br />
+            <span class="small">Is MariaDB running (<code>docker compose up -d</code>) and do the
+            connection strings in <code>appsettings.json</code> match?</span></p>
+    }
+
+    <div class="stat-grid">
+        <div class="stat-card">
+            <div class="stat-value">@_stats.Accounts</div>
+            <div class="stat-label">Accounts @(Status(_stats.AccountDbOk))</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@_stats.Characters</div>
+            <div class="stat-label">Characters @(Status(_stats.GameDbOk))</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@_stats.Online</div>
+            <div class="stat-label">Online now</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">@_stats.ItemDefinitions</div>
+            <div class="stat-label">Item definitions</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Quick actions</h3>
+        <p>
+            <a class="btn btn-primary" href="characters">Search characters</a>
+            <a class="btn" href="items">Browse items</a>
+            <button type="button" class="btn btn-ghost" @onclick="Reload">↻ Refresh</button>
+        </p>
+        <p class="muted small">
+            Databases are created/migrated automatically on startup (see <code>docs/DATABASE.md</code>).
+            Character edits are refused while the character is online, and every save keeps a restorable backup.
+        </p>
+    </div>
+}
+
+@code {
+    private AdminStats? _stats;
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        _stats = await Repo.GetStatsAsync();
+    }
+
+    private static string Status(bool ok) => ok ? "" : "(DB offline)";
+}

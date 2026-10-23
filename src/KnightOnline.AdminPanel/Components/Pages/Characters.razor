@@ -1,0 +1,76 @@
+@page "/characters"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject ICharacterAdminRepository Repo
+@inject NavigationManager Navigation
+
+<PageTitle>Characters — KO 1453 Admin</PageTitle>
+
+<h1>Characters</h1>
+
+<div class="search-row">
+    <input class="input" placeholder="Character name (partial ok)…" @bind="_term" @bind:event="oninput" @onkeydown="OnKeyDown" />
+    <button type="button" class="btn btn-primary" @onclick="Search">Search</button>
+</div>
+
+@if (_searching)
+{
+    <p class="muted">Searching…</p>
+}
+else if (_results is null)
+{
+    <p class="muted">Search for a character to open the editor. Empty search lists the first 100 characters.</p>
+}
+else if (_results.Count == 0)
+{
+    <p class="alert alert-warning">No characters matched. (An empty <code>USERDATA</code> table also looks like this.)</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr><th>Name</th><th>Account</th><th>Nation</th><th>Class</th><th>Level</th><th>Clan</th><th>Zone</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var c in _results)
+            {
+                <tr class="@(c.IsOnline ? "row-online" : "")">
+                    <td><a href="characters/@Uri.EscapeDataString(c.Name)">@c.Name</a></td>
+                    <td>@(c.AccountId ?? "—")</td>
+                    <td><span class="badge badge-nation-@c.Nation">@CharacterClasses.NationName(c.Nation)</span></td>
+                    <td>@CharacterClasses.ClassName(c.ClassId)</td>
+                    <td>@c.Level</td>
+                    <td>@(c.KnightsId == 0 ? "—" : c.KnightsId.ToString())</td>
+                    <td>@c.Zone</td>
+                    <td>@(c.IsOnline ? "🟢 online" : "⚫ offline")</td>
+                    <td><button type="button" class="btn btn-sm" @onclick="@(() => Navigation.NavigateTo($"characters/{Uri.EscapeDataString(c.Name)}"))">Edit</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private string _term = "";
+    private List<CharacterSummary>? _results;
+    private bool _searching;
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Search();
+    }
+
+    private async Task Search()
+    {
+        _searching = true;
+        try
+        {
+            _results = (await Repo.SearchCharactersAsync(_term)).ToList();
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+}

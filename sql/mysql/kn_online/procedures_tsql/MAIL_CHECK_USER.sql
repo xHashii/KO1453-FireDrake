@@ -1,0 +1,7 @@
+CREATE PROCEDURE [dbo].[MAIL_CHECK_USER]
+@strUserID	varchar(21),
+@nRet		smallint	OUTPUT
+AS
+/* NERO 24.06.2012 */
+SELECT @nRet=COUNT(strUserID) FROM USERDATA WHERE strUserID = @strUserID
+RETURN

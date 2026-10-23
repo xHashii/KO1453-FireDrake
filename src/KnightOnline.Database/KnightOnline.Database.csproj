@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>KnightOnline.Database</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MySqlConnector is the actively maintained ADO.NET driver for MariaDB/MySQL. -->
+    <PackageReference Include="MySqlConnector" Version="2.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KnightOnline.Shared\KnightOnline.Shared.csproj" />
+  </ItemGroup>
+
+</Project>
