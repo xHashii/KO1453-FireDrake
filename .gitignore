@@ -30,3 +30,8 @@ x64/
 
 # Python (tools/)
 __pycache__/
+
+# Raw database transfer payload (dump zip / parts) must NEVER be committed
+# to this branch - send_dump.ps1 pushes it to the throwaway db-drop branch
+# with git add -f, and the agent converts it without merging it here.
+/db-drop/
