@@ -573,10 +573,9 @@ internal sealed partial class GameSession : KoSession
     /// <summary>
     /// Port of CUser::GameStart (CharacterSelectionHandler.cpp). Opcode 1 is
     /// the loading-screen pull: quest data, the full self-info dump, notices,
-    /// time, weather and an empty WIZ_GAMESTART ack. The UserInOutForMe /
-    /// MerchantUserInOutForMe / NpcInOutForMe pushes (the region system:
-    /// nearby players, merchants and the NPC spawn tables) are the next
-    /// increment - until then the world renders empty. Opcode 2 flips the
+    /// time, weather, static nearby NPC records and an empty WIZ_GAMESTART ack.
+    /// Multiplayer player/merchant regions and monster AI remain unported.
+    /// Opcode 2 flips the
     /// session in game (respawn, blink, ability recalc and temple checks come
     /// with combat). The character name after the opcode is single-byte
     /// length; the original does not read it, and neither does the port.

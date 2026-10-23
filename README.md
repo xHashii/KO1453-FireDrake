@@ -138,11 +138,11 @@ Ronark Land (71) requires level 60+. Enemy homelands/Eslant and event/war
 zones are not exposed. These are **free prototype exploration routes**, not
 a port of official warp fees, PvP/event entry rules or map warp IDs.
 The travel list uses server-offered synthetic IDs and never accepts client
-coordinates. Native NPC/map gate interactions still require the SMD object/
-warp loader and NPC system; use `/teleport` or `/zone` to travel for now.
+coordinates. Native map gate interactions are now supported by the static-world loader
+described below; `/teleport` remains a free exploration alternative.
 
 Cross-zone travel implements the original 3 -> client 1 -> server 2 -> client 2
-handshake, with empty region snapshots (NPCs/other players are still unported).
+handshake, with static NPC snapshots (other players remain unported).
 Zone/position changes are saved transactionally before the reply is sent.
 Walking positions are not saved by this travel slice.
 

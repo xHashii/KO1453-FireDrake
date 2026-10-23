@@ -19,9 +19,10 @@ data/
 
 Notes:
 
-- Nothing in the C# servers reads these yet — they're inputs for the
-  GameServer milestones (zone loading, heights/collision, warps, spawns)
-  and the Lua quest engine.
+- The C# GameServer now reads `data/map/*.smd` for static NPC terrain
+  heights and native gate destinations; map objects and NPC spawn locations
+  come from the configured database. It copies maps into build/publish output.
+  Lua quest execution, monster AI/pathfinding and event scripts remain unported.
 - These assets are **committed directly on
   `arena/a8daa4cb-ko1453-firedrake`** (owner decision 2026-10-23). After
   dropping files in, run `git status`, then `git add data`, commit, and
