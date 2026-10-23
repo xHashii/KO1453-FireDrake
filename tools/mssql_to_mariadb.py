@@ -192,7 +192,22 @@ def convert_alter(sql: str) -> str | None:
     if "CHECK CONSTRAINT" in upper or "NOCHECK" in upper:
         return None  # enable/disable constraint toggles: no-op for import
     if "DEFAULT" in upper:
-        return None  # defaults are handled inline; standalone DF constraints skipped
+        # Standalone DF constraint - how SSMS scripts nearly all defaults:
+        #   ALTER TABLE `T` ADD CONSTRAINT `DF_..` DEFAULT (<expr>) FOR `col`
+        #   ALTER TABLE `T` ADD DEFAULT (<expr>) FOR `col`
+        # -> ALTER TABLE `T` ALTER COLUMN `col` SET DEFAULT <expr>;
+        # These used to be dropped, losing ALL 122 defaults of the real
+        # KN_Online dump; NOT NULL columns then break runtime INSERTs
+        # (ACCOUNT_LOGIN auto-register, MAIL_BOX_SEND, ...) under MariaDB
+        # strict mode.
+        m = re.search(r"(?is)ALTER\s+TABLE\s+(`[^`]+`)\s+ADD\s+(?:CONSTRAINT\s+`[^`]+`\s+)?"
+                      r"DEFAULT\s+(.+?)\s+FOR\s+(`[^`]+`)\s*$",
+                      sql_bt.rstrip("; \t\r\n"))
+        if not m:
+            return None
+        expr = fix_defaults("DEFAULT " + m.group(2).strip())[len("DEFAULT "):]
+        expr = expr.replace("(CURRENT_TIMESTAMP)", "CURRENT_TIMESTAMP")
+        return f"ALTER TABLE {m.group(1)} ALTER COLUMN {m.group(3)} SET DEFAULT {expr};"
     return strip_table_options(sql_bt).rstrip(";") + ";"
 
 
@@ -288,6 +303,76 @@ def split_semicolons(batch: str):
     return stmts
 
 
+# A new statement also starts at a line beginning with one of these keywords:
+# SSMS "Generate Scripts" emits consecutive INSERT lines with NO semicolons
+# between them, and wraps identity-table data in SET IDENTITY_INSERT ON/OFF
+# inside a single GO batch. Semicolon-only splitting therefore glued whole
+# tables into one invalid statement (and dropped identity-table batches,
+# which start with SET). Routine batches never reach this splitter - they
+# are intercepted whole in main() before any splitting happens.
+_DML_LINE_RE = re.compile(
+    r"^\s*(?:INSERT|UPDATE|DELETE|MERGE)\b"
+    r"|^\s*SET\s+(?:IDENTITY_INSERT|ANSI_NULLS|ANSI_PADDING|ANSI_WARNINGS|"
+    r"QUOTED_IDENTIFIER|ARITHABORT|CONCAT_NULL_YIELDS_NULL|NUMERIC_ROUNDABORT|"
+    r"NOCOUNT|XACT_ABORT|TEXTSIZE|DATEFORMAT|LANGUAGE|LOCK_TIMEOUT)\b",
+    re.IGNORECASE)
+
+
+def _scan_line_state(line: str, in_str: bool, in_block: bool):
+    """Track string/block-comment state across one line (for the splitter)."""
+    i = 0
+    while i < len(line):
+        ch, nxt = line[i], line[i + 1:i + 2]
+        if in_block:
+            if ch == "*" and nxt == "/":
+                in_block = False
+                i += 2
+                continue
+        elif in_str:
+            if ch == "'":
+                if nxt == "'":
+                    i += 2
+                    continue
+                in_str = False
+        else:
+            if ch == "'":
+                in_str = True
+            elif ch == "-" and nxt == "-":
+                break
+            elif ch == "/" and nxt == "*":
+                in_block = True
+                i += 2
+                continue
+        i += 1
+    return in_str, in_block
+
+
+def split_dml_lines(piece: str):
+    """Split a semicolon-free piece on line-start DML/session keywords."""
+    stmts, buf, buf_has_text = [], [], False
+    in_str = in_block = False
+    for line in piece.splitlines(keepends=True):
+        if (not in_str and not in_block and buf_has_text
+                and _DML_LINE_RE.match(line)):
+            stmts.append("".join(buf))
+            buf, buf_has_text = [], False
+        buf.append(line)
+        if line.strip():
+            buf_has_text = True
+        in_str, in_block = _scan_line_state(line, in_str, in_block)
+    if buf_has_text:
+        stmts.append("".join(buf))
+    return stmts
+
+
+def split_statements(batch: str):
+    """Full splitter for non-routine batches: semicolons + DML line starts."""
+    out = []
+    for piece in split_semicolons(batch):
+        out.extend(split_dml_lines(piece))
+    return out
+
+
 def leading_keyword(stmt: str) -> str:
     s = stmt.strip()
     while True:
@@ -325,6 +410,17 @@ USER_DATA_TABLES = {
     "USERDATA_SKILLSHORTCUT", "MAIL_BOX", "SEALED_ITEMS", "RENTAL_ITEM",
     "WEB_ITEMMALL", "USER_DAILY_OP", "USER_KNIGHTS_RANK", "USER_PERSONAL_RANK",
     "KNIGHTS_USER", "FRIEND_LIST", "REMOVED_USERDATA",
+    # Added after seeing the real KN_Online schema (1453db.sql): character
+    # state, purchase/payment logs, and Turkish web-panel user tables
+    # (_SIFRE_DEGISTIR holds password-reset e-mails/hashes!).
+    "USER_SAVED_MAGIC", "USER_ITEMS", "USER_RENTAL_ITEM", "RENTAL_ITEM_LIST",
+    "WEB_ITEMMALL_LOG", "PUS_PAYPAL_LOG", "KING_BALLOT_BOX",
+    "KING_ELECTION_LIST", "_ANKET_OYLAYANLAR", "_IP_ENGELLILER", "_MAIL",
+    "_SIFRE_DEGISTIR", "_SIKAYET", "_TICKET", "_TICKET_CEVAP",
+    # Clan world-state: with USERDATA/KNIGHTS_USER excluded these rows are
+    # orphaned player clans; a fresh server regenerates them via gameplay.
+    "KNIGHTS", "KNIGHTS_CAPE", "KNIGHTS_RATING", "KNIGHTS_ALLIANCE",
+    "KNIGHTS_SIEGE_WARFARE", "MAIL_ITEM", "QUEST_LOG",
 }
 
 
@@ -395,7 +491,7 @@ def main() -> int:
                 routines.append({"type": kind, "name": name, "signature": routine_signature(batch)})
                 continue
 
-            for stmt in split_semicolons(batch):
+            for stmt in split_statements(batch):
                 text = stmt.strip()
                 if not text:
                     continue
