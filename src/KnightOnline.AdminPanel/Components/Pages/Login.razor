@@ -1,0 +1,34 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@layout Layout.LoginLayout
+
+<PageTitle>Sign in — KO 1453 Admin</PageTitle>
+
+<div class="login-card">
+    <div class="login-brand">⚔️ KO 1453 <span>Admin Panel</span></div>
+
+    @if (Error)
+    {
+        <p class="alert alert-danger">Invalid username or password.</p>
+    }
+
+    <form method="post" action="/auth/login">
+        <label>Username
+            <input class="input" name="username" autocomplete="username" required />
+        </label>
+        <label>Password
+            <input class="input" name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+    </form>
+
+    <p class="muted small">Default credentials live in <code>appsettings.json</code> (<code>Admin:Username</code> /
+    <code>Admin:Password</code>) or the <code>KO_ADMIN_PASSWORD</code> environment variable. Change them.</p>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")]
+    public int? ErrorParam { get; set; }
+
+    private bool Error => ErrorParam is 1;
+}

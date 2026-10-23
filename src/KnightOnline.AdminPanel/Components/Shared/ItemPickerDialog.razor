@@ -1,0 +1,142 @@
+@inject ICharacterAdminRepository Repo
+
+@if (Visible)
+{
+    <div class="dialog-backdrop" @onclick="Close">
+        <div class="dialog" @onclick:stopPropagation="true">
+            <div class="dialog-header">
+                <h3>Add item</h3>
+                <button type="button" class="btn btn-ghost" @onclick="Close">✕</button>
+            </div>
+
+            <div class="dialog-body">
+                <div class="search-row">
+                    <input class="input" placeholder="Search by name or numeric item ID…"
+                           @bind="_term" @bind:event="oninput" @onkeydown="OnKeyDown" />
+                    <button type="button" class="btn btn-primary" @onclick="Search">Search</button>
+                </div>
+
+                @if (_searching)
+                {
+                    <p class="muted">Searching…</p>
+                }
+                else if (_results is not null)
+                {
+                    @if (_results.Count == 0)
+                    {
+                        <p class="muted">No matches. (If the ITEM table isn't converted yet, use the manual form below.)</p>
+                    }
+                    else
+                    {
+                        <div class="picker-results">
+                            @foreach (var item in _results)
+                            {
+                                <button type="button" class="picker-row" @onclick="() => Pick(item)">
+                                    <span class="picker-name">@item.Name</span>
+                                    <span class="picker-meta">@item.Num · req @item.ReqLevel · @(item.Countable ? "stackable" : "single")</span>
+                                </button>
+                            }
+                        </div>
+                        <div class="pager">
+                            <button type="button" class="btn" disabled="@(_page == 0)" @onclick="PrevPage">← Prev</button>
+                            <span class="muted">page @(_page + 1)</span>
+                            <button type="button" class="btn" disabled="@(_results.Count < PageSize)" @onclick="NextPage">Next →</button>
+                        </div>
+                    }
+                }
+
+                <hr class="sep" />
+
+                <div class="form-grid">
+                    <label>Item ID
+                        <input class="input" type="number" @bind="_manualItemId" />
+                    </label>
+                    <label>Count
+                        <input class="input" type="number" min="1" max="9999" @bind="_count" />
+                    </label>
+                    <label>Durability
+                        <input class="input" type="number" min="0" @bind="_durability" />
+                    </label>
+                </div>
+                @if (_manualName is not null)
+                {
+                    <p class="muted">→ @_manualName</p>
+                }
+                <div class="dialog-actions">
+                    <button type="button" class="btn" @onclick="Close">Cancel</button>
+                    <button type="button" class="btn btn-primary" disabled="@(_manualItemId == 0)" @onclick="ConfirmManual">Add to selected slot</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const int PageSize = 25;
+
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public EventCallback<(uint ItemId, short Count, short Durability)> OnPicked { get; set; }
+
+    private string _term = "";
+    private List<ItemSearchResult>? _results;
+    private bool _searching;
+    private int _page;
+
+    private uint _manualItemId;
+    private short _count = 1;
+    private short _durability;
+    private string? _manualName;
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Search();
+    }
+
+    private async Task Search()
+    {
+        _page = 0;
+        await LoadPage();
+    }
+
+    private async Task LoadPage()
+    {
+        _searching = true;
+        try
+        {
+            _results = (await Repo.SearchItemsAsync(_term, PageSize, _page * PageSize)).ToList();
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+
+    private async Task NextPage() { _page++; await LoadPage(); }
+    private async Task PrevPage() { if (_page > 0) _page--; await LoadPage(); }
+
+    private async Task Pick(ItemSearchResult item)
+    {
+        _manualItemId = item.Num;
+        _manualName = item.Name;
+        _durability = (short)Math.Clamp(item.Duration, 0, short.MaxValue);
+        _count = 1;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ConfirmManual()
+    {
+        if (_manualItemId == 0)
+            return;
+        var picked = (_manualItemId, (short)Math.Clamp(_count, (short)1, (short)9999), _durability);
+        await OnPicked.InvokeAsync(picked);
+        await Close();
+    }
+
+    private async Task Close()
+    {
+        Visible = false;
+        await VisibleChanged.InvokeAsync(false);
+    }
+}

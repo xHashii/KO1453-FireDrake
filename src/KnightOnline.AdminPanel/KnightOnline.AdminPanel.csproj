@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>KnightOnline.AdminPanel</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KnightOnline.Shared\KnightOnline.Shared.csproj" />
+    <ProjectReference Include="..\KnightOnline.Database\KnightOnline.Database.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- DB migrations applied automatically on startup -->
+    <None Include="..\..\sql\mysql\ko_main\*.sql" Link="sql\ko_main\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\sql\mysql\ko_game\*.sql" Link="sql\ko_game\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

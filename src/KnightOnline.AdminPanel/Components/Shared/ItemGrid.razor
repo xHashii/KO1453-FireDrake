@@ -1,0 +1,59 @@
+@* A grid of item slots (inventory, one magic bag, one warehouse page...). *@
+<div class="item-grid" style="grid-template-columns: repeat(@Columns, var(--slot-size));">
+    @for (var i = 0; i < Slots.Count; i++)
+    {
+        var slotIndex = StartSlot + i;
+        var slot = Slots[i];
+        var css = "slot" + (slot.IsEmpty ? " slot-empty" : " slot-filled") + (slotIndex == SelectedSlot ? " slot-selected" : "");
+        <button type="button" class="@css" title="@Tooltip(slotIndex, slot)" @onclick="() => OnSlotClick.InvokeAsync(slotIndex)">
+            @if (!slot.IsEmpty)
+            {
+                <span class="slot-icon">@IconFor(slot)</span>
+                <span class="slot-id">@ShortId(slot.ItemId)</span>
+                @if (slot.Count > 1)
+                {
+                    <span class="slot-count">×@slot.Count</span>
+                }
+            }
+            else
+            {
+                <span class="slot-empty-label">@slotIndex</span>
+            }
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ItemSlotData> Slots { get; set; } = Array.Empty<ItemSlotData>();
+    [Parameter] public int StartSlot { get; set; }
+    [Parameter] public int Columns { get; set; } = 7;
+    [Parameter] public int SelectedSlot { get; set; } = -1;
+    [Parameter] public EventCallback<int> OnSlotClick { get; set; }
+    [Parameter] public IReadOnlyDictionary<uint, string> ItemNames { get; set; } = new Dictionary<uint, string>();
+
+    private string Tooltip(int slotIndex, ItemSlotData slot)
+    {
+        var where = InventorySlots.Describe(slotIndex);
+        if (slot.IsEmpty)
+            return $"{where} — empty";
+        var name = ItemNames.TryGetValue(slot.ItemId, out var n) && n.Length > 0 ? n : "Unknown item";
+        return $"{where}\n{name} ({slot.ItemId})\nCount {slot.Count} · Durability {slot.Durability}\nSerial {slot.Serial}";
+    }
+
+    // Item ids are 9 digits and differ mostly in the middle; the tail is the
+    // quickest visual distinguisher until real icons exist (needs client data).
+    private static string ShortId(uint itemId)
+    {
+        var s = itemId.ToString();
+        return s.Length > 6 ? "…" + s[^6..] : s;
+    }
+
+    // Crude kind emoji by id family until the ITEM table / icons are wired in.
+    private static string IconFor(ItemSlotData slot) => (slot.ItemId / 10_000_000) switch
+    {
+        31 or 32 or 33 or 34 => "🗡️",  // weapons families (sword/dagger/bow/spear-ish)
+        2 => "🛡️",
+        9 => "🧪",
+        _ => "◆",
+    };
+}

@@ -55,7 +55,18 @@ Community GM-panel designs also stress searchable/paged item pickers and
 4. Admin auth separate from game accounts; the panel binds to localhost by
    default. This is a root-level tool over the whole game database.
 
-## Architecture options (pending owner decision)
+## Status (updated)
+
+- ✅ Platform decided: **separate Blazor web app** (`src/KnightOnline.AdminPanel`).
+- ✅ Module A (character & inventory editor) implemented: search, equipment /
+  inventory / cospre+magic-bag / warehouse grids, slot edit, move/swap,
+  add item with serial generation, give-by-letter, online-protection,
+  optimistic concurrency, audit log + backups (`sql/mysql/ko_game/0001_admin_tables.sql`).
+- ⏳ First live test needs the converted `USERDATA`/`ITEM` tables from the
+  owner's database export (expected as a compressed attachment). Until then
+  the repository probes `INFORMATION_SCHEMA` and only uses columns that exist.
+
+## Architecture options (recorded)
 
 | Option | Shape | Pros | Cons |
 |---|---|---|---|

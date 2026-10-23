@@ -23,9 +23,10 @@ Full plan, milestone list and the audit of the original codebase:
 ```text
 src/
   KnightOnline.Shared      packets, JvCryption, LZF, CRC32, sockets, INI, logging
-  KnightOnline.Database    MariaDB access (MySqlConnector)
+  KnightOnline.Database    MariaDB access (MySqlConnector), migrations, item blobs
   KnightOnline.LoginServer port of LogInServer/
   KnightOnline.GameServer  port of GameServer/ + AIServer/ (merged) - not started
+  KnightOnline.AdminPanel  Blazor GM panel: dashboard, character & inventory editor
 ```
 
 ## Status
@@ -35,7 +36,9 @@ src/
 - ✅ **M2 — LoginServer**: all 7 login opcodes ported (version, patch list,
   login, server list, news, encryption key exchange). _Not yet tested against
   a real client — that's the next step._
-- ⏳ Waiting on: SQL Server → MariaDB database export (`.sql`, both DBs),
+- ✅ **Admin panel v1**: dashboard, character search, visual inventory/warehouse
+  editor, give-item-by-letter, audit log + backups (`src/KnightOnline.AdminPanel`).
+- ⏳ Waiting on: the compressed SQL Server export (attached here by the owner),
   `map/*.smd`, `Quests/*.Lua` (+ `*.evt`), original `*.ini` configs.
 - ⬜ GameServer (39k lines of C++) and the merged AI server.
 
@@ -68,6 +71,17 @@ uncomment the `INSERT INTO TB_USER ... ('test', 'test')` at the bottom of
 or add the row in HeidiSQL afterwards. No database at all yet? Set
 `ALLOW_OFFLINE_START=1` — the server runs and talks to the client, logins
 just fail with AUTH_ERROR.
+
+## Admin panel
+
+```bash
+docker compose up -d
+dotnet run --project src/KnightOnline.AdminPanel    # http://localhost:5100
+```
+
+Sign in with the credentials in `src/KnightOnline.AdminPanel/appsettings.json`
+(default `admin` / `changeme` — change them, or set `KO_ADMIN_PASSWORD`).
+Design + safety rules: [docs/ADMIN_PANEL.md](docs/ADMIN_PANEL.md).
 
 ## Porting rules
 

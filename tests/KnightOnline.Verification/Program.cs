@@ -1,4 +1,7 @@
 using System.Text;
+using KnightOnline.Database.Admin;
+using KnightOnline.Database.Items;
+using KnightOnline.Database.Migrations;
 using KnightOnline.Shared.Compression;
 using KnightOnline.Shared.Configuration;
 using KnightOnline.Shared.Crypto;
@@ -311,6 +314,20 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
         statements.Count == 4 && statements[2].Contains("SET @x = 1;") && statements[2].TrimEnd().EndsWith("END"));
     Check("sql splitter: strings respected",
         statements.Count == 4 && statements[1].Contains("'x;y'"));
+}
+
+// ---------- Item serial generator (CGameServerDlg::GenerateItemSerial) ----------
+{
+    var gen = new ItemSerialGenerator(serverNo: 1);
+    var a = gen.Next();
+    var b = gen.Next();
+    var now = DateTimeOffset.UtcNow;
+    Check("serial: server number in top byte", (a >> 56) == 1);
+    Check("serial: date fields packed (tm_mon 0-based, like the original)",
+        ((a >> 48) & 0xFF) == (ulong)(now.Year % 100) &&
+        ((a >> 40) & 0xFF) == (ulong)(now.Month - 1) &&
+        ((a >> 32) & 0xFF) == (ulong)now.Day);
+    Check("serial: counter increments by 1", (b & 0xFFFF) == ((a & 0xFFFF) + 1) % 0x10000);
 }
 
 Console.WriteLine($"\n{passed} passed, {failed} failed.");

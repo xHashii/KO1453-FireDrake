@@ -13,6 +13,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KnightOnline.GameServer", "
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KnightOnline.Verification", "tests\KnightOnline.Verification\KnightOnline.Verification.csproj", "{49F22F49-C932-54AB-9845-DBC6677137BA}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KnightOnline.AdminPanel", "src\KnightOnline.AdminPanel\KnightOnline.AdminPanel.csproj", "{B0D9B449-B3CD-5ECB-8570-F53A0E0B2FDB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
