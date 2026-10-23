@@ -186,19 +186,23 @@ then `docker compose up -d` again.
    An opcode with no handler is logged before the session is closed (the
    original closed it silently, which looks exactly like a client crash).
 
-   After the LoginServer answers, the client dials the **game server** on
-   15001 — which is milestone M4 and does not exist yet. So that M4 can be
-   written against real packets rather than guesses, `KnightOnline.GameServer`
-   currently runs a *handshake recorder*: it accepts the connection, logs every
-   packet the client sends (opcode + hexdump) and answers nothing.
+   After the LoginServer answers, the client dials the **game server** on 15001
+   and opens with `WIZ_VERSION_CHECK` (0x2B, payload `FF FF` — the int16 −1 the
+   original's commented-out code used to read). `KnightOnline.GameServer`
+   answers that one packet exactly as `CUser::VersionCheck` does —
+   `uint16(1453)` plus the JvCryption public key — and then enables crypto,
+   which is what moves the client past *"Connecting. Please wait."* Everything
+   after the handshake is logged (decrypted, opcode + hexdump) and **not**
+   answered, so the client stops one step further on, at `WIZ_LOGIN`:
 
    ```powershell
    dotnet run --project src\KnightOnline.GameServer     # listens on 15001
    ```
 
-   Run it next to the LoginServer, log in, and `Logs\GameServer.log` holds the
-   client's opening game-server sequence. The client will wait and then give up:
-   that is expected, it is a recorder, not a server.
+   Run it next to the LoginServer and log in; `Logs\GameServer.log` then holds
+   the client's opening game-server sequence, which is what the rest of M4 is
+   being written from. The client sitting at "Connecting." after the handshake
+   is expected until the login handler exists.
 
 ## 7. AdminPanel (the website)
 
@@ -258,7 +262,7 @@ single file over 100 MB (and warns over 50 MB).
 | Port | Service |
 |---|---|
 | 15100 | LoginServer (game client) |
-| 15001 | GameServer — currently a handshake *recorder*, see §6 step 6 |
+| 15001 | GameServer prototype (opening handshake only), see §6 step 6 |
 | 5100 | AdminPanel (browser, localhost only) |
 | 3306 | MariaDB in Docker (127.0.0.1 only) |
 
@@ -326,8 +330,9 @@ single file over 100 MB (and warns over 50 MB).
   successful login** → that is the *client* closing the LoginServer socket,
   which is what it does when it moves on to the game server. Read the trace
   above it (§6 step 6): if `LS_SERVERLIST`/`LS_NEWS` were served, the login
-  server did its whole job and the client is now dialing 15001, where nothing
-  real listens yet (M4). Run the handshake recorder to see what it asks for.
+  server did its whole job and the client is now dialing 15001. Run the
+  GameServer prototype alongside: it answers the opening `WIZ_VERSION_CHECK`
+  and records everything after it (§6 step 6).
 - **Client: "Cannot connect to FTP Server" (`ftp.yoursite.net`)** → the client
   was told a higher version than its own, so it is trying to download patch
   files. The log line `Patch check from …: client version NNNN, server MMMM,

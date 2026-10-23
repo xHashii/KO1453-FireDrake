@@ -1,23 +1,29 @@
 using System.Net.Sockets;
+using System.Reflection;
 using System.Text;
 using KnightOnline.Shared;
 using KnightOnline.Shared.Diagnostics;
 using KnightOnline.Shared.Network;
 using KnightOnline.Shared.Protocol;
 
-// Milestone 4+ will grow this into the port of GameServer/ + AIServer/
-// (merged, per the rewrite plan). What is here now is deliberately NOT a game
-// server: it is a handshake recorder. After the LoginServer authenticates a
-// client, the client dials the game server - GameServerDlg.cpp reads
-// [SETTINGS] PORT with a default of 15001 - and nothing in this repository was
-// listening there. This accepts those connections, logs every packet the client
-// sends and answers none of them, so M4 can be written against real bytes from
-// a real client instead of guesses.
+// Milestone 4 (game login / char select vertical slice) starts here.
 //
-//   dotnet run --project src/KnightOnline.GameServer          # port 15001
-//   dotnet run --project src/KnightOnline.GameServer -- 15002 # another port
+// What is implemented is exactly the opening of CUser::HandlePacket
+// (GameServer/User.cpp + LoginHandler.cpp): until crypto is enabled the session
+// answers nothing but WIZ_VERSION_CHECK (0x2B) - uint16(__VERSION) followed by
+// the JvCryption public key - and then turns encryption on. That is the packet
+// a real 1453 client sends first ("opcode 0x2B, 2 byte(s): FF FF", the int16 -1
+// the original's commented-out code used to read), and answering it is what
+// moves the client past "Connecting. Please wait."
+//
+// Everything after the handshake is still RECORDED, not answered: post-crypto
+// packets arrive decrypted (the framing/crypt layers are the ones
+// KnightOnline.Verification checks against the C golden vectors), so the log is
+// now a readable capture of what the client expects next - WIZ_LOGIN first.
+// A client will therefore sit at "Connecting." again one step further on;
+// that is M4's next increment, not a regression.
 
-const int DefaultGamePort = 15001; // GameServer/GameServerDlg.cpp
+const int DefaultGamePort = 15001; // GameServer/GameServerDlg.cpp [SETTINGS] PORT
 
 Console.Title = $"Game Server for Knight Online v{GameVersion.Version} (.NET)";
 KoLog.ConfigureFile("Logs/GameServer.log");
@@ -26,7 +32,7 @@ var port = DefaultGamePort;
 if (args.Length > 0 && int.TryParse(args[0], out var parsedPort) && parsedPort is > 0 and < 65536)
     port = parsedPort;
 
-var server = new KoTcpServer<HandshakeRecorderSession>(client => new HandshakeRecorderSession(client));
+var server = new KoTcpServer<GameSession>(client => new GameSession(client));
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -36,10 +42,9 @@ Console.CancelKeyPress += (_, e) =>
     server.Stop();
 };
 
-KoLog.Warn($"Handshake recorder listening on port {port}. This is NOT the game server yet " +
-           $"(docs/CSHARP_REWRITE_PLAN.md, milestone M4): packets are logged and never answered, " +
-           $"so a client that connects here will wait and then give up.");
-KoLog.Info("Milestone order: wire core -> LoginServer (done) -> data layer -> login/char-select vertical slice.");
+KoLog.Warn($"GameServer prototype on port {port}: the WIZ_VERSION_CHECK handshake is answered, " +
+           $"everything after it is logged and not answered yet (docs/CSHARP_REWRITE_PLAN.md, M4).");
+KoLog.Info("Milestone order: wire core -> LoginServer (done) -> data layer (done) -> login/char-select vertical slice.");
 
 try
 {
@@ -47,34 +52,83 @@ try
 }
 catch (Exception ex)
 {
-    KoLog.Error("Handshake recorder failed to start.", ex);
+    KoLog.Error("GameServer failed to start.", ex);
     return 1;
 }
 
-KoLog.Info("Handshake recorder shut down.");
+KoLog.Info("GameServer shut down.");
 return 0;
 
 /// <summary>
-/// Logs what a client sends to the game-server port and replies to nothing.
-/// Returning true from <see cref="KoSession.HandlePacket"/> keeps the session
-/// open, so the whole opening sequence is captured rather than just its first
-/// packet. The framing, JvCryption and CRC layers underneath are the ones
-/// KnightOnline.Verification checks byte-for-byte against the C golden vectors.
+/// The opening of a game-server session. Port of the state machine at the top
+/// of CUser::HandlePacket: crypto first, then WIZ_LOGIN, then (M4) character
+/// selection. Packets are logged in both directions so a client run doubles as
+/// a protocol capture.
 /// </summary>
-internal sealed class HandshakeRecorderSession : KoSession
+internal sealed class GameSession : KoSession
 {
-    /// <summary>Bytes of each packet to dump; the opening packets are small.</summary>
+    /// <summary>Bytes of each captured packet to dump; the opening ones are small.</summary>
     private const int DumpLimit = 128;
 
-    public HandshakeRecorderSession(TcpClient client)
+    public GameSession(TcpClient client)
         : base(client, maxPayloadSize: 8192)
     {
     }
 
     protected override bool HandlePacket(Packet packet)
     {
-        KoLog.Info($"<- {RemoteIp} opcode 0x{packet.Opcode:X2}, {packet.Length} byte(s): {Hexdump(packet.Payload)}");
-        return true; // stay connected: the next packet is the interesting one
+        KoLog.Info($"<- {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s)): {Hexdump(packet.Payload)}");
+
+        if (!IsCryptoEnabled)
+        {
+            // CUser::HandlePacket: "If crypto's not been enabled yet, force the
+            // version packet to be sent." Everything else is dropped, not
+            // rejected - return true keeps the session alive either way.
+            if (packet.Opcode == WizOpcode.VersionCheck)
+                VersionCheck(packet);
+
+            return true;
+        }
+
+        // Decrypted and decoded, but not implemented yet: WIZ_LOGIN is expected
+        // here, then character selection. The hexdump in the log above is the
+        // material the next increment is written from.
+        return true;
+    }
+
+    /// <summary>Port of CUser::VersionCheck (GameServer/LoginHandler.cpp).</summary>
+    private void VersionCheck(Packet packet)
+    {
+        var result = new Packet(WizOpcode.VersionCheck);
+        result.WriteUInt16((ushort)GameVersion.Version);
+        result.WriteUInt64(Crypto.GenerateKey());
+        Send(result);
+
+        EnableCrypto();
+    }
+
+    public override bool Send(Packet packet)
+    {
+        KoLog.Info($"-> {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s))");
+        return base.Send(packet);
+    }
+
+    /// <summary>WIZ_* names from <see cref="WizOpcode"/>, for readable traces.</summary>
+    private static string Name(byte opcode) =>
+        WizNames.TryGetValue(opcode, out var name) ? name : $"opcode 0x{opcode:X2}";
+
+    private static readonly Dictionary<byte, string> WizNames = BuildNames();
+
+    private static Dictionary<byte, string> BuildNames()
+    {
+        var names = new Dictionary<byte, string>();
+        foreach (var field in typeof(WizOpcode).GetFields(BindingFlags.Public | BindingFlags.Static))
+        {
+            if (field.IsLiteral && field.FieldType == typeof(byte))
+                names.TryAdd((byte)field.GetValue(null)!, field.Name);
+        }
+
+        return names;
     }
 
     private static string Hexdump(ReadOnlySpan<byte> payload)
