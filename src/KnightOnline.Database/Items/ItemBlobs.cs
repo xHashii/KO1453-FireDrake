@@ -11,7 +11,8 @@ public sealed record ItemSlotData(
     short Durability,       // sDuration
     short Count,            // sCount (stored as int16 by the original)
     ulong Serial,           // nSerialNum (parallel serial blob)
-    uint ExpirationUnixTime // nExpirationTime (parallel time blob)
+    uint ExpirationUnixTime, // nExpirationTime (parallel time blob)
+    byte Flag = 0 // runtime overlay from SEALED_ITEMS; never serialized into legacy blobs
 )
 {
     public static readonly ItemSlotData Empty = new(0, 0, 0, 0, 0);

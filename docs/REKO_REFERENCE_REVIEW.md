@@ -106,3 +106,8 @@ current implementation status. Missing-versus-empty skillbar behavior, spatial
 grid fidelity and actual native-client acceptance remain separate checks.
 Sealing status and required ownership invariants are recorded in
 `SEALING_VERIFICATION.md`; no transfer success is fabricated.
+
+The owner subsequently approved non-retail sealing as an intentional extension.
+Item protection is implemented from the source item protocol with hashed code
+provisioning and transactional ownership checks. Character transfer is still
+unimplemented; see `SEALING_VERIFICATION.md` rather than the historical table.

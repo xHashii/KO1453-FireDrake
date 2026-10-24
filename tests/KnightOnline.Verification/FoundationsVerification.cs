@@ -22,6 +22,7 @@ internal static class FoundationsVerification
         test("native region list contains viewer plus visible actor IDs",Convert.ToHexString(envelopeHub.RegionList(0x2345).Payload)=="020034124523");
         envelopes.Clear();envelopeHub.Remove(0x1234);
         test("native OUT is exactly byte subtype and actor ID",Convert.ToHexString(envelopes.Single().Payload)=="023412");
+        ItemSealVerification.Rules(test);
         var sealWire=new Packet(WizOpcode.ItemUpgrade).WriteByte(1).WriteInt16(-1).WriteUInt32(146211041).WriteByte(27).WriteString("sample");
         test("source item seal request validates exact slot and password framing",ItemSealPackets.TryRead(sealWire,out var seal)&&seal!.Action==1&&seal.Item==146211041&&seal.Position==27&&!seal.ToString().Contains("sample"));
         test("source item seal refusal is not a successful transaction",Convert.ToHexString(ItemSealPackets.Refused(1).Payload)=="080102");

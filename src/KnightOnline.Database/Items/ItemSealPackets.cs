@@ -24,6 +24,9 @@ public static class ItemSealPackets
         packet.ReadPosition-=2;
         request=new(action,item,position,packet.ReadString()); return true;
     }
+    // ReqSealItem includes item and position on database replies; success is 1.
+    public static Packet Result(ItemSealRequest request, byte code) => new Packet(WizOpcode.ItemUpgrade)
+        .WriteByte(8).WriteByte(request.Action).WriteByte(code).WriteUInt32(request.Item).WriteByte(request.Position);
     // SealErrorFailed=2 in SealHandler.cpp. No success is fabricated for an
     // unverified premium/password/serial ownership/commit path.
     public static Packet Refused(byte action)=>new Packet(WizOpcode.ItemUpgrade).WriteByte(8).WriteByte(action).WriteByte(2);

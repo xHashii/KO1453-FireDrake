@@ -229,11 +229,7 @@ internal sealed partial class GameSession
         var sub = packet.ReadByte();
         if (sub == 8)
         {
-            // Parse only the established source layout. Until the retail seal
-            // security/premium and persisted flag lifecycle are verified, fail
-            // closed: no password guesses, fee, protection change or item loss.
-            if (ItemSealPackets.TryRead(packet,out var seal)) Send(ItemSealPackets.Refused(seal!.Action));
-            TravelMessage("Item sealing is not enabled: security, eligibility and protection persistence still require verification. No items or coins changed.");
+            ProcessItemSeal(packet);
             return;
         }
         if (sub == 9)

@@ -69,7 +69,7 @@ internal sealed partial class GameSession
                 if (issues.Count > 0 || weight + (long)item.Weight*entry.Count > _maxWeight || item.Weight < 0 || item.Duration < 0)
                 { Reject(6); return; }
                 if (item.Countable != 0)
-                    position = Enumerable.Range(14,28).FirstOrDefault(i => proposed[i].ItemId == itemId && proposed[i].Count > 0 && proposed[i].ExpirationUnixTime == 0 && proposed[i].Durability == item.Duration && proposed[i].Count+entry.Count <= ItemBlobs.MaxCountableCount,-1);
+                    position = Enumerable.Range(14,28).FirstOrDefault(i => proposed[i].ItemId == itemId && proposed[i].Flag == 0 && proposed[i].Count > 0 && proposed[i].ExpirationUnixTime == 0 && proposed[i].Durability == item.Duration && proposed[i].Count+entry.Count <= ItemBlobs.MaxCountableCount,-1);
                 if (position < 0) position = Enumerable.Range(14,28).FirstOrDefault(i => proposed[i].ItemId == 0,-1);
                 if (position < 0) { Reject(6); return; }
                 previous = proposed[position];

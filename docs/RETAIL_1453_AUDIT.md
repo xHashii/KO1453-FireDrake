@@ -1,3 +1,8 @@
+> Scope update: the owner approved newer-version sealing as an intentional security
+> extension. Item lock/unlock is now implemented; see `SEALING_VERIFICATION.md`
+> for its explicit policy, provisioning and remaining character-transfer work.
+> Earlier "not implemented" entries below are historical audit findings.
+
 # Retail 1453 fidelity audit — initial findings
 
 Goal: reproduce a specific retail 1453 behavior, not modern Knight Online or a
