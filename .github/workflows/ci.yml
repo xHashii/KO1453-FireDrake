@@ -58,3 +58,29 @@ jobs:
           python tools/test_world_npcs.py
           python tools/test_world_coordinates.py
           python tools/test_starter_item_repair.py
+
+  shop-transactions:
+    name: Shop transactions (MariaDB)
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: verification
+          MARIADB_DATABASE: ko_shop_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Verify shop rules, packets and atomic persistence
+        env:
+          KO_SHOP_TEST_PORT: '3306'
+        run: dotnet run --project tests/KnightOnline.Verification --nologo

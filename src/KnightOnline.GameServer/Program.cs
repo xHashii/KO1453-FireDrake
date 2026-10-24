@@ -172,7 +172,7 @@ internal sealed partial class GameSession : KoSession
     private ushort _totalHit;
     private short _totalAc;
     private ushort _maxWeight;
-    private short _itemWeight;
+    private int _itemWeight;
     private readonly short[] _statBonus = new short[5];
     private readonly short[] _resist = new short[6];
 
@@ -197,6 +197,7 @@ internal sealed partial class GameSession : KoSession
 
     private bool HandleGamePacket(Packet packet)
     {
+        if (_inventoryFaulted) return false;
         KoLog.Info($"<- {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s)): {Hexdump(packet.Payload)}");
 
         if (!IsCryptoEnabled)
@@ -254,8 +255,7 @@ internal sealed partial class GameSession : KoSession
                     WorldNpcRequest(packet);
                     break;
                 case WizOpcode.ItemTrade:
-                    Send(new Packet(WizOpcode.ItemTrade).WriteByte(0).WriteByte(1));
-                    TravelMessage("Shop browsing is available. Purchases/sales are not implemented yet; no items or coins changed.");
+                    ItemTrade(packet);
                     break;
                 case WizOpcode.ItemRepair:
                     Send(new Packet(WizOpcode.ItemRepair).WriteByte(0).WriteUInt32((uint)_user.Gold));
@@ -548,11 +548,9 @@ internal sealed partial class GameSession : KoSession
         _user = user;
         _charId = charId;
 
-        var parsed = ItemBlobs.ParseExact(user.Items, ReadOnlySpan<byte>.Empty, ReadOnlySpan<byte>.Empty);
-        _slots = parsed.Slots.Length >= InventoryTotal
-            ? parsed.Slots
-            : parsed.Slots.Concat(Enumerable.Repeat(ItemSlotData.Empty, InventoryTotal - parsed.Slots.Length)).ToArray();
-        _slotCount = Math.Max(parsed.SlotCount, InventoryTotal);
+        var serialBlob = user.Serials ?? Array.Empty<byte>();
+        _slotCount = Math.Max(InventoryTotal, Math.Max((user.Items.Length + 7) / 8, (serialBlob.Length + 7) / 8));
+        _slots = ItemBlobs.Parse(user.Items, serialBlob, ReadOnlySpan<byte>.Empty, _slotCount);
         _stats[0] = user.Str; _stats[1] = user.Sta; _stats[2] = user.Dex;
         _stats[3] = user.Int; _stats[4] = user.Cha;
         _points = user.Points;
@@ -679,7 +677,7 @@ internal sealed partial class GameSession : KoSession
             .WriteInt16(_maxMp)
             .WriteUInt16((ushort)_currentMp)
             .WriteUInt16(_maxWeight)
-            .WriteUInt16((ushort)_itemWeight)
+            .WriteUInt16((ushort)Math.Clamp(_itemWeight, 0, short.MaxValue))
             .WriteByte(_stats[0]).WriteByte(ClampByte(_statBonus[0]))
             .WriteByte(_stats[1]).WriteByte(ClampByte(_statBonus[1]))
             .WriteByte(_stats[2]).WriteByte(ClampByte(_statBonus[2]))
@@ -778,7 +776,7 @@ internal sealed partial class GameSession : KoSession
             if (i == 47 || i == 48)
                 maxWeightBonus += proto.Duration;
             else
-                _itemWeight += (short)(proto.Weight * slot.Count);
+                _itemWeight += proto.Weight * slot.Count;
 
             // Unequipped items (inventory, magic bags) grant nothing.
             if ((i >= SlotMax && i < CospreStart) || i >= MagicBagStart)
@@ -930,6 +928,9 @@ internal sealed partial class GameSession : KoSession
     /// </summary>
     private void ItemMove(Packet packet)
     {
+        if (!CanTravel() || packet.RemainingToRead != 7) { SendItemMove(0); return; }
+        var previous = _slots;
+        _slots = _slots.ToArray();
         var dir = packet.ReadByte();
         var itemId = packet.ReadUInt32();
         var src = packet.ReadByte();
@@ -938,23 +939,27 @@ internal sealed partial class GameSession : KoSession
         var rejection = MoveRejection(dir, itemId, src, dst);
         if (rejection is not null)
         {
+            _slots = previous;
             KoLog.Info($"[ ITEM MOVE - {DateTime.Now:HH:mm:ss} ] {_charId} rejected " +
                        $"dir={dir} item={itemId} {src} -> {dst}: {rejection}");
             SendItemMove(0);
             return;
         }
 
-        var (items, _, _) = ItemBlobs.Serialize(_slots);
+        var proposed = _slots;
+        _slots = previous;
         try
         {
-            _characters.SaveCharacterItemsAsync(_charId, items).GetAwaiter().GetResult();
+            if (!CommitInventory(proposed, _user!.Gold, shopReply: false)) return;
         }
         catch (Exception ex)
         {
-            KoLog.Error($"Saving the item blob for '{_charId}' could not reach the database.", ex);
+            InventoryUnavailable(ex);
+            return;
         }
 
-        RecomputeStats(refillWhenEmpty: false); // SetUserAbility(false)
+        try { RecomputeStats(refillWhenEmpty: false); } // SetUserAbility(false)
+        catch (Exception ex) { InventoryUnavailable(ex); return; }
         SendItemMove(1);
         SendItemWeight();
         KoLog.Info($"[ ITEM MOVE - {DateTime.Now:HH:mm:ss} ] {_charId} dir={dir} item={itemId} {src} -> {dst}");
@@ -1135,7 +1140,7 @@ internal sealed partial class GameSession : KoSession
     private void SendItemWeight()
     {
         var result = new Packet(WizOpcode.WeightChange);
-        result.WriteInt16(_itemWeight);
+        result.WriteInt16((short)Math.Clamp(_itemWeight, 0, short.MaxValue));
         Send(result);
     }
 

@@ -267,8 +267,8 @@ Other native object services (binds, war levers, artifacts) remain unported.
 Right-click merchants/tinkers send the original `WIZ_TRADE_NPC` /
 `WIZ_REPAIR_NPC` selling-group replies so the **client's item tables** display
 what that merchant sells. Clicking the anvil sends `WIZ_ITEM_UPGRADE` request
-1 with the validated runtime anvil ID. These are **browsing windows only**:
-purchases, sales, repairs, upgrades and exchanges are explicitly rejected
+1 with the validated runtime anvil ID. Ordinary NPC purchases/sales are supported
+(see below). Repairs, upgrades and exchanges are explicitly rejected
 without modifying items or coins. Quest/warehouse/clan/other service NPCs
 are visible but report that their service is not implemented; they do not
 pretend to provide a working transaction. Full skills/combat are also not
@@ -349,3 +349,56 @@ appearance fields and the exact response payload. If the client still crashes
 with preview equipment suppressed, retain that log and obtain the client crash
 log/Windows Application Error entry: the client renderer and assets are not in
 this server repository, so this patch cannot claim to fix every client crash.
+
+
+### NPC shop purchases and sales
+
+Ordinary merchant/tinker shops now handle `WIZ_ITEM_TRADE` buy (1), sell (2)
+and shop-window inventory swap (3), using `GameServer/NPCHandler.cpp` as the
+wire reference. This is not player-to-player trading or player merchant stalls.
+
+- Requires an alive, in-game character outside zone loading and a friendly shop
+  in the current zone within 11 world units. Buying/selling validates the wire
+  NPC ID and group; shop-window swaps require a previously opened nearby shop.
+- Prices come from the server's `ITEM` table: purchases use `BuyPrice`; ordinary
+  sales use `(BuyPrice / 6) * count`, or full `BuyPrice` for `SellPrice = 1`.
+  The legacy selling-group variants 0, 1, 2 and 72 are checked for purchases.
+  King/siege taxes and premium discounts are **not implemented**.
+- Inventory positions are 0–27, counts 1–9999; non-stackable purchases/sales
+  must have count 1. Occupied incompatible slots, excessive stacks, insufficient
+  coins, overweight purchases, integer overflow and the 2.1-billion coin cap
+  are checked before any mutation. No automatic slot allocation is implied.
+- Restricted IDs/races and recorded sealed/rental items cannot be sold. Adding
+  purchases to a recorded sealed/rental stack is also refused. Protection checks
+  are conservative, including legacy serial-zero items. The shipped schema
+  stores serials but not item expiration blobs; timed-item support is not added.
+- Item IDs, durability/count, serials and coins are saved in **one conditional
+  InnoDB UPDATE** before the session changes or success is sent. Normal item
+  moves now use this same persistence boundary, preserving serials on swaps.
+  Stale item/serial/coin snapshots are rejected, not overwritten. A stale state,
+  protected-item rejection at save, or ambiguous database failure disconnects
+  the session so reconnect reloads the authoritative state. Do not run the
+  legacy C++ server concurrently against the same characters.
+- The protocol has no request nonce: two otherwise-valid identical buy packets
+  are two purchases, each charged. There is no server retry after an uncertain
+  commit. This prevents free duplication; it is not exactly-once request replay.
+
+No new migration or settings change is required. Keep a database backup before
+first testing an economy feature. CI covers pure shop rules and packet vectors,
+plus atomic save/rejection, concurrent writers, protection records, persistence
+and SQL-failure rollback against a disposable MariaDB 11.4 service.
+
+Manual acceptance test (real-client confirmation still required):
+
+1. Open a potion merchant, buy a small quantity into a free inventory slot,
+   then add to that stack. Check quantity and the charged coins.
+2. Sell part of the stack, then the rest. Check coins and slot clearing.
+3. Buy one ordinary weapon/armor item, move it between slots (including inside
+   the shop window), then reconnect. Check inventory and coins persisted.
+4. Try buying with insufficient coins or into an occupied incompatible slot;
+   verify both inventory and coins stay unchanged.
+5. Repeat at weapon, armor and sundries merchants. For any failure, retain the
+   `[ SHOP ]`, `[ SHOP REJECT ]` or `[ INVENTORY ]` server lines and item/quantity.
+
+Repair, anvil upgrades, item exchanges, warehouse, quests and monster AI/combat
+remain separate milestones. This feature makes no change to tooltip rendering.

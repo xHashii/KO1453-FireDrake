@@ -76,7 +76,8 @@ public sealed record UserData(
     int MannerPoint,
     int LoyaltyMonthly,
     short QuestCount,
-    byte[] Quests);
+    byte[] Quests,
+    byte[]? Serials = null);
 
 /// <summary>
 /// The COEFFICIENT row slice SetMaxHp/SetMaxMp and SetUserAbility need for a

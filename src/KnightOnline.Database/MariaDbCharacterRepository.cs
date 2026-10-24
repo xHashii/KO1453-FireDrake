@@ -527,7 +527,7 @@ public sealed partial class MariaDbCharacterRepository
         select.CommandText =
             "SELECT Nation, Race, Class, HairRGB, Rank, Title, Level, Exp, Loyalty, Face, City, " +
             "Knights, Fame, Hp, Mp, Sp, Strong, Sta, Dex, Intel, Cha, Authority, Points, Gold, " +
-            "Zone, PX, PZ, PY, strSkill, strItem, MannerPoint, LoyaltyMonthly, sQuestCount, strQuest " +
+            "Zone, PX, PZ, PY, strSkill, strItem, MannerPoint, LoyaltyMonthly, sQuestCount, strQuest, strSerial " +
             "FROM USERDATA WHERE strUserID = @charId";
         select.Parameters.AddWithValue("@charId", charId);
 
@@ -569,7 +569,8 @@ public sealed partial class MariaDbCharacterRepository
             Convert.ToInt32(row.GetValue(30)),
             Convert.ToInt32(row.GetValue(31)),
             Convert.ToInt16(row.GetValue(32)),
-            GetBlob(row, 33));
+            GetBlob(row, 33),
+            GetBlob(row, 34));
     }
 
     // Called only after ownership/warehouse validation, before loading the session.
@@ -704,23 +705,6 @@ public sealed partial class MariaDbCharacterRepository
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Persists a character's item blob after an inventory change (the
-    /// SaveUserData half of the original's item round-trip; serials and
-    /// expiration times are untouched - the port does not manage them yet).
-    /// </summary>
-    public async Task SaveCharacterItemsAsync(string charId, byte[] itemBlob, CancellationToken cancellationToken = default)
-    {
-        await using var connection = new MySqlConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE USERDATA SET strItem = @blob WHERE strUserID = @charId";
-        command.Parameters.AddWithValue("@blob", itemBlob);
-        command.Parameters.AddWithValue("@charId", charId);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -503,5 +503,7 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     Check("char preview: opt-in restores equipment", !normal.Payload.SequenceEqual(safe.Payload));
 }
 
+await ShopVerification.RunAsync((name, ok) => Check(name, ok));
+
 Console.WriteLine($"\n{passed} passed, {failed} failed.");
 return failed == 0 ? 0 : 1;
