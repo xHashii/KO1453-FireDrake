@@ -42,7 +42,7 @@ else
     @if (_character.IsOnline)
     {
         <p class="alert alert-danger">This character is <b>online</b>. Item edits are disabled — the game server would overwrite them on logout.
-           Use “Give item by letter”, or wait until the player logs out.</p>
+           Wait until the player logs out, then reload. In-game letter receipt is not implemented yet.</p>
     }
     @if (!string.IsNullOrEmpty(_error))
     {
@@ -58,6 +58,10 @@ else
            Slots beyond that are shown for completeness but are not written back.</p>
     }
 
+    @if (_character.StoredInventorySlots > InventorySlots.Total)
+    {
+        <p class="alert alert-warning">Legacy inventory trailer detected. Slots beyond 73 are hidden and preserved byte-for-byte, not treated as editable equipment.</p>
+    }
     <div class="editor-layout">
         <div class="editor-main">
             <div class="tabs">
@@ -116,15 +120,15 @@ else
             <div class="card">
                 <h3>Character</h3>
                 <div class="form-grid">
-                    <label>Level <input class="input" type="number" @bind="_character.Level" @oninput="Dirty" /></label>
-                    <label>Class ID <input class="input" type="number" @bind="_character.ClassId" @oninput="Dirty" /></label>
-                    <label>Coins (inventory) <input class="input" type="number" @bind="_character.Gold" @oninput="Dirty" /></label>
-                    <label>Coins (warehouse) <input class="input" type="number" @bind="_character.BankCoins" @oninput="Dirty" /></label>
-                    <label>EXP <input class="input" type="number" @bind="_character.Exp" @oninput="Dirty" /></label>
-                    <label>Loyalty (NP) <input class="input" type="number" @bind="_character.Loyalty" @oninput="Dirty" /></label>
-                    <label>Stat points free <input class="input" type="number" @bind="_character.StatPoints" @oninput="Dirty" /></label>
+                    <label>Level <input class="input" type="number" @bind="_character.Level" @bind:after="MarkDirty" /></label>
+                    <label>Class ID <input class="input" type="number" @bind="_character.ClassId" @bind:after="MarkDirty" /></label>
+                    <label>Coins (inventory) <input class="input" type="number" @bind="_character.Gold" @bind:after="MarkDirty" /></label>
+                    <label>Coins (warehouse) <input class="input" type="number" @bind="_character.BankCoins" @bind:after="MarkDirty" /></label>
+                    <label>EXP <input class="input" type="number" @bind="_character.Exp" @bind:after="MarkDirty" /></label>
+                    <label>Loyalty (NP) <input class="input" type="number" @bind="_character.Loyalty" @bind:after="MarkDirty" /></label>
+                    <label>Stat points free <input class="input" type="number" @bind="_character.StatPoints" @bind:after="MarkDirty" /></label>
                     <label>Authority
-                        <select class="input" @bind="_character.Authority" @oninput="Dirty">
+                        <select class="input" @bind="_character.Authority" @bind:after="MarkDirty">
                             <option value="0">0 — Game Master</option>
                             <option value="1">1 — Player</option>
                             <option value="11">11 — Muted</option>
@@ -135,11 +139,11 @@ else
                     </label>
                 </div>
                 <div class="form-grid stats">
-                    <label>STR <input class="input" type="number" @bind="_character.Stats[0]" @oninput="Dirty" /></label>
-                    <label>STA <input class="input" type="number" @bind="_character.Stats[1]" @oninput="Dirty" /></label>
-                    <label>DEX <input class="input" type="number" @bind="_character.Stats[2]" @oninput="Dirty" /></label>
-                    <label>INT <input class="input" type="number" @bind="_character.Stats[3]" @oninput="Dirty" /></label>
-                    <label>CHA <input class="input" type="number" @bind="_character.Stats[4]" @oninput="Dirty" /></label>
+                    <label>STR <input class="input" type="number" @bind="_character.Stats[0]" @bind:after="MarkDirty" /></label>
+                    <label>STA <input class="input" type="number" @bind="_character.Stats[1]" @bind:after="MarkDirty" /></label>
+                    <label>DEX <input class="input" type="number" @bind="_character.Stats[2]" @bind:after="MarkDirty" /></label>
+                    <label>INT <input class="input" type="number" @bind="_character.Stats[3]" @bind:after="MarkDirty" /></label>
+                    <label>CHA <input class="input" type="number" @bind="_character.Stats[4]" @bind:after="MarkDirty" /></label>
                 </div>
                 @if (_character.MissingColumns.Count > 0)
                 {
@@ -286,7 +290,7 @@ else
 
     private string TabCss(string tab) => "tab" + (_tab == tab ? " tab-active" : "");
 
-    private void Dirty(ChangeEventArgs _) => _dirty = true;
+    private void MarkDirty() => _dirty = true;
 
     private ItemSlotData[] ArrayFor(int area) => area == _areaInv ? _character!.Inventory : _character!.Warehouse;
 

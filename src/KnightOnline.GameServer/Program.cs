@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using KnightOnline.Database;
 using KnightOnline.Database.Items;
+using KnightOnline.Database.World;
 using KnightOnline.GameServer;
 using KnightOnline.Shared;
 using KnightOnline.Shared.Diagnostics;
@@ -30,7 +31,7 @@ using KnightOnline.Shared.Protocol;
 // once you create a character) is the spec for the next increment.
 
 Console.Title = $"Game Server for Knight Online v{GameVersion.Version} (.NET)";
-KoLog.ConfigureFile("Logs/GameServer.log");
+KoLog.StartRun("GameServer");
 
 var settings = GameServerSettings.Load();
 if (!File.Exists(GameServerSettings.ConfigFileName))
@@ -38,12 +39,51 @@ if (!File.Exists(GameServerSettings.ConfigFileName))
                "copy GameServer.sample.ini and set [DATABASE] to your LogInServer.ini credentials.");
 
 var characters = new MariaDbCharacterRepository(settings.Database);
+try
+{
+    await characters.EnsureTravelSchemaAsync();
+    await characters.EnsureCombatSchemaAsync();
+    await characters.EnsurePotionDataAsync();
+    var catalogRepair = await characters.RepairItemCatalogAsync();
+    KoLog.Info($"Item catalog: restored {catalogRepair.Restored} missing ITEM row(s) from {catalogRepair.SourceCount} shipped definitions; existing definitions and saved inventory unchanged.");
+}
+catch (Exception ex)
+{
+    KoLog.Error("Game data initialization failed. Check database connectivity and ITEM/KO_WORLD_TRAVEL table permissions before retrying.", ex);
+    return 1;
+}
+
+if (args.Length == 2 && args[0] == "--grant-gm")
+{
+    try
+    {
+        var count = await characters.GrantGameMasterAsync(args[1]);
+        KoLog.Info($"GM promotion: account '{args[1]}', {count} owned character(s). Log out and reconnect to load authority 0.");
+        return count > 0 ? 0 : 1;
+    }
+    catch (Exception ex)
+    {
+        KoLog.Error("GM promotion failed; no promotion was committed.", ex);
+        return 1;
+    }
+}
 
 var port = settings.Port;
 if (args.Length > 0 && int.TryParse(args[0], out var parsedPort) && parsedPort is > 0 and < 65536)
     port = parsedPort;
 
-var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters));
+WorldCatalog world;
+try
+{
+    world = new WorldCatalog(await characters.LoadWorldDataAsync(), WorldCatalog.FindMapDirectory());
+}
+catch (Exception ex)
+{
+    KoLog.Error("World NPC/map loading failed. Fix the reported asset or data reference before starting.", ex);
+    return 1;
+}
+var chat = new ChatHub();
+var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat));
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -54,9 +94,9 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 KoLog.Warn($"GameServer prototype on port {port}: version check, game login, nation select, the " +
-           "character list, creation/selection and the world-entry info dump (MYINFO) are implemented; " +
-           "deeper world systems are logged and not answered yet (docs/CSHARP_REWRITE_PLAN.md, M4/M5).");
-KoLog.Info("Milestone order: wire core -> LoginServer (done) -> data layer (done) -> login/char-select vertical slice.");
+           "character list, creation/selection, NPC/monster spawns, PvE attacks/skills/retaliation, XP/loot, NPC shops, anvil windows and native warp gates are implemented; " +
+           "repairs/upgrades, warehouse, quests, full chasing AI, parties and unsupported skill types remain unported (docs/CSHARP_REWRITE_PLAN.md, M4/M5).");
+KoLog.Info($"Build: {Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion}; NPC shop transactions enabled.");
 
 try
 {
@@ -76,7 +116,7 @@ return 0;
 /// pre-character-select gate - the opening of CUser::HandlePacket. Packets are
 /// logged in both directions so a client run doubles as a protocol capture.
 /// </summary>
-internal sealed class GameSession : KoSession
+internal sealed partial class GameSession : KoSession
 {
     /// <summary>Bytes of each captured packet to dump; the opening ones are small.</summary>
     private const int DumpLimit = 128;
@@ -112,6 +152,7 @@ internal sealed class GameSession : KoSession
     private static int _lastSocketId = 1000;
 
     private readonly MariaDbCharacterRepository _characters;
+    private readonly bool _characterPreviewEquipment;
     private readonly ushort _socketId;
 
     /// <summary>Port of m_strAccountID: empty until GAME_LOGIN accepts us.</summary>
@@ -119,6 +160,8 @@ internal sealed class GameSession : KoSession
 
     /// <summary>Set by WIZ_SEL_CHAR: the LOAD_USER_DATA row and m_strUserID.</summary>
     private UserData? _user;
+    private CharacterEditLease? _editLease;
+    private Timer? _editLeaseTimer;
     private string _charId = string.Empty;
 
     /// <summary>GAMESTART opcode 2 flips CUser::m_state to GAME_STATE_INGAME.</summary>
@@ -134,7 +177,7 @@ internal sealed class GameSession : KoSession
     private ushort _totalHit;
     private short _totalAc;
     private ushort _maxWeight;
-    private short _itemWeight;
+    private int _itemWeight;
     private readonly short[] _statBonus = new short[5];
     private readonly short[] _resist = new short[6];
 
@@ -143,16 +186,29 @@ internal sealed class GameSession : KoSession
     private readonly byte[] _stats = new byte[5];
     private short _points;
 
-    public GameSession(TcpClient client, MariaDbCharacterRepository characters)
+    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment, ChatHub chat)
         : base(client, maxPayloadSize: 8192)
     {
         _characters = characters;
+        _chat = chat;
+        _characterPreviewEquipment = characterPreviewEquipment;
+        _world = world;
         _socketId = unchecked((ushort)Interlocked.Increment(ref _lastSocketId));
     }
 
     protected override bool HandlePacket(Packet packet)
     {
-        KoLog.Info($"<- {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s)): {Hexdump(packet.Payload)}");
+        lock (_gameGate)
+        {
+            try { return HandleGamePacket(packet); }
+            finally { UpdateChatPresence(); }
+        }
+    }
+
+    private bool HandleGamePacket(Packet packet)
+    {
+        if (_inventoryFaulted) return false;
+        KoLog.Info($"<- {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s)): {PacketTrace.GamePayload(packet)}");
 
         if (!IsCryptoEnabled)
         {
@@ -176,6 +232,10 @@ internal sealed class GameSession : KoSession
 
         if (_user is not null)
         {
+            if (_travelStage != 0 && packet.Opcode != WizOpcode.ZoneChange
+                && packet.Opcode != WizOpcode.SpeedhackCheck)
+                return true;
+
             // Past WIZ_SEL_CHAR: the in-game half of CUser::HandlePacket's switch.
             switch (packet.Opcode)
             {
@@ -191,6 +251,67 @@ internal sealed class GameSession : KoSession
                 case WizOpcode.Rental:
                     // CUser::RentalSystem reads the sub-opcode, but the premium/PvP
                     // rental handling is commented out in the original: no answer.
+                    break;
+                case WizOpcode.Move:
+                    WorldMove(packet);
+                    break;
+                case WizOpcode.ObjectEvent:
+                    WorldObjectEvent(packet);
+                    break;
+                case WizOpcode.NpcEvent:
+                    WorldNpcEvent(packet);
+                    break;
+                case WizOpcode.ReqNpcin:
+                    WorldNpcRequest(packet);
+                    break;
+                case WizOpcode.MagicProcess:
+                    if (!UseCombatSkill(packet)) UsePotion(packet);
+                    break;
+                case WizOpcode.BundleOpenReq:
+                    OpenLoot(packet);
+                    break;
+                case WizOpcode.ItemGet:
+                    PickupLoot(packet);
+                    break;
+                case WizOpcode.SkillptChange:
+                    AllocateSkillPoint(packet);
+                    break;
+                case WizOpcode.Regene:
+                    RevivePlayer(packet);
+                    break;
+                case WizOpcode.Attack:
+                    MeleeAttack(packet);
+                    break;
+                case WizOpcode.TargetHp:
+                    TargetHp(packet);
+                    break;
+                case WizOpcode.ItemTrade:
+                    ItemTrade(packet);
+                    break;
+                case WizOpcode.ItemRepair:
+                    Send(new Packet(WizOpcode.ItemRepair).WriteByte(0).WriteUInt32((uint)_user.Gold));
+                    TravelMessage("Repair processing is not implemented yet; no coins or items changed.");
+                    break;
+                case WizOpcode.ItemUpgrade:
+                    RejectWorldUpgrade(packet);
+                    break;
+                case WizOpcode.StateChange:
+                    BasicStateChange(packet);
+                    break;
+                case WizOpcode.Home:
+                    Town();
+                    break;
+                case WizOpcode.Chat:
+                    TravelChat(packet);
+                    break;
+                case WizOpcode.ChatTarget:
+                    ChatTargetSelect(packet);
+                    break;
+                case WizOpcode.WarpList:
+                    SelectTravel(packet);
+                    break;
+                case WizOpcode.ZoneChange:
+                    FinishTravel(packet);
                     break;
                 case WizOpcode.ItemMove:
                     ItemMove(packet);
@@ -347,22 +468,16 @@ internal sealed class GameSession : KoSession
             slots = new[] { CharacterSelectInfo.Empty, CharacterSelectInfo.Empty, CharacterSelectInfo.Empty };
         }
 
-        var result = new Packet(WizOpcode.AllcharInfoReq);
-        result.WriteByte(1);
-        foreach (var slot in slots)
+        var result = CharacterListPackets.Build(slots, _characterPreviewEquipment);
+        KoLog.Info($"[ CHAR PREVIEW ] equipmentModels={(_characterPreviewEquipment ? "enabled" : "suppressed (recovery mode)")}; saved inventory unchanged");
+        for (var i = 0; i < slots.Count; i++)
         {
-            result.WriteString(slot.CharacterId)
-                .WriteByte(slot.Race)
-                .WriteUInt16(slot.Class)
-                .WriteByte(slot.Level)
-                .WriteByte(slot.Face)
-                .WriteByte(slot.Hair)
-                .WriteByte(slot.Zone);
-
-            foreach (var item in slot.VisibleEquipment)
-                result.WriteUInt32(item.ItemId).WriteUInt16(item.Durability);
+            var slot = slots[i];
+            if (slot.CharacterId.Length == 0) continue;
+            KoLog.Info($"[ CHAR PREVIEW ] slot={i} char={slot.CharacterId} race={slot.Race} class={slot.Class} level={slot.Level} face={slot.Face} hair={slot.Hair} zone={slot.Zone} " +
+                $"savedEquipment={string.Join(",", slot.VisibleEquipment.Select(item => item?.ItemId ?? 0))}");
         }
-
+        KoLog.Info($"[ CHAR PREVIEW ] reply={Convert.ToHexString(result.Payload)}");
         Send(result);
     }
 
@@ -431,7 +546,7 @@ internal sealed class GameSession : KoSession
     /// (captured: string account, string char, uint8 init), which the C++
     /// source - written against a later client - does not read; the capture
     /// wins, and the account is verified against the session. The success
-    /// answer is the original's: result byte, init echo, zone, spawn X/Z/Y,
+    /// answer is the original's: result byte, uint8 zone, spawn X/Z/Y,
     /// old-victory flag. The warehouse/premium/saved-magic loads that gate
     /// the original collapse to the warehouse existence check inside
     /// <see cref="MariaDbCharacterRepository.LoadUserDataAsync"/>.
@@ -440,17 +555,31 @@ internal sealed class GameSession : KoSession
     {
         var account = packet.ReadString();
         var charId = packet.ReadString();
-        var init = packet.ReadByte();
+        _ = packet.ReadByte(); // bInit: internal selection flag, not part of the success reply
 
+        if (_user is not null) { Send(new Packet(WizOpcode.SelChar).WriteByte(0)); return; }
         UserData? user = null;
         if (string.Equals(account, _accountId, StringComparison.Ordinal) && charId.Length > 0)
         {
             try
             {
+                if (_editLease is not null) throw new InvalidOperationException("Character already selected.");
+                _editLease = _characters.AcquireEditLease(account, charId);
                 user = _characters.LoadUserDataAsync(account, charId).GetAwaiter().GetResult();
+                if (user is null) { _editLease.Dispose(); _editLease = null; }
+                else _editLeaseTimer = new Timer(_ =>
+                {
+                    lock (_gameGate)
+                    {
+                        try { _editLease?.Ping(); }
+                        catch (Exception ex) { KoLog.Error("Session protection connection lost; disconnecting.", ex); _inventoryFaulted = true; Disconnect(); }
+                    }
+                }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
             }
             catch (Exception ex)
             {
+                try { _editLease?.Dispose(); } catch { }
+                _editLease = null;
                 KoLog.Error($"Loading user data for '{charId}' could not reach the database.", ex);
             }
         }
@@ -464,40 +593,38 @@ internal sealed class GameSession : KoSession
             return;
         }
 
-        KoLog.Info($"[ SEL CHAR - {DateTime.Now:HH:mm:ss} ] ID={_accountId} char={charId} " +
-                   $"zone={user.Zone} spawn={user.Px},{user.Pz},{user.Py} level={user.Level} items={_protos.Count}");
-
         _user = user;
+        _savedPosition = new(user.Zone,user.Px,user.Pz,user.Py);
         _charId = charId;
 
-        var parsed = ItemBlobs.ParseExact(user.Items, ReadOnlySpan<byte>.Empty, ReadOnlySpan<byte>.Empty);
-        _slots = parsed.Slots.Length >= InventoryTotal
-            ? parsed.Slots
-            : parsed.Slots.Concat(Enumerable.Repeat(ItemSlotData.Empty, InventoryTotal - parsed.Slots.Length)).ToArray();
-        _slotCount = Math.Max(parsed.SlotCount, InventoryTotal);
+        var serialBlob = user.Serials ?? Array.Empty<byte>();
+        _slotCount = Math.Max(InventoryTotal, Math.Max((user.Items.Length + 7) / 8, (serialBlob.Length + 7) / 8));
+        _slots = ItemBlobs.Parse(user.Items, serialBlob, ReadOnlySpan<byte>.Empty, _slotCount);
         _stats[0] = user.Str; _stats[1] = user.Sta; _stats[2] = user.Dex;
         _stats[3] = user.Int; _stats[4] = user.Cha;
         _points = user.Points;
         RecomputeStats(refillWhenEmpty: true);
+        var inventoryAudit = ShopRules.MeasureInventory(_slots, _protos);
+        LogInventoryIssues(inventoryAudit.Issues, "character load");
+        var retainedTail = _slots.Select((slot, index) => (slot, index))
+            .Count(entry => !_protos.ContainsKey(entry.slot.ItemId) && LegacyStarterTail.IsKnownUnusedSlot(entry.index, entry.slot));
+        if (retainedTail != 0)
+            KoLog.Info($"[ INVENTORY ] {_charId}: {retainedTail} recognized legacy starter-tail records retained unchanged; not counted as active items");
+        KoLog.Info($"[ SEL CHAR - {DateTime.Now:HH:mm:ss} ] ID={_accountId} char={charId} " +
+                   $"zone={user.Zone} spawn={user.Px},{user.Pz},{user.Py} level={user.Level} items={_protos.Count}");
 
         // GetSPosX() = uint16(world * 10) and the stored PX is world * 100.
-        result.WriteByte(1)
-            .WriteByte(init)
-            .WriteUInt16(user.Zone)
-            .WriteUInt16((ushort)(user.Px / 10))
-            .WriteUInt16((ushort)(user.Pz / 10))
-            .WriteUInt16((ushort)(user.Py / 10))
-            .WriteByte(0); // g_pMain->m_byOldVictory
-        Send(result);
+        // SelectCharacter consumes bInit internally; it is NOT echoed on the wire.
+        // GetZoneID() returns uint8 here, unlike ZoneChange's explicit uint16 cast.
+        Send(TravelPackets.SelectCharacter(user.Zone, user.Px, user.Pz, user.Py));
     }
 
     /// <summary>
     /// Port of CUser::GameStart (CharacterSelectionHandler.cpp). Opcode 1 is
     /// the loading-screen pull: quest data, the full self-info dump, notices,
-    /// time, weather and an empty WIZ_GAMESTART ack. The UserInOutForMe /
-    /// MerchantUserInOutForMe / NpcInOutForMe pushes (the region system:
-    /// nearby players, merchants and the NPC spawn tables) are the next
-    /// increment - until then the world renders empty. Opcode 2 flips the
+    /// time, weather, static nearby NPC records and an empty WIZ_GAMESTART ack.
+    /// Multiplayer player/merchant regions and monster AI remain unported.
+    /// Opcode 2 flips the
     /// session in game (respawn, blink, ability recalc and temple checks come
     /// with combat). The character name after the opcode is single-byte
     /// length; the original does not read it, and neither does the port.
@@ -515,11 +642,13 @@ internal sealed class GameSession : KoSession
             SendNotice();
             SendTime();
             SendWeather();
+            SendWorldNpcs();
             Send(new Packet(WizOpcode.Gamestart));
         }
         else if (opcode == 2)
         {
             _inGame = true;
+            StartRecovery();
             RecomputeStats(refillWhenEmpty: false); // CUser::SetUserAbility()
         }
     }
@@ -529,7 +658,9 @@ internal sealed class GameSession : KoSession
     /// count, then (uint16 quest id, uint8 state) per entry - std::map order,
     /// so sorted by id. Entries come from USERDATA.strQuest as 3-byte records
     /// (DBAgent::LoadUserData); the original also seeds STARTER_SEED_QUEST at
-    /// state 1 when it is missing.
+    /// state 1 when it is missing. The repository persists state 2 instead for
+    /// level-boosted characters while the level-one tutorial is unsupported,
+    /// so their initial tutorial/intro trigger is not offered on every login.
     /// </summary>
     private void SendQuestData()
     {
@@ -601,7 +732,7 @@ internal sealed class GameSession : KoSession
             .WriteInt16(_maxMp)
             .WriteUInt16((ushort)_currentMp)
             .WriteUInt16(_maxWeight)
-            .WriteUInt16((ushort)_itemWeight)
+            .WriteUInt16((ushort)Math.Clamp(_itemWeight, 0, short.MaxValue))
             .WriteByte(_stats[0]).WriteByte(ClampByte(_statBonus[0]))
             .WriteByte(_stats[1]).WriteByte(ClampByte(_statBonus[1]))
             .WriteByte(_stats[2]).WriteByte(ClampByte(_statBonus[2]))
@@ -700,7 +831,7 @@ internal sealed class GameSession : KoSession
             if (i == 47 || i == 48)
                 maxWeightBonus += proto.Duration;
             else
-                _itemWeight += (short)(proto.Weight * slot.Count);
+                _itemWeight += proto.Weight * slot.Count;
 
             // Unequipped items (inventory, magic bags) grant nothing.
             if ((i >= SlotMax && i < CospreStart) || i >= MagicBagStart)
@@ -852,6 +983,9 @@ internal sealed class GameSession : KoSession
     /// </summary>
     private void ItemMove(Packet packet)
     {
+        if (!CanTravel() || packet.RemainingToRead != 7) { SendItemMove(0); return; }
+        var previous = _slots;
+        _slots = _slots.ToArray();
         var dir = packet.ReadByte();
         var itemId = packet.ReadUInt32();
         var src = packet.ReadByte();
@@ -860,23 +994,27 @@ internal sealed class GameSession : KoSession
         var rejection = MoveRejection(dir, itemId, src, dst);
         if (rejection is not null)
         {
+            _slots = previous;
             KoLog.Info($"[ ITEM MOVE - {DateTime.Now:HH:mm:ss} ] {_charId} rejected " +
                        $"dir={dir} item={itemId} {src} -> {dst}: {rejection}");
             SendItemMove(0);
             return;
         }
 
-        var (items, _, _) = ItemBlobs.Serialize(_slots);
+        var proposed = _slots;
+        _slots = previous;
         try
         {
-            _characters.SaveCharacterItemsAsync(_charId, items).GetAwaiter().GetResult();
+            if (!CommitInventory(proposed, _user!.Gold, shopReply: false)) return;
         }
         catch (Exception ex)
         {
-            KoLog.Error($"Saving the item blob for '{_charId}' could not reach the database.", ex);
+            InventoryUnavailable(ex);
+            return;
         }
 
-        RecomputeStats(refillWhenEmpty: false); // SetUserAbility(false)
+        try { RecomputeStats(refillWhenEmpty: false); } // SetUserAbility(false)
+        catch (Exception ex) { InventoryUnavailable(ex); return; }
         SendItemMove(1);
         SendItemWeight();
         KoLog.Info($"[ ITEM MOVE - {DateTime.Now:HH:mm:ss} ] {_charId} dir={dir} item={itemId} {src} -> {dst}");
@@ -1057,7 +1195,7 @@ internal sealed class GameSession : KoSession
     private void SendItemWeight()
     {
         var result = new Packet(WizOpcode.WeightChange);
-        result.WriteInt16(_itemWeight);
+        result.WriteInt16((short)Math.Clamp(_itemWeight, 0, short.MaxValue));
         Send(result);
     }
 
@@ -1108,7 +1246,9 @@ internal sealed class GameSession : KoSession
 
     public override bool Send(Packet packet)
     {
-        KoLog.Info($"-> {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s))");
+        var travelDump = packet.Opcode is WizOpcode.SelChar or WizOpcode.ZoneChange or WizOpcode.Warp
+            ? $": {Hexdump(packet.Payload)}" : string.Empty;
+        KoLog.Info($"-> {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s)){travelDump}");
         return base.Send(packet);
     }
 

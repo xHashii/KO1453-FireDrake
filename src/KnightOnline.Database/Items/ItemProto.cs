@@ -37,7 +37,7 @@ public sealed record ItemProto(
     byte ReqDex,
     byte ReqIntel,
     byte ReqCha,
-    byte Countable)
+    byte Countable, short Delay = 100, short Range = 10)
 {
     /// <summary>C++ GetItemGroup(): the weapon family (WEAPON_* in Define.h).</summary>
     public int Group => Kind / 10;

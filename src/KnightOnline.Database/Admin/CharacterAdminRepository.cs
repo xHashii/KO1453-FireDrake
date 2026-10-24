@@ -19,7 +19,7 @@ namespace KnightOnline.Database.Admin;
 /// expiration support - so expirations simply read as 0 and are not written
 /// back when the columns are absent.
 /// </summary>
-public sealed class CharacterAdminRepository : ICharacterAdminRepository
+public sealed partial class CharacterAdminRepository : ICharacterAdminRepository
 {
     private readonly string _gameConnectionString;
     private readonly string _accountConnectionString;
@@ -141,6 +141,7 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
     public async Task<AdminStats> GetStatsAsync(CancellationToken cancellationToken = default)
     {
         long accounts = 0, characters = 0, online = 0, items = 0;
+        long clans = 0, monsters = 0, spawns = 0, drops = 0, karus = 0, elmorad = 0;
         var accountOk = true;
         var gameOk = true;
         string? error = null;
@@ -153,6 +154,20 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
                 characters = await CountAsync(game, "SELECT COUNT(*) FROM `USERDATA`", cancellationToken).ConfigureAwait(false);
             if (_hasItemTable == true)
                 items = await CountAsync(game, "SELECT COUNT(*) FROM `ITEM`", cancellationToken).ConfigureAwait(false);
+            foreach (var table in new[] { "KNIGHTS", "K_MONSTER", "K_NPCPOS", "K_MONSTER_ITEM" })
+            {
+                if (!await TableExistsAsync(game, table, cancellationToken)) continue;
+                var count = await CountAsync(game, $"SELECT COUNT(*) FROM `{table}`", cancellationToken);
+                if (table == "KNIGHTS") clans = count;
+                if (table == "K_MONSTER") monsters = count;
+                if (table == "K_NPCPOS") spawns = count;
+                if (table == "K_MONSTER_ITEM") drops = count;
+            }
+            if (_userDataColumns!.Contains("Nation"))
+            {
+                karus = await CountAsync(game, "SELECT COUNT(*) FROM USERDATA WHERE Nation=1", cancellationToken);
+                elmorad = await CountAsync(game, "SELECT COUNT(*) FROM USERDATA WHERE Nation=2", cancellationToken);
+            }
         }
         catch (Exception ex)
         {
@@ -174,7 +189,9 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
             error = (error is null ? "" : error + " ") + $"Account DB: {ex.Message}";
         }
 
-        return new AdminStats(accounts, characters, online, items, accountOk, gameOk, error);
+        try { online = (await GetOnlineNamesAsync(cancellationToken)).Count; }
+        catch (Exception ex) { gameOk = false; error = (error ?? "") + " Online status unavailable: " + ex.Message; }
+        return new AdminStats(accounts, characters, online, items, accountOk, gameOk, error, clans, monsters, spawns, drops, karus, elmorad);
     }
 
     private static async Task<long> CountAsync(MySqlConnection connection, string sql, CancellationToken cancellationToken)
@@ -185,7 +202,7 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
         return result is null or DBNull ? 0 : Convert.ToInt64(result);
     }
 
-    public async Task<IReadOnlyList<CharacterSummary>> SearchCharactersAsync(string term, int limit = 100, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<CharacterSummary>> SearchCharactersAsync(string term, int limit = 100, CancellationToken cancellationToken = default, int offset = 0)
     {
         await ProbeAsync(cancellationToken).ConfigureAwait(false);
         var results = new List<CharacterSummary>();
@@ -197,9 +214,10 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
         await using var connection = await OpenGameAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText =
-            $"SELECT {columns} FROM `USERDATA` WHERE `strUserID` LIKE @term ORDER BY `strUserID` LIMIT @limit";
+            $"SELECT {columns} FROM `USERDATA` WHERE `strUserID` LIKE @term ORDER BY `strUserID` LIMIT @limit OFFSET @offset";
         command.Parameters.AddWithValue("@term", $"%{term.Trim()}%");
         command.Parameters.AddWithValue("@limit", Math.Clamp(limit, 1, 500));
+        command.Parameters.AddWithValue("@offset", Math.Max(0, offset));
 
         var names = new List<string>();
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
@@ -236,14 +254,18 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
 
     private static int ReadInt(MySqlDataReader reader, string column)
     {
-        var ordinal = reader.GetOrdinal(column);
-        return reader.IsDBNull(ordinal) ? 0 : Convert.ToInt32(reader.GetValue(ordinal));
+        for (var ordinal = 0; ordinal < reader.FieldCount; ordinal++)
+            if (string.Equals(reader.GetName(ordinal), column, StringComparison.OrdinalIgnoreCase))
+                return reader.IsDBNull(ordinal) ? 0 : Convert.ToInt32(reader.GetValue(ordinal));
+        return 0;
     }
 
     private static long ReadLong(MySqlDataReader reader, string column)
     {
-        var ordinal = reader.GetOrdinal(column);
-        return reader.IsDBNull(ordinal) ? 0 : Convert.ToInt64(reader.GetValue(ordinal));
+        for (var ordinal = 0; ordinal < reader.FieldCount; ordinal++)
+            if (string.Equals(reader.GetName(ordinal), column, StringComparison.OrdinalIgnoreCase))
+                return reader.IsDBNull(ordinal) ? 0 : Convert.ToInt64(reader.GetValue(ordinal));
+        return 0;
     }
 
     private static byte[] ReadBlob(MySqlDataReader reader, string column)
@@ -301,6 +323,14 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
     private async Task<HashSet<string>> GetOnlineNamesAsync(CancellationToken cancellationToken)
     {
         var online = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        await using (var game = await OpenGameAsync(cancellationToken))
+        {
+            await using var command = game.CreateCommand();
+            command.CommandText = $"SELECT strUserID FROM USERDATA WHERE IS_USED_LOCK({CharacterEditLease.CharacterLockExpression}) IS NOT NULL";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken)) online.Add(reader.GetString(0));
+        }
 
         // CURRENTUSER normally lives in the account DB; hybrid installs keep it in the game DB.
         foreach (var open in new Func<CancellationToken, Task<MySqlConnection>>[] { OpenAccountAsync, OpenGameAsync })
@@ -385,12 +415,12 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
                     ReadInt(reader, "Intel"), ReadInt(reader, "Cha"),
                 },
                 StatPoints = ReadInt(reader, "Points"),
-                Inventory = ItemBlobs.Parse(itemBlob, serialBlob, itemTimeBlob, InventorySlots.Total),
+                Inventory = ItemBlobs.Parse(itemBlob, serialBlob, itemTimeBlob, Math.Max(InventorySlots.Total, Math.Max(itemBlob.Length / 8, serialBlob.Length / 8))),
                 Warehouse = Enumerable.Repeat(ItemSlotData.Empty, InventorySlots.WarehouseTotal).ToArray(),
                 BankCoins = 0,
                 IsOnline = false,
                 MissingColumns = UserDataWishList.Where(c => !Has(c)).ToHashSet(StringComparer.OrdinalIgnoreCase),
-                StoredInventorySlots = Math.Min(InventorySlots.Total, itemBlob.Length / ItemBlobs.ItemEntrySize),
+                StoredInventorySlots = Math.Max(itemBlob.Length / 8, serialBlob.Length / 8),
                 ConcurrencyToken = "",
             };
         }
@@ -427,12 +457,16 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
         details.Warehouse = ItemBlobs.Parse(warehouseItems, warehouseSerials, warehouseTimes, InventorySlots.WarehouseTotal);
         details.BankCoins = bankCoins;
         details.IsOnline = online.Contains(details.Name);
-        details.ConcurrencyToken = BlobToken(itemBlob, serialBlob, itemTimeBlob, warehouseItems, warehouseSerials, warehouseTimes);
+        details.ConcurrencyToken = BlobToken(itemBlob, serialBlob, itemTimeBlob, warehouseItems, warehouseSerials, warehouseTimes, ScalarBytes(details), BitConverter.GetBytes(bankCoins));
         return details;
     }
 
     // CharacterDetails is a class with init-only members; this helper rebuilds
     // the few post-load fields without a second query.
+    private static readonly string[] ScalarColumns = ["Class", "Level", "Exp", "Loyalty", "Gold", "Authority", "Points", "Strong", "Sta", "Dex", "Intel", "Cha"];
+    private static byte[] ScalarBytes(IEnumerable<long> values) => Encoding.UTF8.GetBytes(string.Join(",", values.Select(v => v.ToString(System.Globalization.CultureInfo.InvariantCulture))));
+    private static byte[] ScalarBytes(CharacterDetails c) => ScalarBytes(new long[] { c.ClassId, c.Level, c.Exp, c.Loyalty, c.Gold, c.Authority, c.StatPoints }.Concat(c.Stats.Select(v => (long)v)));
+
     private static string BlobToken(params byte[][] blobs)
     {
         using var sha = SHA256.Create();
@@ -454,6 +488,13 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
         if (online.Contains(character.Name))
             throw new AdminEditRejectedException($"{character.Name} is online - refusing to edit item blobs (the logout save would clobber the edit).");
 
+        if (character.Level is < 1 or > 255 || character.ClassId is < 1 or > short.MaxValue ||
+            character.Authority is < 0 or > 255 || character.Gold is < 0 or > int.MaxValue ||
+            character.BankCoins is < 0 or > int.MaxValue || character.Loyalty is < 0 or > int.MaxValue ||
+            character.Exp < 0 || character.StatPoints is < 0 or > short.MaxValue ||
+            character.Stats.Length != 5 || character.Stats.Any(v => v is < 0 or > 255))
+            throw new AdminEditRejectedException("Stats, level or currencies are outside the stored game field ranges.");
+
         // Preserve the stored number of item slots (47 for this codebase's
         // SaveUserData, 73 max) rather than silently growing the blob.
         var storedSlots = character.StoredInventorySlots > 0
@@ -464,15 +505,19 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
         var (wItems, wSerials, wTimes) = ItemBlobs.Serialize(character.Warehouse);
 
         await using var connection = await OpenGameAsync(cancellationToken).ConfigureAwait(false);
+        var accounts = await ResolveAccountsAsync(connection, new[] { character.Name }, cancellationToken);
+        if (accounts.GetValueOrDefault(character.Name) != character.AccountId)
+            throw new AdminEditRejectedException("Account ownership changed. Reload before saving.");
+        using var editLease = CharacterEditLease.Acquire(connection, character.AccountId, character.Name);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
+        byte[] oldScalars = [], oldBank = BitConverter.GetBytes(0L);
         byte[] oldItems, oldSerials, oldTimes, oldWItems = Array.Empty<byte>(), oldWSerials = Array.Empty<byte>(), oldWTimes = Array.Empty<byte>();
 
         await using (var command = connection.CreateCommand())
         {
             command.Transaction = transaction;
-            command.CommandText = "SELECT `strItem`, `strSerial`" +
-                (HasItemTime ? ", `strItemTime`" : "") +
+            command.CommandText = "SELECT *" +
                 " FROM `USERDATA` WHERE `strUserID` = @name FOR UPDATE";
             command.Parameters.AddWithValue("@name", character.Name);
 
@@ -480,16 +525,18 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
             if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 throw new AdminEditRejectedException($"Character {character.Name} no longer exists.");
 
+            oldScalars = ScalarBytes(ScalarColumns.Select(c => Has(c) ? ReadLong(reader, c) : 0));
             oldItems = ReadBlob(reader, "strItem");
             oldSerials = ReadBlob(reader, "strSerial");
             oldTimes = ReadOptionalBlob(reader, "strItemTime");
+            if (await reader.ReadAsync(cancellationToken)) throw new AdminEditRejectedException("Duplicate character rows; repair the database before editing.");
         }
 
         if (character.AccountId is not null && _warehouseColumns is { Count: > 0 } && _warehouseColumns.Contains("WarehouseData"))
         {
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = "SELECT `WarehouseData`, `strSerial`" +
+            command.CommandText = "SELECT `nMoney`, `WarehouseData`, `strSerial`" +
                 (HasWarehouseTime ? ", `WarehouseDataTime`" : "") +
                 " FROM `WAREHOUSE` WHERE `strAccountID` = @account FOR UPDATE";
             command.Parameters.AddWithValue("@account", character.AccountId);
@@ -497,13 +544,30 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
             await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
             if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
+                oldBank = BitConverter.GetBytes(ReadLong(reader, "nMoney"));
                 oldWItems = ReadBlob(reader, "WarehouseData");
                 oldWSerials = ReadBlob(reader, "strSerial");
                 oldWTimes = ReadOptionalBlob(reader, "WarehouseDataTime");
+                if (await reader.ReadAsync(cancellationToken)) throw new AdminEditRejectedException("Duplicate warehouse rows; repair before editing.");
             }
         }
 
-        var currentToken = BlobToken(oldItems, oldSerials, oldTimes, oldWItems, oldWSerials, oldWTimes);
+        // Unknown legacy trailer bytes are not editor slots. Never rewrite them.
+        static byte[] KeepTrailer(byte[] proposed, byte[] original, int editableBytes)
+        {
+            if (original.Length <= editableBytes) return proposed;
+            var merged = (byte[])original.Clone();
+            proposed.AsSpan(0, Math.Min(editableBytes, proposed.Length)).CopyTo(merged);
+            return merged;
+        }
+        items = KeepTrailer(items, oldItems, InventorySlots.Total * 8);
+        serials = KeepTrailer(serials, oldSerials, InventorySlots.Total * 8);
+        itemTimes = KeepTrailer(itemTimes, oldTimes, InventorySlots.Total * 4);
+        wItems = KeepTrailer(wItems, oldWItems, InventorySlots.WarehouseTotal * 8);
+        wSerials = KeepTrailer(wSerials, oldWSerials, InventorySlots.WarehouseTotal * 8);
+        wTimes = KeepTrailer(wTimes, oldWTimes, InventorySlots.WarehouseTotal * 4);
+
+        var currentToken = BlobToken(oldItems, oldSerials, oldTimes, oldWItems, oldWSerials, oldWTimes, oldScalars, oldBank);
         if (currentToken != character.ConcurrencyToken)
         {
             await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
@@ -593,7 +657,7 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
             audit.Parameters.AddWithValue("@admin", adminUser);
             audit.Parameters.AddWithValue("@target", character.Name);
             audit.Parameters.AddWithValue("@detail",
-                $"level={character.Level} gold={character.Gold} bank={character.BankCoins} token={currentToken[..12]}");
+                System.Text.Json.JsonSerializer.Serialize(new { beforeScalars = Encoding.UTF8.GetString(oldScalars), beforeBank = BitConverter.ToInt64(oldBank), afterScalars = Encoding.UTF8.GetString(ScalarBytes(character)), afterBank = character.BankCoins, previousToken = currentToken }));
             await audit.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
@@ -604,7 +668,10 @@ public sealed class CharacterAdminRepository : ICharacterAdminRepository
         // what the next load/save will read back.
         var storedItemTimes = HasItemTime ? itemTimes : Array.Empty<byte>();
         var storedWTimes = HasWarehouseTime ? wTimes : Array.Empty<byte>();
-        var newToken = BlobToken(items, serials, storedItemTimes, wItems, wSerials, storedWTimes);
+        var storesWarehouse = character.AccountId is not null && _warehouseColumns is { Count: > 0 } && _warehouseColumns.Contains("WarehouseData");
+        var newToken = BlobToken(items, serials, storedItemTimes, storesWarehouse ? wItems : oldWItems,
+            storesWarehouse ? wSerials : oldWSerials, storesWarehouse ? storedWTimes : oldWTimes,
+            ScalarBytes(character), storesWarehouse ? BitConverter.GetBytes(character.BankCoins) : oldBank);
         KoLog.Info($"[admin] {adminUser} saved character {character.Name}");
         return newToken;
     }

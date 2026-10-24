@@ -85,3 +85,41 @@ The originals were bare consoles (the C++ even kept MFC dialog remnants,
 `*Dlg.cpp`). The C# ports will keep clean consoles for operations, and the
 "UI" investment goes into this panel: status dashboard, live logs and
 editors — which is also how KOWEB-style tools present it.
+
+## October 2026: character browsing, dashboard and drops
+
+- Character browsing loads on entry; an empty Search browses **all** characters
+  with Previous/Next (50 per page), rather than silently stopping at 100.
+- Dashboard adds clans, nation character counts, monster definitions, spawn rows
+  and drop-group counts. Definitions/rows are not counts of living runtime monsters.
+- **Monster drops** edits existing `K_MONSTER_ITEM` rows, searchable by monster
+  name or group ID. It does not create/delete groups or edit monster/spawn stats.
+  Slots 1–2 use production codes (`<100`, MAKE_ITEM_GRADECODE) or
+  MAKE_ITEM_GROUP (`>=100`, randomly selected among 30 entries); only slots 3–5
+  are direct ITEM IDs. Independent chances are out of 10000, not out of 100.
+  New/activated references are validated; existing broken source references can
+  be disabled. Duplicate IDs and stale saves are rejected. Before/after JSON is
+  retained in `_ko_admin_audit` in the same transaction as the update.
+- Solo in-game loot now resolves this catalog (including procedural/group slots).
+  There is no live reload. Restart GameServer after catalog edits. Stationary
+  retaliation and selected single-target skills are implemented; full chasing AI,
+  party rewards, buffs, DoTs and AoE remain unsupported.
+- **Deploy the panel and GameServer from the same updated build.** The server
+  holds MariaDB account/character advisory locks from character selection until
+  its disconnect save finishes. Admin saves acquire the same locks, including
+  the shared account warehouse, closing the old CURRENTUSER check race. The
+  session's dedicated non-pooled connection is checked every 30 seconds; a lost
+  connection disconnects the player instead of continuing unprotected play.
+  Old C++ servers and older rewrite binaries do not participate: stop them
+  before editing. CURRENTUSER is retained as a conservative legacy status hint.
+- Character concurrency checks now include editable scalar stats/currencies and
+  bank coins as well as blobs; duplicated character/warehouse rows are rejected.
+  Stored inventory slots beyond the 73-slot visible editor are retained.
+  Character item backups remain blob backups, not full database backups.
+
+Before testing, back up the database, rebuild the solution and restart GameServer
+and AdminPanel. Browse Characters with no search text, edit an offline character,
+verify a second stale editor is rejected, then log in and verify character/account
+edits are refused. Open Monster drops, lower a chance, save/reload, and inspect
+`_ko_admin_audit`; then restart GameServer and use the end-to-end combat checklist
+in `docs/COMBAT_AND_LOOT.md`.

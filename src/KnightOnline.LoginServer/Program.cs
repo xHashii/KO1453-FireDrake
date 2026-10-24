@@ -5,7 +5,7 @@ using KnightOnline.Shared.Diagnostics;
 // Port of LogInServer/main.cpp.
 
 Console.Title = $"LogIn Server for Knight Online v{GameVersion.Version} (.NET)";
-KoLog.ConfigureFile("Logs/LoginServer.log");
+KoLog.StartRun("LoginServer");
 
 LoginServerSettings settings;
 try

@@ -19,7 +19,7 @@ namespace KnightOnline.Database;
 /// connection per call instead of sharing one ODBC handle, and implements the
 /// routines in C# rather than as MariaDB procedures.
 /// </summary>
-public sealed class MariaDbCharacterRepository
+public sealed partial class MariaDbCharacterRepository
 {
     /// <summary>
     /// Equipped-inventory slots the character-select screen renders, as slot
@@ -27,16 +27,74 @@ public sealed class MariaDbCharacterRepository
     /// HEAD, BREAST, SHOULDER, LEG, GLOVE, FOOT, RIGHTHAND, LEFTHAND
     /// (shared/globals.h).
     /// </summary>
-    private static readonly int[] VisibleSlots = { 1, 4, 5, 10, 12, 13, 6, 8 };
+    // CDBAgent::LoadCharInfo scans slots 0..SLOT_MAX, emitting visible slots
+    // in numeric order (shared/globals.h), NOT armor-first then weapons.
+    // Reordering these makes the client interpret armor as a weapon and vice versa.
+    private static readonly int[] VisibleSlots = { 1, 4, 5, 6, 8, 10, 12, 13 };
 
     /// <summary>Bytes per inventory slot in strItem: uint32 id + uint16 durability + uint16 count.</summary>
     private const int InventorySlotSize = 8;
+
+    public CharacterEditLease AcquireEditLease(string account, string character)
+    {
+        var settings = new MySqlConnectionStringBuilder(_connectionString) { Pooling = false };
+        var connection = new MySqlConnection(settings.ConnectionString);
+        try
+        {
+            connection.Open();
+            // Resolve persisted spellings first: accent-insensitive database equality
+            // must not let an alternate wire spelling acquire a different lock.
+            string Canonical(string table, string column, string value)
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = $"SELECT `{column}` FROM `{table}` WHERE `{column}`=@value";
+                command.Parameters.AddWithValue("@value", value);
+                using var reader = command.ExecuteReader();
+                if (!reader.Read()) throw new InvalidOperationException("Character/account does not exist.");
+                var canonical = reader.GetString(0);
+                if (reader.Read()) throw new InvalidOperationException("Ambiguous character/account rows.");
+                return canonical;
+            }
+            return CharacterEditLease.Acquire(connection,
+                Canonical("ACCOUNT_CHAR", "strAccountID", account),
+                Canonical("USERDATA", "strUserID", character), true);
+        }
+        catch { connection.Dispose(); throw; }
+    }
 
     private readonly string _connectionString;
 
     public MariaDbCharacterRepository(DatabaseSettings settings)
     {
         _connectionString = settings.BuildConnectionString();
+    }
+
+    /// <summary>
+    /// Restores shipped starter prototypes missing from a partial data import.
+    /// Runs once at server startup, atomically, without changing existing rows.
+    /// The embedded seed is independent of the launch directory and publish layout.
+    /// </summary>
+    public async Task<int> RepairStarterItemPrototypesAsync(CancellationToken cancellationToken = default)
+    {
+        using var stream = typeof(MariaDbCharacterRepository).Assembly.GetManifestResourceStream(
+            "KnightOnline.Database.Items.StarterItemRepair.sql")
+            ?? throw new InvalidOperationException("Embedded starter-item repair data is missing.");
+        using var reader = new StreamReader(stream);
+        await using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var restored = 0;
+        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+        {
+            if (!line.StartsWith("INSERT INTO `ITEM` ", StringComparison.Ordinal))
+                continue;
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = line;
+            restored += await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return restored;
     }
 
     /// <summary>
@@ -336,7 +394,7 @@ public sealed class MariaDbCharacterRepository
                     "Points, Gold, Zone, PX, PZ, PY, dwTime, sQuestCount, MannerPoint, LoyaltyMonthly, dtCreateTime) " +
                     "VALUES (@charId, @nation, @race, @class, @hair, @face, " +
                     "@strong, @sta, @dex, @intel, @cha, " +
-                    "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, " +
+                    "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, " +
                     "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NOW())";
                 command.Parameters.AddWithValue("@charId", charId);
                 command.Parameters.AddWithValue("@nation", nation);
@@ -397,8 +455,8 @@ public sealed class MariaDbCharacterRepository
 
             // The T-SQL INSERT left Zone/PX/PZ/PY to SQL Server defaults the
             // converted schema lost; a character at zone 0 has no map and can
-            // never enter the world, so the port spawns it at its nation's
-            // home zone init point. ZONE_INFO and USERDATA both store
+            // never enter the world, so the port spawns it at the
+            // Moradon init point. ZONE_INFO and USERDATA both store
             // world * 100 (ZoneInfoSet and DBAgent::LoadUserData divide by
             // 100 for the float world position); the WIZ_SEL_CHAR/WIZ_MYINFO
             // answers send GetSPosX() = uint16(world * 10), i.e. stored / 10.
@@ -406,7 +464,7 @@ public sealed class MariaDbCharacterRepository
             {
                 command.Transaction = transaction;
                 command.CommandText =
-                    "UPDATE USERDATA u JOIN ZONE_INFO z ON z.ZoneNo = @nation AND z.ServerNo = 1 " +
+                    "UPDATE USERDATA u JOIN ZONE_INFO z ON z.ZoneNo = 21 AND z.ServerNo = 1 " +
                     "SET u.Zone = z.ZoneNo, u.PX = z.InitX, u.PZ = z.InitZ, u.PY = z.InitY " +
                     "WHERE u.strUserID = @charId";
                 command.Parameters.AddWithValue("@nation", nation);
@@ -490,13 +548,16 @@ public sealed class MariaDbCharacterRepository
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        await RepairLegacySpawnAsync(connection, charId, cancellationToken).ConfigureAwait(false);
+        await SkipBoostedStarterQuestAsync(connection, charId, cancellationToken).ConfigureAwait(false);
+
         // Distinct names on purpose: C# forbids reusing 'command'/'reader' at
         // method scope when enclosed blocks already used them (CS0136).
         await using var select = connection.CreateCommand();
         select.CommandText =
             "SELECT Nation, Race, Class, HairRGB, Rank, Title, Level, Exp, Loyalty, Face, City, " +
             "Knights, Fame, Hp, Mp, Sp, Strong, Sta, Dex, Intel, Cha, Authority, Points, Gold, " +
-            "Zone, PX, PZ, PY, strSkill, strItem, MannerPoint, LoyaltyMonthly, sQuestCount, strQuest " +
+            "Zone, PX, PZ, PY, strSkill, strItem, MannerPoint, LoyaltyMonthly, sQuestCount, strQuest, strSerial " +
             "FROM USERDATA WHERE strUserID = @charId";
         select.Parameters.AddWithValue("@charId", charId);
 
@@ -538,7 +599,38 @@ public sealed class MariaDbCharacterRepository
             Convert.ToInt32(row.GetValue(30)),
             Convert.ToInt32(row.GetValue(31)),
             Convert.ToInt16(row.GetValue(32)),
-            GetBlob(row, 33));
+            GetBlob(row, 33),
+            GetBlob(row, 34));
+    }
+
+    // Called only after ownership/warehouse validation, before loading the session.
+    // Lock the row so this narrow repair cannot overwrite concurrent quest edits.
+    private static async Task SkipBoostedStarterQuestAsync(
+        MySqlConnection connection, string charId, CancellationToken cancellationToken)
+    {
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT Level, strQuest, sQuestCount FROM USERDATA WHERE strUserID = @charId FOR UPDATE";
+        command.Parameters.AddWithValue("@charId", charId);
+        (byte[] Blob, short Count, bool Changed) repair;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                return;
+            repair = StarterQuestState.SkipForBoostedCharacter(
+                Convert.ToByte(reader.GetValue(0)), GetBlob(reader, 1), Convert.ToInt16(reader.GetValue(2)));
+        }
+        if (repair.Changed)
+        {
+            command.CommandText = "UPDATE USERDATA SET strQuest = @quests, sQuestCount = @count WHERE strUserID = @charId";
+            command.Parameters.AddWithValue("@quests", repair.Blob);
+            command.Parameters.AddWithValue("@count", repair.Count);
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        if (repair.Changed)
+            KoLog.Info($"[ STARTER QUEST ] {charId}: saved quest 500 state 2; skipping unsupported level-one tutorial for boosted character.");
     }
 
     private static byte[] GetBlob(MySqlDataReader reader, int ordinal) =>
@@ -600,7 +692,7 @@ public sealed class MariaDbCharacterRepository
             "SELECT Num, Kind, Slot, Damage, Weight, Duration, Ac, Hitrate, Evasionrate, " +
             "StrB, StaB, DexB, IntelB, ChaB, MaxHpB, MaxMpB, FireR, ColdR, LightningR, MagicR, " +
             "PoisonR, CurseR, ReqLevel, ReqLevelMax, ReqRank, ReqTitle, ReqStr, ReqSta, ReqDex, " +
-            "ReqIntel, ReqCha, Countable FROM ITEM WHERE Num IN (" +
+            "ReqIntel, ReqCha, Countable, COALESCE(`Delay`,100), COALESCE(`Range`,10) FROM ITEM WHERE Num IN (" +
             string.Join(", ", ids) + ")";
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -638,28 +730,11 @@ public sealed class MariaDbCharacterRepository
                 Convert.ToByte(reader.GetValue(28)),
                 Convert.ToByte(reader.GetValue(29)),
                 Convert.ToByte(reader.GetValue(30)),
-                Convert.ToByte(reader.GetValue(31)));
+                Convert.ToByte(reader.GetValue(31)), Convert.ToInt16(reader.GetValue(32)), Convert.ToInt16(reader.GetValue(33)));
             result[proto.Num] = proto;
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Persists a character's item blob after an inventory change (the
-    /// SaveUserData half of the original's item round-trip; serials and
-    /// expiration times are untouched - the port does not manage them yet).
-    /// </summary>
-    public async Task SaveCharacterItemsAsync(string charId, byte[] itemBlob, CancellationToken cancellationToken = default)
-    {
-        await using var connection = new MySqlConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE USERDATA SET strItem = @blob WHERE strUserID = @charId";
-        command.Parameters.AddWithValue("@blob", itemBlob);
-        command.Parameters.AddWithValue("@charId", charId);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

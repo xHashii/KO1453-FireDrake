@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'arena/**']
 
 # Both jobs are deliberately server-free: the point is that a broken migration
 # script or a drifted protocol port is caught before anyone starts MariaDB.
@@ -52,3 +52,36 @@ jobs:
 
       - name: Check the data drop zone against the database
         run: python tools/check_data_assets.py
+
+      - name: Verify world NPCs, native warps and coordinate repairs
+        run: |
+          python tools/test_world_npcs.py
+          python tools/test_world_coordinates.py
+          python tools/test_starter_item_repair.py
+          python tools/build_item_catalog.py --check
+
+  shop-transactions:
+    name: Shop transactions (MariaDB)
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: verification
+          MARIADB_DATABASE: ko_shop_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Verify shop rules, packets and atomic persistence
+        env:
+          KO_SHOP_TEST_PORT: '3306'
+        run: dotnet run --project tests/KnightOnline.Verification --nologo

@@ -37,6 +37,10 @@ else
             <div class="stat-value">@_stats.ItemDefinitions</div>
             <div class="stat-label">Item definitions</div>
         </div>
+        @foreach (var stat in new[] { ("Clans", _stats.Clans), ("Karus characters", _stats.Karus), ("El Morad characters", _stats.ElMorad), ("Monster definitions", _stats.Monsters), ("Spawn rows", _stats.SpawnRows), ("Drop groups", _stats.DropGroups) })
+        {
+            <div class="stat-card"><div class="stat-value">@stat.Item2.ToString("N0")</div><div class="stat-label">@stat.Item1</div></div>
+        }
     </div>
 
     <div class="card">
@@ -44,11 +48,12 @@ else
         <p>
             <a class="btn btn-primary" href="characters">Search characters</a>
             <a class="btn" href="items">Browse items</a>
+            <a class="btn" href="drops">Edit monster drops</a>
             <button type="button" class="btn btn-ghost" @onclick="Reload">↻ Refresh</button>
         </p>
         <p class="muted small">
             Databases are created/migrated automatically on startup (see <code>docs/DATABASE.md</code>).
-            Character edits are refused while the character is online, and every save keeps a restorable backup.
+            Character edits are refused while the character is online, and every save keeps an item-blob backup and audit record. Run the updated GameServer for session/edit exclusion.
         </p>
     </div>
 }

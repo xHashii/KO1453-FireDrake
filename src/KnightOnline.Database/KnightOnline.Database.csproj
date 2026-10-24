@@ -14,6 +14,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Items/StarterItemRepair.sql" />
+    <EmbeddedResource Include="../../sql/mysql/kn_online/0010_combat_rewards.sql" LogicalName="KnightOnline.Database.CombatSchema.sql" />
+    <EmbeddedResource Include="Items/PotionMagicRepair.sql" />
+    <EmbeddedResource Include="Items/ItemCatalog.sql.gz" LogicalName="KnightOnline.Database.Items.ItemCatalog.sql.gz" />
+    <EmbeddedResource Include="../../sql/mysql/kn_online/0009_zone_start_points.sql" LogicalName="KnightOnline.Database.WorldCoordinateRepair.sql" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\KnightOnline.Shared\KnightOnline.Shared.csproj" />
   </ItemGroup>
 
