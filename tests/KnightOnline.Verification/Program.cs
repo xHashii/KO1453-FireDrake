@@ -517,7 +517,13 @@ ChatVerification.Run((name, ok) => Check(name, ok));
 
 LoggingVerification.Run((name, ok) => Check(name, ok));
 
-await ShopVerification.RunAsync((name, ok) => Check(name, ok));
+try { await ShopVerification.RunAsync((name, ok) => Check(name, ok)); }
+catch (Exception ex)
+{
+    if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+        Console.WriteLine("::error::" + ex.ToString().Replace("%", "%25").Replace("\r", "%0D").Replace("\n", "%0A"));
+    throw;
+}
 
 Console.WriteLine($"\n{passed} passed, {failed} failed.");
 return failed == 0 ? 0 : 1;

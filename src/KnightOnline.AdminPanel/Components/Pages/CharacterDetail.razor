@@ -42,7 +42,7 @@ else
     @if (_character.IsOnline)
     {
         <p class="alert alert-danger">This character is <b>online</b>. Item edits are disabled — the game server would overwrite them on logout.
-           Use “Give item by letter”, or wait until the player logs out.</p>
+           Wait until the player logs out, then reload. In-game letter receipt is not implemented yet.</p>
     }
     @if (!string.IsNullOrEmpty(_error))
     {
@@ -58,6 +58,10 @@ else
            Slots beyond that are shown for completeness but are not written back.</p>
     }
 
+    @if (_character.StoredInventorySlots > InventorySlots.Total)
+    {
+        <p class="alert alert-warning">Legacy inventory trailer detected. Slots beyond 73 are hidden and preserved byte-for-byte, not treated as editable equipment.</p>
+    }
     <div class="editor-layout">
         <div class="editor-main">
             <div class="tabs">

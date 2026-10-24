@@ -254,14 +254,18 @@ public sealed partial class CharacterAdminRepository : ICharacterAdminRepository
 
     private static int ReadInt(MySqlDataReader reader, string column)
     {
-        var ordinal = reader.GetOrdinal(column);
-        return reader.IsDBNull(ordinal) ? 0 : Convert.ToInt32(reader.GetValue(ordinal));
+        for (var ordinal = 0; ordinal < reader.FieldCount; ordinal++)
+            if (string.Equals(reader.GetName(ordinal), column, StringComparison.OrdinalIgnoreCase))
+                return reader.IsDBNull(ordinal) ? 0 : Convert.ToInt32(reader.GetValue(ordinal));
+        return 0;
     }
 
     private static long ReadLong(MySqlDataReader reader, string column)
     {
-        var ordinal = reader.GetOrdinal(column);
-        return reader.IsDBNull(ordinal) ? 0 : Convert.ToInt64(reader.GetValue(ordinal));
+        for (var ordinal = 0; ordinal < reader.FieldCount; ordinal++)
+            if (string.Equals(reader.GetName(ordinal), column, StringComparison.OrdinalIgnoreCase))
+                return reader.IsDBNull(ordinal) ? 0 : Convert.ToInt64(reader.GetValue(ordinal));
+        return 0;
     }
 
     private static byte[] ReadBlob(MySqlDataReader reader, string column)

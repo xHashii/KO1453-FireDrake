@@ -36,7 +36,26 @@ public sealed partial class MariaDbCharacterRepository
     {
         var settings = new MySqlConnectionStringBuilder(_connectionString) { Pooling = false };
         var connection = new MySqlConnection(settings.ConnectionString);
-        try { connection.Open(); return CharacterEditLease.Acquire(connection, account, character, true); }
+        try
+        {
+            connection.Open();
+            // Resolve persisted spellings first: accent-insensitive database equality
+            // must not let an alternate wire spelling acquire a different lock.
+            string Canonical(string table, string column, string value)
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = $"SELECT `{column}` FROM `{table}` WHERE `{column}`=@value";
+                command.Parameters.AddWithValue("@value", value);
+                using var reader = command.ExecuteReader();
+                if (!reader.Read()) throw new InvalidOperationException("Character/account does not exist.");
+                var canonical = reader.GetString(0);
+                if (reader.Read()) throw new InvalidOperationException("Ambiguous character/account rows.");
+                return canonical;
+            }
+            return CharacterEditLease.Acquire(connection,
+                Canonical("ACCOUNT_CHAR", "strAccountID", account),
+                Canonical("USERDATA", "strUserID", character), true);
+        }
         catch { connection.Dispose(); throw; }
     }
 
