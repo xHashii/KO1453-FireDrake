@@ -10,16 +10,17 @@
 
 <div class="search-row">
     <input class="input" placeholder="Character name (partial ok)…" @bind="_term" @bind:event="oninput" @onkeydown="OnKeyDown" />
-    <button type="button" class="btn btn-primary" @onclick="Search">Search</button>
+    <button type="button" class="btn btn-primary" disabled="@_searching" @onclick="Search">Search</button>
 </div>
 
+@if (_error is not null) { <p class="alert alert-danger">@_error</p> }
 @if (_searching)
 {
     <p class="muted">Searching…</p>
 }
 else if (_results is null)
 {
-    <p class="muted">Search for a character to open the editor. Empty search lists the first 100 characters.</p>
+    <p class="muted">Search for a character to open the editor. Leave the name empty to browse all characters, 50 per page.</p>
 }
 else if (_results.Count == 0)
 {
@@ -48,12 +49,23 @@ else
             }
         </tbody>
     </table>
+    <div class="search-row">
+        <button class="btn" disabled="@(_page == 0 || _searching)" @onclick="Previous">← Previous</button>
+        <span class="muted">Page @(_page + 1) · showing @(_page * 50 + 1)–@(_page * 50 + _results.Count)</span>
+        <button class="btn" disabled="@(!_hasMore || _searching)" @onclick="Next">Next →</button>
+    </div>
 }
 
 @code {
     private string _term = "";
     private List<CharacterSummary>? _results;
-    private bool _searching;
+    private bool _searching, _hasMore;
+    private int _page;
+    private string _searchedTerm = "";
+    private string? _error;
+    protected override Task OnInitializedAsync() => Search();
+    private async Task Previous() { if (_page > 0) { _page--; await Load(); } }
+    private async Task Next() { if (_hasMore) { _page++; await Load(); } }
 
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
@@ -63,11 +75,18 @@ else
 
     private async Task Search()
     {
-        _searching = true;
+        _page = 0; _searchedTerm = _term; await Load();
+    }
+    private async Task Load()
+    {
+        _searching = true; _error = null;
         try
         {
-            _results = (await Repo.SearchCharactersAsync(_term)).ToList();
+            var rows = await Repo.SearchCharactersAsync(_searchedTerm, 51, offset: _page * 50);
+            _hasMore = rows.Count > 50;
+            _results = rows.Take(50).ToList();
         }
+        catch (Exception ex) { _error = ex.Message; }
         finally
         {
             _searching = false;

@@ -23,6 +23,24 @@ class WorldNpcTests(unittest.TestCase):
             count += num
         self.assertEqual(count, 1436)
 
+    def test_monster_namespace_rectangles_and_id_budget(self):
+        db = load_tables()
+        zones = dict(db.execute('SELECT ZoneNo,strZoneName FROM ZONE_INFO'))
+        prototypes = set(r[0] for r in db.execute('SELECT sSid FROM K_MONSTER'))
+        count = 0
+        for zone, sid, left, top, right, bottom, num in db.execute('SELECT ZoneID,NpcID,LeftX,TopZ,RightX,BottomZ,NumNPC FROM K_NPCPOS WHERE ActType<100'):
+            self.assertIn(sid, prototypes)
+            if zone not in zones: continue
+            with (ROOT / 'data/map' / zones[zone]).open('rb') as f:
+                size, step = struct.unpack('<if', f.read(8))
+            self.assertTrue(all(0 <= v < (size - 1) * step for v in (left, top, right, bottom)), (zone, sid))
+            self.assertGreaterEqual(num, 0)
+            count += num
+        self.assertGreater(count, 4000)
+        self.assertEqual(db.execute('SELECT SUM(NumNPC) FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100').fetchone()[0], 474)
+        objects = db.execute('SELECT COUNT(*) FROM K_OBJECTPOS').fetchone()[0]
+        self.assertLess(count + 1436 + objects, 10000)
+
     def test_moradon_merchants_and_anvil(self):
         db = load_tables()
         self.assertEqual(db.execute('SELECT SUM(NumNPC) FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100').fetchone()[0], 57)

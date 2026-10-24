@@ -32,6 +32,14 @@ public sealed partial class MariaDbCharacterRepository
     /// <summary>Bytes per inventory slot in strItem: uint32 id + uint16 durability + uint16 count.</summary>
     private const int InventorySlotSize = 8;
 
+    public CharacterEditLease AcquireEditLease(string account, string character)
+    {
+        var settings = new MySqlConnectionStringBuilder(_connectionString) { Pooling = false };
+        var connection = new MySqlConnection(settings.ConnectionString);
+        try { connection.Open(); return CharacterEditLease.Acquire(connection, account, character, true); }
+        catch { connection.Dispose(); throw; }
+    }
+
     private readonly string _connectionString;
 
     public MariaDbCharacterRepository(DatabaseSettings settings)

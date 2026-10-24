@@ -476,6 +476,14 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     Check("NPC: homeland faction unchanged", karusMerchant.InteractionNation(1, 2) == 1);
     var guard = karusMerchant with { Prototype = karusMerchant.Prototype with { Type = 11 } };
     Check("NPC: guards retain faction", guard.InteractionNation(21, 2) == 1);
+    var monster = karusMerchant with { Prototype = karusMerchant.Prototype with { IsMonster = true } };
+    Check("monster: no shared-service faction override", monster.InteractionNation(21, 2) == 1);
+    var catalog = new KnightOnline.Database.World.WorldCatalog(new(
+        [new(21, "moradon_20060124.smd")], new Dictionary<ushort, KnightOnline.Database.World.NpcPrototype> { [100] = proto },
+        [new(21,100,10,20,10,20,1,0), new(21,100,30,40,35,45,3,0,true)],
+        [new(21, 1, 5, 0, 0, 0, 10, 0, 20)],
+        new Dictionary<ushort, KnightOnline.Database.World.NpcPrototype> { [100] = proto with { Name = "Monster", IsMonster = true, MaxHp = 123 } }), maps);
+    Check("monster: separate prototype namespaces and unique runtime IDs", catalog.Zones[21].Npcs.Count == 4 && catalog.Zones[21].Npcs.Select(n => n.Id).Distinct().Count() == 4 && catalog.Zones[21].Npcs.Count(n => n.Prototype.IsMonster && n.Prototype.MaxHp == 123) == 3);
     var friendly = new Packet(WizOpcode.ReqNpcin).WriteUInt16(1).WriteUInt16(karusMerchant.Id);
     karusMerchant.WriteInfo(friendly, 21, 2);
     Check("NPC: shared-service wire nationality", friendly.Payload[25] == 2);

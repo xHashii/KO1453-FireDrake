@@ -27,7 +27,8 @@ public sealed class WorldCatalog
             ushort Allocate() => nextId < 20000 ? (ushort)nextId++ : throw new InvalidDataException("Static NPC ID band exhausted.");
             foreach (var spawn in data.Spawns.Where(s => s.Zone == definition.Id))
             {
-                if (!data.Prototypes.TryGetValue(spawn.Prototype, out var proto))
+                var prototypes = spawn.IsMonster ? data.Monsters : data.Prototypes;
+                if (prototypes is null || !prototypes.TryGetValue(spawn.Prototype, out var proto))
                     throw new InvalidDataException($"Zone {definition.Id}: missing NPC prototype {spawn.Prototype}.");
                 for (var i = 0; i < spawn.Count; i++)
                 {
@@ -59,7 +60,7 @@ public sealed class WorldCatalog
                 npcs.Add(new WorldNpc(Allocate(), proto, obj.X, obj.Y, obj.Z, 0, 1, obj.Status));
             }
             zones.Add(definition.Id, new WorldZone(definition.Id, map, npcs, objects));
-            KoLog.Info($"[ WORLD ] zone={definition.Id} NPCs={npcs.Count} objects={objects.Length} warps={map.Warps.Count}");
+            KoLog.Info($"[ WORLD ] zone={definition.Id} NPCs={npcs.Count(n => !n.Prototype.IsMonster)} monsters={npcs.Count(n => n.Prototype.IsMonster)} objects={objects.Length} warps={map.Warps.Count}");
         }
         Zones = zones;
     }

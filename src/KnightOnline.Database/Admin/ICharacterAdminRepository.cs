@@ -10,9 +10,13 @@ namespace KnightOnline.Database.Admin;
 /// </summary>
 public interface ICharacterAdminRepository
 {
+    Task<IReadOnlyList<DropSummary>> SearchDropsAsync(string term, int offset = 0, CancellationToken cancellationToken = default);
+    Task<DropDefinition?> GetDropAsync(short id, CancellationToken cancellationToken = default);
+    Task<string> SaveDropAsync(DropDefinition drop, string admin, CancellationToken cancellationToken = default);
+
     Task<AdminStats> GetStatsAsync(CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<CharacterSummary>> SearchCharactersAsync(string term, int limit = 100, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CharacterSummary>> SearchCharactersAsync(string term, int limit = 100, CancellationToken cancellationToken = default, int offset = 0);
 
     Task<CharacterDetails?> GetCharacterAsync(string name, CancellationToken cancellationToken = default);
 

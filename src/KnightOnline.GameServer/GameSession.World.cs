@@ -100,6 +100,7 @@ internal sealed partial class GameSession
             TravelMessage("Move closer to the NPC and right-click again.");
             return;
         }
+        if (npc.Prototype.IsMonster) { TravelMessage("Monster combat is the next milestone; this spawn is currently stationary."); return; }
         KoLog.Info($"[ NPC ] {_charId} opened {npc.Prototype.Name} id={id} type={npc.Prototype.Type} shop={npc.Prototype.SellingGroup}");
         switch (npc.Prototype.Type)
         {

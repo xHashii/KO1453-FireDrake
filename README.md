@@ -571,3 +571,19 @@ repeat immediately to check cooldown, then reconnect to check persistence.
 Full HP/MP should not consume the corresponding potion. Stand rather than sit
 while testing: GM sitting recovery intentionally fills both bars. Click a
 merchant/guard to verify its HP bar. Client confirmation is still required.
+
+### Monster spawning and administration increment
+
+`K_NPCPOS.ActType < 100` now resolves against `K_MONSTER` in a separate prototype
+namespace; static NPC rows still resolve against `K_NPC`. Authored counts and
+rectangles are loaded for hosted zones, with globally unique runtime IDs and
+source HP shown by target-health requests. Startup validates map bounds and ID
+capacity. Monsters are **stationary/non-combatant in this increment**: damage,
+retaliation, death/respawn, loot ownership and atomic pickup are not implemented.
+Moradon has 474 authored monster instances in addition to its service NPCs.
+
+AdminPanel now has paginated empty character search, additional dashboard counts
+(including clans), improved character-save concurrency/session exclusion, and an
+existing-group drop editor. See [admin documentation](docs/ADMIN_PANEL.md) for
+source drop semantics, auditing and deployment precautions. Deploy the new server
+and panel together; legacy servers must be stopped before character editing.

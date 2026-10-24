@@ -3,8 +3,8 @@ using KnightOnline.Shared.Protocol;
 namespace KnightOnline.Database.World;
 
 public sealed record NpcPrototype(ushort Id, string Name, ushort Model, ushort Size, uint Weapon1,
-    uint Weapon2, byte Nation, byte Type, int SellingGroup, byte Level, int MaxHp = 1);
-public sealed record NpcSpawn(ushort Zone, ushort Prototype, int Left, int Top, int Right, int Bottom, int Count, byte Direction);
+    uint Weapon2, byte Nation, byte Type, int SellingGroup, byte Level, int MaxHp = 1, bool IsMonster = false, int DropGroup = 0);
+public sealed record NpcSpawn(ushort Zone, ushort Prototype, int Left, int Top, int Right, int Bottom, int Count, byte Direction, bool IsMonster = false);
 public sealed record WorldObject(ushort Zone, ushort Index, byte Type, ushort Control, byte Nation,
     byte Status, float X, float Y, float Z);
 public sealed record WorldNpc(ushort Id, NpcPrototype Prototype, float X, float Y, float Z,
@@ -16,7 +16,7 @@ public sealed record WorldNpc(ushort Id, NpcPrototype Prototype, float X, float 
     /// services is viewer-relative; guards, other zones and gate permissions
     /// retain their authored faction.</summary>
     public byte InteractionNation(ushort zone, byte viewerNation) =>
-        zone == 21 && viewerNation is 1 or 2 && IsSharedService(Prototype.Type)
+        !Prototype.IsMonster && zone == 21 && viewerNation is 1 or 2 && IsSharedService(Prototype.Type)
             ? viewerNation : Prototype.Nation;
 
     public static bool IsSharedService(byte type) => type is
@@ -36,5 +36,5 @@ public sealed record WorldNpc(ushort Id, NpcPrototype Prototype, float X, float 
 }
 public sealed record ZoneDefinition(ushort Id, string MapName);
 public sealed record WorldData(IReadOnlyList<ZoneDefinition> Zones, IReadOnlyDictionary<ushort, NpcPrototype> Prototypes,
-    IReadOnlyList<NpcSpawn> Spawns, IReadOnlyList<WorldObject> Objects);
+    IReadOnlyList<NpcSpawn> Spawns, IReadOnlyList<WorldObject> Objects, IReadOnlyDictionary<ushort, NpcPrototype>? Monsters = null);
 public sealed record WorldZone(ushort Id, SmdMap Map, IReadOnlyList<WorldNpc> Npcs, IReadOnlyList<WorldObject> Objects);

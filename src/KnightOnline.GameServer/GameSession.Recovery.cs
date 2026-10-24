@@ -50,6 +50,9 @@ internal sealed partial class GameSession
                 catch (Exception ex) { KoLog.Error($"Could not save HP/MP for {_charId}.", ex); }
             }
             _inGame = false;
+            _editLeaseTimer?.Dispose(); _editLeaseTimer = null;
+            try { _editLease?.Dispose(); } catch (Exception ex) { KoLog.Error("Session lock cleanup failed.", ex); }
+            _editLease = null;
         }
         base.OnDisconnected();
     }

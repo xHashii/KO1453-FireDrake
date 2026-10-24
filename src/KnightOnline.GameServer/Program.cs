@@ -159,6 +159,8 @@ internal sealed partial class GameSession : KoSession
 
     /// <summary>Set by WIZ_SEL_CHAR: the LOAD_USER_DATA row and m_strUserID.</summary>
     private UserData? _user;
+    private CharacterEditLease? _editLease;
+    private Timer? _editLeaseTimer;
     private string _charId = string.Empty;
 
     /// <summary>GAMESTART opcode 2 flips CUser::m_state to GAME_STATE_INGAME.</summary>
@@ -539,15 +541,29 @@ internal sealed partial class GameSession : KoSession
         var charId = packet.ReadString();
         _ = packet.ReadByte(); // bInit: internal selection flag, not part of the success reply
 
+        if (_user is not null) { Send(new Packet(WizOpcode.SelChar).WriteByte(0)); return; }
         UserData? user = null;
         if (string.Equals(account, _accountId, StringComparison.Ordinal) && charId.Length > 0)
         {
             try
             {
+                if (_editLease is not null) throw new InvalidOperationException("Character already selected.");
+                _editLease = _characters.AcquireEditLease(account, charId);
                 user = _characters.LoadUserDataAsync(account, charId).GetAwaiter().GetResult();
+                if (user is null) { _editLease.Dispose(); _editLease = null; }
+                else _editLeaseTimer = new Timer(_ =>
+                {
+                    lock (_gameGate)
+                    {
+                        try { _editLease?.Ping(); }
+                        catch (Exception ex) { KoLog.Error("Session protection connection lost; disconnecting.", ex); _inventoryFaulted = true; Disconnect(); }
+                    }
+                }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
             }
             catch (Exception ex)
             {
+                try { _editLease?.Dispose(); } catch { }
+                _editLease = null;
                 KoLog.Error($"Loading user data for '{charId}' could not reach the database.", ex);
             }
         }

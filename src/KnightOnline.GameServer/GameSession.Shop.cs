@@ -10,7 +10,7 @@ internal sealed partial class GameSession
     private ushort _shopNpcId;
     private bool _inventoryFaulted;
 
-    private bool ShopNpcAvailable(WorldNpc? npc, int group) => npc is not null &&
+    private bool ShopNpcAvailable(WorldNpc? npc, int group) => npc is not null && !npc.Prototype.IsMonster &&
         ShopRules.CanUseNpc(npc.Prototype.Type, npc.Prototype.SellingGroup, group,
             PlayerX - npc.X, PlayerZ - npc.Z,
             npc.InteractionNation(_user!.Zone, _user.Nation) is 0 ||

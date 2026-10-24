@@ -68,7 +68,7 @@ public sealed record AdminStats(
     long ItemDefinitions,
     bool AccountDbOk,
     bool GameDbOk,
-    string? Error);
+    string? Error, long Clans = 0, long Monsters = 0, long SpawnRows = 0, long DropGroups = 0, long Karus = 0, long ElMorad = 0);
 
 /// <summary>Thrown when a save is rejected because the character is online or data changed meanwhile.</summary>
 public sealed class AdminEditRejectedException(string message) : Exception(message);

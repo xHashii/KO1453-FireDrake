@@ -9,7 +9,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 def load_tables():
     db = sqlite3.connect(':memory:')
-    tables = ('ZONE_INFO', 'K_NPC', 'K_NPCPOS', 'K_OBJECTPOS')
+    tables = ('ZONE_INFO', 'K_NPC', 'K_MONSTER', 'K_NPCPOS', 'K_OBJECTPOS')
     sql = (ROOT / 'sql/mysql/kn_online/0003_data.sql').read_text()
     for table in tables:
         rows = [l for l in sql.splitlines() if l.startswith(f'INSERT `{table}` ')]
