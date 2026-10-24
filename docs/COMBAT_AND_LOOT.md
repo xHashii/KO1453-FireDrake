@@ -15,6 +15,26 @@
   a six-second minimum to avoid erasing the death animation. Returning actors get
   a fresh OUT/IN cycle even though their runtime ID is reused.
 
+- Basic melee now sends the successful attack animation first and applies damage
+  after a server windup of one-third cadence, clamped to 250–600 ms. Weak monsters
+  can still die in one hit, but no longer receive DEAD in the same frame as the
+  attack starts. Deferred impacts revalidate range, equipment, player state and
+  the monster's per-life token; movement/travel/death/disconnect cancel them.
+  This is bounded server timing, not a measured client animation-frame schedule.
+
+## Reconnect state
+
+- Character selection displays the latest saved equipped IDs/durability by
+  default. The retired `CHARACTER_PREVIEW_EQUIPMENT=0` no longer suppresses gear.
+  Only explicit `CHARACTER_PREVIEW_RECOVERY=1` enables naked diagnostic previews.
+- Validated movement saves position every ten seconds and on disconnect, without
+  overwriting inventory, coins, XP or vitals. Position CAS protects newer travel
+  state and records the legacy-spawn-repair exemption. Graceful shutdown waits
+  for final logout saves; a forced kill can lose movement after the checkpoint.
+- Client checks: equip/unequip, logout and reopen selection; move away from town,
+  logout/relogin, and confirm the same location. Attack a weak mob and confirm
+  the swing starts before death/chest effects, then test stronger mobs normally.
+
 ## Implemented scope
 
 - **Retaliation:** an attacked monster retaliates against its most recent attacker

@@ -40,12 +40,15 @@ internal sealed partial class GameSession
                 try { ResolveMeleeImpact(); }
                 catch (Exception ex) { InventoryUnavailable(ex); }
             }
-        },null,TimeSpan.FromMilliseconds(50),TimeSpan.FromMilliseconds(50));
+        },null,Timeout.Infinite,Timeout.Infinite);
+        _meleeTimer.Change(50,50);
     }
     private void ResolveMeleeImpact()
     {
         var now = Environment.TickCount64;
-        if (_pendingMelee is not { } swing || now < swing.Impact) return;
+        if (_pendingMelee is not { } swing) { _meleeTimer?.Change(Timeout.Infinite,Timeout.Infinite); return; }
+        if (now < swing.Impact) return;
+        _meleeTimer?.Change(Timeout.Infinite,Timeout.Infinite);
         _pendingMelee = null;
         if (!IsConnected || _inventoryFaulted || !CanTravel() || _sitting || _user!.Zone != swing.Zone || now > swing.Impact+1000 ||
             Slot(RightHand) != swing.Right || Slot(LeftHand) != swing.Left) return;

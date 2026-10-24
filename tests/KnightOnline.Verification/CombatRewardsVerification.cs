@@ -121,7 +121,7 @@ internal static class CombatRewardsVerification
         test("skill point allocation persists once with blob CAS", await repository.SaveAllocatedSkillAsync("combat-test",allocation,allocatedSkills,105,80) && !await repository.SaveAllocatedSkillAsync("combat-test",allocation,allocatedSkills,105,80));
         test("death and free town revival persist vitals/position", await repository.TrySaveCombatVitalsAsync("combat-test",80,32,0,32) && await repository.TrySaveCombatVitalsAsync("combat-test",0,32,100,50,new(21,"Town",30000,35000,0)));
         // Smoke-test the actual runtime loader, not just hand-built combat records.
-        foreach (var table in new[] { "ZONE_INFO","K_NPC","K_NPCPOS","K_OBJECTPOS","K_MONSTER","K_MONSTER_ITEM","MAKE_ITEM_GROUP","MAKE_ITEM_GRADECODE","MAKE_WEAPON","MAKE_DEFENSIVE","MAKE_ITEM_LARECODE" })
+        foreach (var table in new[] { "ZONE_INFO","START_POSITION","K_NPC","K_NPCPOS","K_OBJECTPOS","K_MONSTER","K_MONSTER_ITEM","MAKE_ITEM_GROUP","MAKE_ITEM_GRADECODE","MAKE_WEAPON","MAKE_DEFENSIVE","MAKE_ITEM_LARECODE" })
         {
             var ddl = Regex.Match(schema,$@"CREATE TABLE `{table}`\([\s\S]*?\) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;").Value;
             command.CommandText = $"DROP TABLE IF EXISTS `{table}`; " + ddl; await command.ExecuteNonQueryAsync();
