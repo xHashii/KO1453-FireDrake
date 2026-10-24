@@ -93,8 +93,8 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 KoLog.Warn($"GameServer prototype on port {port}: version check, game login, nation select, the " +
-           "character list, creation/selection, static NPCs, NPC shop buying/selling, anvil windows and native warp gates are implemented; " +
-           "repairs/upgrades, warehouse, quests and combat/AI remain unported (docs/CSHARP_REWRITE_PLAN.md, M4/M5).");
+           "character list, creation/selection, NPC/monster spawns, basic R attacks/death/respawn, NPC shops, anvil windows and native warp gates are implemented; " +
+           "repairs/upgrades, warehouse, quests, monster AI and loot remain unported (docs/CSHARP_REWRITE_PLAN.md, M4/M5).");
 KoLog.Info($"Build: {Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion}; NPC shop transactions enabled.");
 
 try

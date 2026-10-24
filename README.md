@@ -578,8 +578,8 @@ merchant/guard to verify its HP bar. Client confirmation is still required.
 namespace; static NPC rows still resolve against `K_NPC`. Authored counts and
 rectangles are loaded for hosted zones, with globally unique runtime IDs and
 source HP shown by target-health requests. Startup validates map bounds and ID
-capacity. Monsters are **stationary/non-combatant in this increment**: damage,
-retaliation, death/respawn, loot ownership and atomic pickup are not implemented.
+capacity. Monsters are stationary; the follow-up basic R-attack increment below adds
+damage and death/respawn. Retaliation, loot ownership and atomic pickup remain pending.
 Moradon has 474 authored monster instances in addition to its service NPCs.
 
 AdminPanel now has paginated empty character search, additional dashboard counts

@@ -101,7 +101,7 @@ editors — which is also how KOWEB-style tools present it.
   be disabled. Duplicate IDs and stale saves are rejected. Before/after JSON is
   retained in `_ko_admin_audit` in the same transaction as the update.
 - The editor is database tooling, **not working in-game loot**. Monster spawns
-  are now loaded, but attacks, death, respawn and pickup remain the next stages.
+  support basic R attacks, death and respawn; AI, rewards and pickup remain pending.
   There is no live reload. Restart after catalog edits once loot is implemented.
 - **Deploy the panel and GameServer from the same updated build.** The server
   holds MariaDB account/character advisory locks from character selection until

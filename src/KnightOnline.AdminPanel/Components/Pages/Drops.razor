@@ -7,7 +7,7 @@
 <PageTitle>Monster drops — KO 1453 Admin</PageTitle>
 <h1>Monster drops</h1>
 <p class="muted">Search by monster name or drop-group ID. Empty search browses every group.</p>
-<p class="alert alert-warning">Database editor only: the new monster spawns are stationary. Combat, kills and loot pickup are not implemented yet. Changes are audited but do not enable drops in-game; future loot catalogs require a GameServer restart, not a live reload.</p>
+<p class="alert alert-warning">Database editor only: basic R attacks, death and respawn are available, but monster AI, rewards and loot pickup are not implemented yet. Changes are audited but do not enable drops in-game; future loot catalogs will require a GameServer restart, not a live reload.</p>
 <div class="search-row">
     <input class="input" placeholder="Monster name or group ID…" @bind="_term" @onkeydown="KeyDown" />
     <button class="btn btn-primary" disabled="@_busy" @onclick="Search">Search</button>
@@ -77,7 +77,7 @@
         if (_drop is null) return;
         var auth = await AuthState.GetAuthenticationStateAsync();
         _drop.Token = await Repo.SaveDropAsync(_drop, auth.User.Identity?.Name ?? "unknown");
-        _notice = "Saved and audited. In-game loot is still pending the combat/loot milestone.";
+        _notice = "Saved and audited. In-game loot is still pending the loot milestone.";
     });
     private async Task Run(Func<Task> action)
     {
