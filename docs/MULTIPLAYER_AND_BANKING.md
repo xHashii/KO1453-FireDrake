@@ -9,8 +9,8 @@ and allowed sitting/emotion changes reach visible peers. Equipment/stat changes
 refresh peer appearance with OUT/IN; this is deliberately not a complete clan,
 party, merchant, stealth or buff state implementation.
 
-The remote-player wire layout follows `CUser::GetUserInfo` in
-`GameServer/CharacterMovementHandler.cpp`: byte-prefixed name, clanless fields,
+The remote-player wire layout uses the native 1453 envelopes documented by
+RE-KO (see `REKO_REFERENCE_REVIEW.md`), not the conflicting C++ subtype prefix: byte-prefixed name, clanless fields,
 pose/direction and ten item records in BREAST/LEG/HEAD/GLOVE/FOOT/SHOULDER/
 RIGHTHAND/LEFTHAND/CTOP/CHELMET order, followed by a **byte** zone ID. It is not
 the character-selection layout. Unknown model references are suppressed on this
@@ -140,3 +140,23 @@ compatibility mapping still applies when a GM explicitly becomes visible.
 
 This is actor visibility, not anonymity: normal chat/private messages and combat
 are not suppressed or made anonymous. It is not a PvP stealth skill.
+
+## Native protocol corrections (after RE-KO comparison)
+
+- USER_INOUT uses **byte** action then ushort actor ID (not ushort action).
+- REQ_USERIN records use ushort actor ID then info, with **no extra zero byte**.
+- Clanless info explicitly labels the native alliance/name/grade/ranking/mark/
+  cape widths; its existing all-zero clan metadata bytes remain unchanged.
+- World entry and completed zone loading send a native 0x15 region-ID list
+  containing the viewer plus visible actors. Hidden GM IDs remain excluded from
+  other viewers' lists. This does not yet replace radial visibility with a grid.
+- XP updates use action 0 plus **uint32** current XP, not int64. Stored signed
+  XP bounds remain unchanged; database migration is not needed.
+- Warehouse transfers accept both explicit-NPC and selected-NPC forms, with exact
+  lengths. Only the explicit form may supply an NPC ID; an explicit zero/mismatch
+  is refused. Both forms still require the current open snapshot and a live,
+  friendly, in-range selected Inn in the current zone.
+
+Independent literal vectors cover nontrivial actor IDs, record prefixes, region
+lists and uint32 XP boundaries. Real-client rendering/reconnect verification is
+still required; this is not a declaration that all retail systems are complete.

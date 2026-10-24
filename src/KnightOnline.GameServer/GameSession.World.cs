@@ -1,4 +1,5 @@
 using KnightOnline.Database;
+using KnightOnline.Database.Items;
 using KnightOnline.Database.World;
 using KnightOnline.Shared.Diagnostics;
 using KnightOnline.Shared.Protocol;
@@ -226,6 +227,22 @@ internal sealed partial class GameSession
     {
         if (!_inGame || packet.RemainingToRead < 1) return;
         var sub = packet.ReadByte();
+        if (sub == 8)
+        {
+            // Parse only the established source layout. Until the retail seal
+            // security/premium and persisted flag lifecycle are verified, fail
+            // closed: no password guesses, fee, protection change or item loss.
+            if (ItemSealPackets.TryRead(packet,out var seal)) Send(ItemSealPackets.Refused(seal!.Action));
+            TravelMessage("Item sealing is not enabled: security, eligibility and protection persistence still require verification. No items or coins changed.");
+            return;
+        }
+        if (sub == 9)
+        {
+            // The original CharacterSealProcess is empty. Do not interpret
+            // unknown payload bytes as account/slot ownership instructions.
+            TravelMessage("Character sealing is not enabled: the native transfer protocol is not verified. No scroll consumed and no character ownership changed.");
+            return;
+        }
         if ((sub is 2 or 3 or 7) && packet.RemainingToRead == 53)
         {
             packet.ReadByte(); packet.ReadUInt16();

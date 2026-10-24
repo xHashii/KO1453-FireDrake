@@ -92,3 +92,17 @@ against the client/data we actually deploy.
    incomplete path.
 5. Use the AI/combat/quest/social references incrementally, with source and policy
    evidence recorded for each subsystem.
+
+## Resolution increment
+
+The native envelope/XP corrections and both warehouse request forms have now
+been implemented. Literal vectors independently assert byte-action IN/OUT,
+requested records with no prefix, uint32 XP and exact explicit/implicit warehouse
+shapes. Selected Inn authorization and transaction safeguards are retained.
+World entry/completed zone loading now send viewer-specific region-ID lists.
+
+The original discrepancy table above is the historical comparison, not the
+current implementation status. Missing-versus-empty skillbar behavior, spatial
+grid fidelity and actual native-client acceptance remain separate checks.
+Sealing status and required ownership invariants are recorded in
+`SEALING_VERIFICATION.md`; no transfer success is fabricated.

@@ -1,0 +1,30 @@
+using KnightOnline.Shared.Protocol;
+namespace KnightOnline.Database.Items;
+
+/// <summary>Only the request layout established by SealHandler.cpp is modeled.
+/// A parsed request is NOT permission to charge coins or change protection.</summary>
+public sealed class ItemSealRequest(byte action,uint item,byte position,string password)
+{
+    public byte Action { get; }=action;
+    public uint Item { get; }=item;
+    public byte Position { get; }=position;
+    internal string Password { get; }=password;
+    public override string ToString()=>$"ItemSeal(action={Action},item={Item},position={Position},password=redacted)";
+}
+public static class ItemSealPackets
+{
+    public static bool TryRead(Packet packet,out ItemSealRequest? request)
+    {
+        request=null;
+        // Remaining payload starts after ITEM_UPGRADE subopcode 8.
+        if(packet.RemainingToRead<10) return false;
+        var action=packet.ReadByte();var marker=packet.ReadInt16();
+        var item=packet.ReadUInt32();var position=packet.ReadByte();var length=packet.ReadUInt16();
+        if(action is not (1 or 2) || marker!=-1 || item==0 || position>=28 || length is 0 or >8 || packet.RemainingToRead!=length) return false;
+        packet.ReadPosition-=2;
+        request=new(action,item,position,packet.ReadString()); return true;
+    }
+    // SealErrorFailed=2 in SealHandler.cpp. No success is fabricated for an
+    // unverified premium/password/serial ownership/commit path.
+    public static Packet Refused(byte action)=>new Packet(WizOpcode.ItemUpgrade).WriteByte(8).WriteByte(action).WriteByte(2);
+}
