@@ -50,6 +50,13 @@ internal static class FoundationsVerification
         test("warehouse partial deposit conserves count and identity",deposit.Inventory[14].Count==7&&deposit.Warehouse[0]==(inv[14] with {Count=3})&&inv[14].Count==10&&deposit.Inventory[74]==inv[74]);
         var withdrawal=WarehouseRules.Propose(request with {Action=3,Count=3},item,deposit.Inventory,deposit.Warehouse,100,100,35,1000)!;
         test("warehouse withdrawal restores stack and leaves bank empty",withdrawal.Inventory[14]==inv[14]&&withdrawal.Warehouse[0]==ItemSlotData.Empty);
+        var pageMove=WarehouseRules.Propose(request with {Action=4,Destination=1},item,deposit.Inventory,deposit.Warehouse,100,100,35,1000)!;
+        test("warehouse page move transfers whole stack without overwriting",pageMove.Warehouse[0]==ItemSlotData.Empty&&pageMove.Warehouse[1]==deposit.Warehouse[0]);
+        var bagMove=WarehouseRules.Propose(request with {Action=5,Destination=1},item,deposit.Inventory,deposit.Warehouse,100,100,35,1000)!;
+        test("warehouse bag move preserves stack and hidden inventory tails",bagMove.Inventory[14]==ItemSlotData.Empty&&bagMove.Inventory[15]==deposit.Inventory[14]&&bagMove.Inventory[74]==inv[74]);
+        var oldTrailer=new WarehouseSnapshot(new byte[1536].Concat(new byte[]{1,2,3,4,5,6,7,8}).ToArray(),new byte[1536].Concat(new byte[]{8,7,6,5,4,3,2,1}).ToArray(),new byte[768].Concat(new byte[]{4,3,2,1}).ToArray(),100,true);
+        var newTrailer=MariaDbCharacterRepository.WarehouseProposal(oldTrailer,bank,100);
+        test("warehouse proposal retains opaque item/serial/expiration trailers",newTrailer.Items.SequenceEqual(oldTrailer.Items)&&newTrailer.Serials.SequenceEqual(oldTrailer.Serials)&&newTrailer.Times.SequenceEqual(oldTrailer.Times));
         test("warehouse strict page and slot bounds",Propose(request with {Page=8}) is null&&Propose(request with {Source=28}) is null&&Propose(request with {Destination=24}) is null);
         test("warehouse zero and excessive counts rejected",Propose(request with {Count=0}) is null&&Propose(request with {Count=11}) is null);
         test("warehouse withdrawal enforces weight",WarehouseRules.Propose(request with {Action=3},item,deposit.Inventory,deposit.Warehouse,100,100,999,1000) is null);
@@ -76,6 +83,13 @@ internal static class FoundationsVerification
         await repo.SaveSkillBarAsync("foundation-test",[490014,1490020,uint.MaxValue]);
         test("skill bar reconnect round trip",(await new MariaDbCharacterRepository(settings).LoadSkillBarAsync("foundation-test")).SequenceEqual(new uint[]{490014,1490020,uint.MaxValue}));
         await repo.SaveSkillBarAsync("foundation-test",[]);test("empty skill bar persists",(await repo.LoadSkillBarAsync("foundation-test")).Length==0);
+        await repo.SaveSkillBarAsync("foundation-test",Enumerable.Range(0,64).Select(i=>(uint)i).ToArray());
+        test("maximum-size skill bar persists",(await repo.LoadSkillBarAsync("foundation-test")).Length==64);
+        cmd.CommandText="UPDATE USERDATA_SKILLSHORTCUT SET nCount=65 WHERE strCharID='foundation-test'";await cmd.ExecuteNonQueryAsync();
+        var badBar=false;try{await repo.LoadSkillBarAsync("foundation-test");}catch(InvalidDataException){badBar=true;}
+        cmd.CommandText="SELECT nCount FROM USERDATA_SKILLSHORTCUT WHERE strCharID='foundation-test'";
+        test("malformed saved shortcut count refused without rewriting it",badBar&&Convert.ToInt32(await cmd.ExecuteScalarAsync())==65);
+        await repo.SaveSkillBarAsync("foundation-test",[]);
         var bank=await repo.LoadWarehouseAsync("foundation-account");var stored=ItemBlobs.Parse(bank.Items,bank.Serials,bank.Times,192);
         var nextBank=MariaDbCharacterRepository.WarehouseProposal(bank,stored,1100);var next=snapshot with {Gold=900};
         test("bank and character coins commit atomically",await repo.SaveWarehouseAsync("foundation-test","foundation-account",snapshot,next,bank,nextBank,[])==InventorySaveResult.Saved);
@@ -104,6 +118,11 @@ internal static class FoundationsVerification
         test("item deposit commits inventory and page-eight bank slot together",await repo.SaveWarehouseAsync("foundation-test","foundation-account",snapshot,new(tb.Items,tb.Serials,transfer.Gold),bank,nextBank,[(item.Id,12345)])==InventorySaveResult.Saved);
         var reloaded=await repo.LoadWarehouseAsync("foundation-account");var loaded=ItemBlobs.Parse(reloaded.Items,reloaded.Serials,reloaded.Times,192);
         test("bank item count/durability/serial survive reconnect",loaded[191]==new ItemSlotData(item.Id,1,3,12345,0)&&reloaded.HasTimes);
+        var reverse=WarehouseRules.Propose(new(3,10001,item.Id,7,23,0,3),item,transfer.Inventory,loaded,transfer.Gold,reloaded.Gold,35,1000)!;
+        var reverseBlobs=ItemBlobs.Serialize(reverse.Inventory);
+        var restoredBank=MariaDbCharacterRepository.WarehouseProposal(reloaded,reverse.Warehouse,reverse.Bank);
+        test("withdrawal after reconnect restores inventory and removes stored quantity atomically",await repo.SaveWarehouseAsync("foundation-test","foundation-account",new(tb.Items,tb.Serials,transfer.Gold),new(reverseBlobs.Items,reverseBlobs.Serials,reverse.Gold),reloaded,restoredBank,[(item.Id,12345)])==InventorySaveResult.Saved&&reverseBlobs.Items.SequenceEqual(blobs.Items));
+        tb=reverseBlobs;reloaded=await repo.LoadWarehouseAsync("foundation-account");
         cmd.CommandText="INSERT INTO WAREHOUSE SELECT * FROM WAREHOUSE WHERE strAccountID='foundation-account'";await cmd.ExecuteNonQueryAsync();
         var duplicate=false;try{await repo.LoadWarehouseAsync("foundation-account");}catch(InvalidDataException){duplicate=true;}
         test("duplicate warehouse identity refused without choosing arbitrary row",duplicate);
