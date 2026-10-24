@@ -121,7 +121,8 @@ internal static class ShopVerification
         }
         var results = await Task.WhenAll(repository.TrySaveInventoryAsync("shop-test", after, next), repository.TrySaveInventoryAsync("shop-test", after, next));
         test("DB concurrent stale writers exactly one commits", results.Count(success => success) == 1);
-        command.CommandText = "ALTER TABLE USERDATA ADD CONSTRAINT test_gold CHECK (Gold=500)";
+        test("DB unchanged inventory swap can acknowledge success", await repository.TrySaveInventoryAsync("shop-test", next, next));
+        command.CommandText = "ALTER TABLE USERDATA ADD CONSTRAINT test_gold CHECK (strUserID<>'shop-test' OR Gold=500)";
         await command.ExecuteNonQueryAsync();
         var threw = false;
         try { await repository.TrySaveInventoryAsync("shop-test", next, before); } catch (MySqlException) { threw = true; }
