@@ -2,7 +2,7 @@
 
 ## Nearby players
 
-A shared hub tracks immutable player snapshots and symmetric visibility within
+A shared hub tracks immutable player snapshots and directional visibility within
 120 world units in the same zone. Entering/leaving range, entering the world,
 travel and disconnect generate native USER_INOUT records. Movement, rotation
 and allowed sitting/emotion changes reach visible peers. Equipment/stat changes
@@ -105,7 +105,8 @@ clans/parties, and chasing/pathfinding AI remain separate milestones.
   Remote appearance packets advertise authority 1 for full/limited GMs so clients
   that hide remote GM models display them to ordinary players. This is a public
   rendering compatibility field, not a promotion/demotion or an authorization
-  source. Explicit GM invisibility is not implemented; GMs are visible by default.
+  source. GM actors now default to hidden; only an explicit session opt-in makes
+  them public.
 - Earlier account creation used a single zero byte for both empty warehouse
   blobs. The loader accepts this precise empty sentinel (also for optional time
   data), keeps the raw bytes as the CAS snapshot, and does not rewrite on open.
@@ -118,6 +119,24 @@ clans/parties, and chasing/pathfinding AI remain separate milestones.
   actual writes still disconnect for reconciliation; that safety rule is not
   relaxed.
 
-Retest with a GM and an ordinary account: the ordinary account should see the GM,
+Retest with a GM and an ordinary account: after `+visible`, the ordinary account should see the GM,
 and opening the Inn should keep the session alive and show existing bank data.
 Verify a deposit/withdrawal and reconnect; no SQL reset or inventory wipe is needed.
+
+## GM visibility commands
+
+Full GMs (Authority 0) and limited GMs (250) start hidden from **all other
+players**, including other GMs, on every new connection. Hidden GMs still see
+ordinary nearby players. Use `+visible` to publish your character and
+`+invisible` to remove it again. `/visible` and `/invisible` are equivalent;
+no arguments are accepted. Ordinary accounts cannot use these commands.
+
+Visibility is session-only, survives ordinary travel within that session, and
+resets to hidden on reconnect. No database authority or other GM permissions
+change. The hub enforces actor visibility, requested-user discovery, movement,
+rotation and state broadcasts; hiding sends OUT and showing sends IN immediately
+without removing the GM's own view of nearby players. Public model authority
+compatibility mapping still applies when a GM explicitly becomes visible.
+
+This is actor visibility, not anonymity: normal chat/private messages and combat
+are not suppressed or made anonymous. It is not a PvP stealth skill.

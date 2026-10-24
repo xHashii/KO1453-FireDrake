@@ -6,7 +6,7 @@ public static class PlayerPackets
 {
     // Some 1453 clients suppress authority-0 remote actors for ordinary viewers.
     // Public appearance is not authorization: MYINFO and server-side permissions
-    // retain the real authority. Until explicit GM hiding is supported, GMs are visible.
+    // retain the real authority. The presence hub enforces hiding; opt-in visible GMs need a renderable model.
     public static byte PublicAuthority(byte authority) => authority is 0 or 250 ? (byte)1 : authority;
     /// <summary>CUser::GetUserInfo's clanless 1453 layout. This is NOT the
     /// character-select or MYINFO layout; all three have different item orders.</summary>

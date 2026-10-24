@@ -3,7 +3,7 @@ using KnightOnline.Shared.Protocol;
 namespace KnightOnline.Shared.Network;
 
 public sealed record PlayerPresence(ushort Id, ushort Zone, float X, float Z, byte[] Info,
-    int AppearanceVersion, Action<Packet> Deliver);
+    int AppearanceVersion, Action<Packet> Deliver, bool Hidden = false);
 
 /// <summary>Serializes visibility transitions and packet enqueueing, never session locks.
 /// Info arrays are owned immutable snapshots. Callbacks must only enqueue packets.</summary>
@@ -28,17 +28,19 @@ public sealed class PlayerHub
             {
                 if (other.Id == player.Id) continue;
                 var theirs = _visible[other.Id];
-                if (Near(player,other))
+                // Visibility is directional: a hidden GM still sees other
+                // players, but no viewer receives that GM's actor or updates.
+                if (Near(player,other) && !other.Hidden)
                 {
                     if (own.Add(other.Id)) player.Deliver(In(other));
+                }
+                else if (own.Remove(other.Id)) player.Deliver(Out(other.Id));
+                if (Near(player,other) && !player.Hidden)
+                {
                     if (theirs.Add(player.Id)) other.Deliver(In(player));
                     else if (changed) { other.Deliver(Out(player.Id)); other.Deliver(In(player)); }
                 }
-                else
-                {
-                    if (own.Remove(other.Id)) player.Deliver(Out(other.Id));
-                    if (theirs.Remove(player.Id)) other.Deliver(Out(player.Id));
-                }
+                else if (theirs.Remove(player.Id)) other.Deliver(Out(player.Id));
             }
         }
     }

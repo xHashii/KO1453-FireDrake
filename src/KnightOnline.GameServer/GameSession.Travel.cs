@@ -37,6 +37,12 @@ internal sealed partial class GameSession
             PlayerChat(type, message);
             return;
         }
+        var visibilityCommand=words[0][1..].ToLowerInvariant();
+        if (visibilityCommand is "visible" or "invisible")
+        {
+            SetGmVisibility(visibilityCommand,words.Length);
+            return;
+        }
         var gmCommand = words[0][0] == '+';
         if (gmCommand && _user!.Authority != 0)
         {
@@ -63,7 +69,7 @@ internal sealed partial class GameSession
                 Town();
                 break;
             case "/help":
-                TravelMessage("Travel: /town, /teleport, /zone <id/name>, /moradon, /home, /eslant. GMs: +zonechange <id>, +moradon, +heal.");
+                TravelMessage("Travel: /town, /teleport, /zone <id/name>, /moradon, /home, /eslant. GMs: +visible, +invisible, +zonechange <id>, +moradon, +heal.");
                 break;
             case "/moradon":
                 TravelTo("moradon");

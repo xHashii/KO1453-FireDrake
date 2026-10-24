@@ -638,3 +638,7 @@ Timed/protected transfers are refused rather than losing their metadata.
 See [Multiplayer and banking](docs/MULTIPLAYER_AND_BANKING.md) for protocol
 scope, safety rules and the two-client/reconnect acceptance checklist. These
 features still need visual verification with the actual Windows 1453 client.
+
+GM characters now start hidden from other players. Full/limited GMs can use
+`+visible` and `+invisible` (also `/visible` and `/invisible`) to change their
+session's visibility. Reconnecting resets to hidden; GM permissions are unchanged.
