@@ -488,9 +488,41 @@ nearby, confirm one message each; move it beyond 32 units or into another zone
 and confirm normal chat does not leak. Then select that player's private chat,
 send a message and verify delivery/confirmation, blocking and disconnect cases.
 
-The 2026-10-24 supplied run log also identified missing server `ITEM` definitions
-for potion IDs `389020000` and `389014000`. These are separate from chat and
-from the resolved starter-tail rejection. Neither definition is present among
-the shipped ITEM inserts; prices/stats must not be guessed or silently mapped to
-another potion. Those purchases remain safely rejected pending authoritative
-matching item definitions.
+### Complete item catalog repair for purchasing
+
+**Correction to the earlier diagnosis:** potion IDs `389020000` and `389014000`
+are present in `0002_data.sql`, not absent from the shipped source. They were
+missing from the running database, and startup's old starter-only repair did
+not include merchant stock. This affected weapons, armor and other categories
+as well; it was not a potion-specific protocol problem.
+
+Startup now restores **every missing definition from the full 102,884-item
+shipped catalog** before accepting players. Full rows (prices, selling groups,
+weights, stackability, equipment requirements, stats, etc.) are copied from the
+original SQL, never guessed or aliased to another item. Existing definitions,
+including custom prices, are left untouched; no inventories/coins are reset.
+
+The compact embedded `Items/ItemCatalog.sql.gz` is generated reproducibly by
+`python tools/build_item_catalog.py` from both data scripts. It is embedded in
+the Database assembly, so repair works from published builds without needing
+SQL files in the launch directory. CI checks source/resource equivalence.
+
+Repair reads existing IDs once, inserts only missing rows in bounded batches,
+and commits as one transaction. A startup advisory lock serializes concurrent
+repairs (the shipped ITEM table has no unique index). Invalid inserts fail and
+roll back rather than silently truncating via INSERT IGNORE. Repeat startups
+restore zero rows when complete. The normal existing ITEM read/insert privileges
+are required; no manual SQL/import or new configuration is needed.
+
+Stop GameServer, pull/build, and restart. Look for:
+
+```text
+Item catalog: restored <count> missing ITEM row(s) from 102884 shipped definitions; existing definitions and saved inventory unchanged.
+```
+
+A large restored count is expected for a partial database. CI tests the actual
+ITEM schema and full catalog, custom-row preservation, repeat/concurrent
+startup, failure rollback, and real buy/save/reload flows for health/mana
+potions, a weapon, armor and sundries. Normal shop range/group, slot, stacking,
+weight and coin validation remains enforced: restoring all definitions does
+not make every item purchasable at every merchant, nor invent client-only IDs.
