@@ -4,6 +4,7 @@ public sealed record WarehouseRequest(byte Action, ushort Npc, uint Item, byte P
 public sealed record WarehouseChange(ItemSlotData[] Inventory,ItemSlotData[] Warehouse,int Gold,int Bank);
 public static class WarehouseRules
 {
+    public static int OpenFee(ushort zone) => zone is 71 or 72 or 73 ? 10000 : 0;
     public static bool TryRead(Packet p,out WarehouseRequest r)
     {
         r=new(0,0,0,0,0,0,0); if(p.RemainingToRead<1) return false;
@@ -28,13 +29,13 @@ public static class WarehouseRules
         var src=r.Action is 2 or 5?14+r.Source:24*r.Page+r.Source;
         var dst=r.Action is 3 or 5?14+r.Destination:24*r.Page+r.Destination;
         if(ReferenceEquals(srcArray,dstArray) && src==dst) return null;
-        var from=srcArray[src]; var to=dstArray[dst];
-        var count=r.Action is 4 or 5?(uint)Math.Max(0,(int)from.Count):r.Count;
-        if(from.ItemId!=r.Item || from.Count<=0 || from.Count>9999 || count==0 || count>(uint)from.Count || from.ExpirationUnixTime!=0 || to.ExpirationUnixTime!=0 ||
-            (item.Countable==0 && (from.Count!=1 || count!=1)) || (to.ItemId!=0 && (r.Action is 4 or 5 || item.Countable==0 || to.ItemId!=from.ItemId || to.Count<=0 || to.Durability!=from.Durability || to.Count+count>9999))) return null;
+        var sourceItem=srcArray[src]; var to=dstArray[dst];
+        var count=r.Action is 4 or 5?(uint)Math.Max(0,(int)sourceItem.Count):r.Count;
+        if(sourceItem.ItemId!=r.Item || sourceItem.Count<=0 || sourceItem.Count>9999 || count==0 || count>(uint)sourceItem.Count || sourceItem.ExpirationUnixTime!=0 || to.ExpirationUnixTime!=0 ||
+            (item.Countable==0 && (sourceItem.Count!=1 || count!=1)) || (to.ItemId!=0 && (r.Action is 4 or 5 || item.Countable==0 || to.ItemId!=sourceItem.ItemId || to.Count<=0 || to.Durability!=sourceItem.Durability || to.Count+count>9999))) return null;
         if(r.Action==3 && (item.Weight<0 || weight<0 || weight+(long)item.Weight*count>maxWeight)) return null;
-        dstArray[dst]=to.ItemId==0?from with {Count=(short)count}:to with {Count=(short)(to.Count+count)};
-        srcArray[src]=count==from.Count?ItemSlotData.Empty:from with {Count=(short)(from.Count-count)};
+        dstArray[dst]=to.ItemId==0?(sourceItem with {Count=(short)count}):(to with {Count=(short)(to.Count+count)});
+        srcArray[src]=count==sourceItem.Count?ItemSlotData.Empty:(sourceItem with {Count=(short)(sourceItem.Count-count)});
         return new(inv,wh,gold,bank);
     }
     public static Packet Result(byte action,bool success)=>new Packet(WizOpcode.Warehouse).WriteByte(action).WriteByte(success?(byte)1:(byte)0);

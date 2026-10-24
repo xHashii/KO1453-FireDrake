@@ -14,7 +14,19 @@ internal sealed partial class GameSession
         if (!WarehouseNpcAvailable(_warehouseNpc)) { Send(WarehouseRules.Result(1,false)); return; }
         try
         {
-            _warehouse=_characters.LoadWarehouseAsync(_accountId).GetAwaiter().GetResult();
+            _warehouse=null;
+            var loaded=_characters.LoadWarehouseAsync(_accountId).GetAwaiter().GetResult();
+            var fee=WarehouseRules.OpenFee(_user!.Zone);
+            if(_user.Gold<fee) {Send(WarehouseRules.Result(1,false));return;}
+            if(fee>0)
+            {
+                var expected=new InventorySnapshot(_user.Items,_user.Serials??[],_user.Gold);
+                if(_characters.SaveWarehouseAsync(_charId,_accountId,expected,expected with {Gold=expected.Gold-fee},loaded,loaded,[]).GetAwaiter().GetResult()!=InventorySaveResult.Saved)
+                    throw new InvalidOperationException("Stale warehouse opening fee snapshot.");
+                _user=_user with {Gold=_user.Gold-fee};
+                Send(new Packet(WizOpcode.GoldChange).WriteByte(2).WriteUInt32((uint)fee).WriteUInt32((uint)_user.Gold));
+            }
+            _warehouse=loaded;
             Send(WarehouseRules.Open(_warehouse.Gold,ItemBlobs.Parse(_warehouse.Items,_warehouse.Serials,_warehouse.Times,192)));
         }
         catch(Exception ex) { InventoryUnavailable(ex); }

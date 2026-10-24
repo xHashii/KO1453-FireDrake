@@ -57,6 +57,7 @@ internal static class FoundationsVerification
         test("warehouse coin transfer conserves total",Propose(request with {Item=900000000,Count=50}) is {Gold:50,Bank:150});
         test("warehouse coin underflow/overflow rejected",Propose(request with {Item=900000000,Count=101}) is null&&WarehouseRules.Propose(request with {Item=900000000,Count=1},null,inv,bank,100,ShopRules.CoinMax,0,1000) is null);
         test("warehouse open has exact 192 native item records",WarehouseRules.Open(100,bank).Length==6+192*17);
+        test("warehouse source PK-zone opening fee",WarehouseRules.OpenFee(71)==10000&&WarehouseRules.OpenFee(72)==10000&&WarehouseRules.OpenFee(73)==10000&&WarehouseRules.OpenFee(21)==0);
         test("warehouse native transfer success vector",Convert.ToHexString(WarehouseRules.Result(2,true).Payload)=="0201");
         var wire=new Packet(WizOpcode.Warehouse).WriteByte(2).WriteUInt16(10001).WriteUInt32(item.Id).WriteByte(0).WriteByte(0).WriteByte(0).WriteUInt32(3);
         test("warehouse native request parses exact fields",WarehouseRules.TryRead(wire,out var decoded)&&decoded==request);
