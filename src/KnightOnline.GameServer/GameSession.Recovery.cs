@@ -21,6 +21,7 @@ internal sealed partial class GameSession
                 {
                     SyncWorldNpcs();
                     MonsterRetaliation();
+                    UpdatePlayerPresence();
                     if (!_inventoryFaulted && Environment.TickCount64 >= _nextPositionSave)
                     {
                         _nextPositionSave = Environment.TickCount64+10000;
@@ -63,6 +64,7 @@ internal sealed partial class GameSession
         lock (_gameGate)
         {
             _chat.Remove(_socketId);
+            _players.Remove(_socketId);
             _pendingMelee = null; _meleeTimer?.Dispose(); _meleeTimer = null;
             _worldTimer?.Dispose(); _worldTimer = null;
             _recoveryTimer?.Dispose();

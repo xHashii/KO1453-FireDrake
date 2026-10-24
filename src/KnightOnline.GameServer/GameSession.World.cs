@@ -58,18 +58,20 @@ internal sealed partial class GameSession
 
     private void WorldMove(Packet packet)
     {
-        if (!_inGame || packet.Length != 9 || CurrentWorld is not { } zone) return;
+        if (!CanTravel() || packet.Length != 9 || CurrentWorld is not { } zone) return;
         var wireX = packet.ReadUInt16();
         var wireZ = packet.ReadUInt16();
         var wireY = packet.ReadInt16();
         var x = wireX / 10f;
         var z = wireZ / 10f;
         var speed = packet.ReadInt16();
-        packet.ReadByte();
+        var echo = packet.ReadByte();
         if (!zone.Map.Contains(x, z)) return;
         if (speed != 0) { _sitting = false; _casting = null; _pendingMelee = null; }
         _user = _user! with { Px = wireX * 10, Pz = wireZ * 10, Py = wireY * 10 };
         SyncWorldNpcs();
+        UpdatePlayerPresence();
+        _players.Broadcast(_socketId,new Packet(WizOpcode.Move).WriteUInt16(_socketId).WriteUInt16(wireX).WriteUInt16(wireZ).WriteInt16(wireY).WriteInt16(speed).WriteByte(echo),true);
         if (_activeGate is not null && !Near(_activeGate.X, _activeGate.Z, 10)) ClearGate();
     }
 
@@ -139,6 +141,8 @@ internal sealed partial class GameSession
         KoLog.Info($"[ NPC ] {_charId} opened {npc.Prototype.Name} id={id} type={npc.Prototype.Type} shop={npc.Prototype.SellingGroup}");
         switch (npc.Prototype.Type)
         {
+            case 31:
+                _warehouseNpc = id; OpenWarehouse(); break;
             case 21:
                 _shopNpcId = id;
                 Send(new Packet(WizOpcode.TradeNpc).WriteInt32(npc.Prototype.SellingGroup));

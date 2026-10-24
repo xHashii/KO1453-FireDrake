@@ -43,6 +43,7 @@ try
 {
     await characters.EnsureTravelSchemaAsync();
     await characters.EnsureCombatSchemaAsync();
+    await characters.EnsureFoundationSchemaAsync();
     await characters.EnsurePotionDataAsync();
     var catalogRepair = await characters.RepairItemCatalogAsync();
     KoLog.Info($"Item catalog: restored {catalogRepair.Restored} missing ITEM row(s) from {catalogRepair.SourceCount} shipped definitions; existing definitions and saved inventory unchanged.");
@@ -83,7 +84,8 @@ catch (Exception ex)
     return 1;
 }
 var chat = new ChatHub();
-var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat));
+var players = new PlayerHub();
+var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat, players));
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -186,11 +188,12 @@ internal sealed partial class GameSession : KoSession
     private readonly byte[] _stats = new byte[5];
     private short _points;
 
-    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment, ChatHub chat)
+    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment, ChatHub chat, PlayerHub players)
         : base(client, maxPayloadSize: 8192)
     {
         _characters = characters;
         _chat = chat;
+        _players = players;
         _characterPreviewEquipment = characterPreviewEquipment;
         _world = world;
         _socketId = unchecked((ushort)Interlocked.Increment(ref _lastSocketId));
@@ -201,7 +204,7 @@ internal sealed partial class GameSession : KoSession
         lock (_gameGate)
         {
             try { return HandleGamePacket(packet); }
-            finally { UpdateChatPresence(); }
+            finally { UpdateChatPresence(); UpdatePlayerPresence(); }
         }
     }
 
@@ -255,6 +258,14 @@ internal sealed partial class GameSession : KoSession
                 case WizOpcode.Move:
                     WorldMove(packet);
                     break;
+                case WizOpcode.Rotate:
+                    PlayerRotate(packet); break;
+                case WizOpcode.ReqUserin:
+                    RequestedPlayers(packet); break;
+                case WizOpcode.Skilldata:
+                    SkillBar(packet); break;
+                case WizOpcode.Warehouse:
+                    Warehouse(packet); break;
                 case WizOpcode.ObjectEvent:
                     WorldObjectEvent(packet);
                     break;
@@ -809,6 +820,7 @@ internal sealed partial class GameSession : KoSession
     /// </summary>
     private void RecomputeStats(bool refillWhenEmpty)
     {
+        _appearanceVersion++;
         var user = _user!;
         Array.Clear(_statBonus);
         Array.Clear(_resist);
@@ -1015,6 +1027,7 @@ internal sealed partial class GameSession : KoSession
 
         try { RecomputeStats(refillWhenEmpty: false); } // SetUserAbility(false)
         catch (Exception ex) { InventoryUnavailable(ex); return; }
+        _appearanceVersion++;
         SendItemMove(1);
         SendItemWeight();
         KoLog.Info($"[ ITEM MOVE - {DateTime.Now:HH:mm:ss} ] {_charId} dir={dir} item={itemId} {src} -> {dst}");

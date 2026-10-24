@@ -213,6 +213,7 @@ internal sealed partial class GameSession
                 throw new InvalidOperationException("Stale revival snapshot.");
             _user = _user with { Hp=_maxHp, Mp=_maxMp, Zone=destination.Zone, Px=destination.Px, Pz=destination.Pz, Py=destination.Py };
             _savedPosition = new(destination.Zone,destination.Px,destination.Pz,destination.Py);
+            _appearanceVersion++;
             _pendingMelee = null;
             _sitting=false;
             Send(new Packet(WizOpcode.Regene).WriteUInt16((ushort)(destination.Px/10)).WriteUInt16((ushort)(destination.Pz/10)).WriteUInt16(unchecked((ushort)(short)(destination.Py/10))));

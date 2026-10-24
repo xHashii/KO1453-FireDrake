@@ -34,7 +34,7 @@ public sealed partial class MariaDbCharacterRepository
         uint item, ulong serial, PotionVitals vitals) => SaveInventoryAsync(charId, expected, proposed, item, serial, vitals);
 
     private async Task<InventorySaveResult> SaveInventoryAsync(string charId, InventorySnapshot expected, InventorySnapshot proposed,
-        uint protectedItem, ulong protectedSerial, PotionVitals? potion, LootClaim? loot = null)
+        uint protectedItem, ulong protectedSerial, PotionVitals? potion, LootClaim? loot = null, WarehouseMutation? warehouse = null)
     {
         if (proposed.Gold < 0 || proposed.Gold > ShopRules.CoinMax) return InventorySaveResult.StaleOrProtected;
         await using var connection = new MySqlConnection(_connectionString);
@@ -50,6 +50,7 @@ public sealed partial class MariaDbCharacterRepository
         {
             if (!await rows.ReadAsync().ConfigureAwait(false) || await rows.ReadAsync().ConfigureAwait(false)) return InventorySaveResult.StaleOrProtected;
         }
+        if (warehouse is not null && !await LockAndSaveWarehouse(command,warehouse,expected,proposed).ConfigureAwait(false)) return InventorySaveResult.StaleOrProtected;
         if (loot is not null && !await LockLootAsync(command, loot).ConfigureAwait(false)) return InventorySaveResult.StaleOrProtected;
         if (potion is not null)
         {

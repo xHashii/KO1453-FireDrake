@@ -16,8 +16,9 @@ internal sealed partial class GameSession
         if ((type == 1 && value is 1 or 2)
             || (type == 4 && value is 1 or 2 or 3 or 11 or 12 or 13 or 14 or 15))
         {
-            if (type == 1) _sitting = value == 2;
-            Send(new Packet(WizOpcode.StateChange).WriteUInt16(_socketId).WriteByte(type).WriteUInt32(value));
+            if (type == 1) { _sitting = value == 2; if (_sitting) _pendingMelee = null; }
+            UpdatePlayerPresence();
+            _players.Broadcast(_socketId,new Packet(WizOpcode.StateChange).WriteUInt16(_socketId).WriteByte(type).WriteUInt32(value),true);
         }
     }
 
@@ -166,6 +167,8 @@ internal sealed partial class GameSession
         var gold = _characters.SaveTravelPositionAsync(_charId, target, fee).GetAwaiter().GetResult();
         _savedPosition = new(target.Zone,target.Px,target.Pz,target.Py);
         _pendingMelee = null; _casting = null;
+        _players.Remove(_socketId);
+        _warehouse = null; _warehouseNpc = 0;
         var sameZone = target.Zone == _user!.Zone;
         _user = _user with { Zone = target.Zone, Px = target.Px, Pz = target.Pz, Py = target.Py, Gold = gold };
         _offeredTravel.Clear();
