@@ -5,6 +5,11 @@ using KnightOnline.Shared.Protocol;
 internal sealed partial class GameSession
 {
     private readonly PlayerHub _players;
+    protected override void OnConnected()
+    {
+        _socketId=SessionId;
+        base.OnConnected();
+    }
     private short _direction;
     private int _appearanceVersion;
     private void UpdatePlayerPresence()
@@ -14,7 +19,7 @@ internal sealed partial class GameSession
         var u = _user;
         var info=PlayerPackets.Info(new(_charId,u.Nation,u.Level,u.Race,u.Class,
             (ushort)(u.Px/10),(ushort)(u.Pz/10),(short)(u.Py/10),u.Face,u.Hair,
-            _currentHp<=0?(byte)3:_sitting?(byte)2:(byte)1,u.Authority,_direction,u.Rank,(byte)u.Zone,_slots));
+            _currentHp<=0?(byte)3:_sitting?(byte)2:(byte)1,u.Authority,_direction,0,(byte)u.Zone,_slots),id=>_protos.ContainsKey(id));
         _players.Publish(new(_socketId,u.Zone,PlayerX,PlayerZ,info,_appearanceVersion,p => { Send(p); }));
     }
     private void PlayerRotate(Packet packet)

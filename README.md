@@ -625,3 +625,16 @@ and death packets at swing frame zero. Impact revalidates target life, zone,
 range, weapon state and player state; movement/travel/disconnect cancel pending
 hits. This does not reduce damage or inflate weak-monster HP. Client animation
 assets/timing still require visual confirmation in the real 1453 client.
+
+### Multiplayer and banking foundations
+
+Nearby players now receive native appearance IN/OUT, movement, rotation and
+allowed state updates; equipment changes refresh visible peer models. Player
+IDs are kept below the NPC ID band. Skill-bar shortcuts persist independently
+of skill-point allocation. Friendly warehouse NPCs support account-wide item
+and coin deposits/withdrawals, stack/page moves and atomic inventory/bank saves.
+Timed/protected transfers are refused rather than losing their metadata.
+
+See [Multiplayer and banking](docs/MULTIPLAYER_AND_BANKING.md) for protocol
+scope, safety rules and the two-client/reconnect acceptance checklist. These
+features still need visual verification with the actual Windows 1453 client.

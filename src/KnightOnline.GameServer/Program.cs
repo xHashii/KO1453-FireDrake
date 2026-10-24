@@ -85,7 +85,7 @@ catch (Exception ex)
 }
 var chat = new ChatHub();
 var players = new PlayerHub();
-var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat, players));
+var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat, players),maxSessionId:9999);
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -150,12 +150,9 @@ internal sealed partial class GameSession : KoSession
     private const int RightHand = 6;      // equipment position order, ItemBlobs.Describe
     private const int LeftHand = 8;
 
-    /// <summary>Session ids handed out like the C++ socket slots (1000+).</summary>
-    private static int _lastSocketId = 1000;
-
     private readonly MariaDbCharacterRepository _characters;
     private readonly bool _characterPreviewEquipment;
-    private readonly ushort _socketId;
+    private ushort _socketId;
 
     /// <summary>Port of m_strAccountID: empty until GAME_LOGIN accepts us.</summary>
     private string _accountId = string.Empty;
@@ -196,7 +193,6 @@ internal sealed partial class GameSession : KoSession
         _players = players;
         _characterPreviewEquipment = characterPreviewEquipment;
         _world = world;
-        _socketId = unchecked((ushort)Interlocked.Increment(ref _lastSocketId));
     }
 
     protected override bool HandlePacket(Packet packet)
@@ -634,7 +630,7 @@ internal sealed partial class GameSession : KoSession
     /// Port of CUser::GameStart (CharacterSelectionHandler.cpp). Opcode 1 is
     /// the loading-screen pull: quest data, the full self-info dump, notices,
     /// time, weather, static nearby NPC records and an empty WIZ_GAMESTART ack.
-    /// Multiplayer player/merchant regions and monster AI remain unported.
+    /// Nearby player visibility is synchronized after loading; merchants and full AI remain unported.
     /// Opcode 2 flips the
     /// session in game (respawn, blink, ability recalc and temple checks come
     /// with combat). The character name after the opcode is single-byte

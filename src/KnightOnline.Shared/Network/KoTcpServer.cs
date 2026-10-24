@@ -14,7 +14,7 @@ public sealed class KoTcpServer<TSession> where TSession : KoSession
 {
     private readonly Func<TcpClient, TSession> _sessionFactory;
     private readonly ConcurrentDictionary<ushort, TSession> _sessions = new();
-    private readonly ConcurrentDictionary<ushort, Task> _sessionTasks = new();
+    private readonly ConcurrentDictionary<Task, byte> _sessionTasks = new();
     private readonly CancellationTokenSource _shutdown = new();
     private TcpListener? _listener;
     private int _nextSessionId;
@@ -23,13 +23,15 @@ public sealed class KoTcpServer<TSession> where TSession : KoSession
     /// Disconnect sessions with no valid packet for this long (the original
     /// used KOSOCKET_TIMEOUT = 30s on the game server). Null = disabled.
     /// </param>
-    public KoTcpServer(Func<TcpClient, TSession> sessionFactory, TimeSpan? idleTimeout = null)
+    public KoTcpServer(Func<TcpClient, TSession> sessionFactory, TimeSpan? idleTimeout = null, ushort maxSessionId = ushort.MaxValue)
     {
         _sessionFactory = sessionFactory;
         IdleTimeout = idleTimeout;
+        MaxSessionId = maxSessionId != 0 ? maxSessionId : throw new ArgumentOutOfRangeException(nameof(maxSessionId));
     }
 
     public TimeSpan? IdleTimeout { get; }
+    public ushort MaxSessionId { get; }
 
     public int ListeningPort => (_listener?.LocalEndpoint as IPEndPoint)?.Port ?? 0;
     public int SessionCount => _sessions.Count;
@@ -49,12 +51,15 @@ public sealed class KoTcpServer<TSession> where TSession : KoSession
             while (!_shutdown.IsCancellationRequested)
             {
                 var client = await _listener.AcceptTcpClientAsync(_shutdown.Token).ConfigureAwait(false);
+                // Reserve the player-ID band independently of NPC IDs. Refuse
+                // excess sockets without terminating the listening server.
+                if (_sessions.Count >= MaxSessionId) { client.Dispose(); continue; }
                 var session = _sessionFactory(client);
                 session.SessionId = AllocateSessionId();
                 _sessions[session.SessionId] = session;
                 var task = RunSessionAsync(session);
-                _sessionTasks[session.SessionId] = task;
-                _ = task.ContinueWith(completed => { _sessionTasks.TryRemove(session.SessionId,out var ignored); },
+                _sessionTasks[task] = 0;
+                _ = task.ContinueWith(completed => { _sessionTasks.TryRemove(completed,out var ignored); },
                     CancellationToken.None,TaskContinuationOptions.ExecuteSynchronously,TaskScheduler.Default);
             }
         }
@@ -66,7 +71,7 @@ public sealed class KoTcpServer<TSession> where TSession : KoSession
                 session.Disconnect();
             // Logout persistence runs in OnDisconnected. Do not exit the process
             // while disconnected sessions are still saving their final position.
-            await Task.WhenAll(_sessionTasks.Values).ConfigureAwait(false);
+            await Task.WhenAll(_sessionTasks.Keys).ConfigureAwait(false);
             if (sweeper is not null)
                 await sweeper.ConfigureAwait(false);
         }
@@ -84,7 +89,7 @@ public sealed class KoTcpServer<TSession> where TSession : KoSession
         // with collision skip is equivalent for our purposes.
         while (true)
         {
-            var id = (ushort)Interlocked.Increment(ref _nextSessionId);
+            var id = (ushort)(unchecked((uint)Interlocked.Increment(ref _nextSessionId)-1u) % MaxSessionId+1u);
             if (id != 0 && !_sessions.ContainsKey(id))
                 return id;
         }

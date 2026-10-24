@@ -6,7 +6,7 @@ public static class PlayerPackets
 {
     /// <summary>CUser::GetUserInfo's clanless 1453 layout. This is NOT the
     /// character-select or MYINFO layout; all three have different item orders.</summary>
-    public static byte[] Info(PlayerAppearance u)
+    public static byte[] Info(PlayerAppearance u,Func<uint,bool>? knownItem = null)
     {
         var p=new Packet(WizOpcode.UserInout);p.SByte();
         p.WriteString(u.Name).WriteByte(u.Nation).WriteInt16(0).WriteByte(0)
@@ -17,7 +17,7 @@ public static class PlayerPackets
             .WriteUInt32(1).WriteByte(1).WriteByte(u.Authority).WriteByte(0).WriteByte(0).WriteByte(0)
             .WriteInt16(u.Direction).WriteByte(0).WriteByte(u.Rank).WriteSByte(-1).WriteSByte(-1);
         foreach(var index in new[]{4,10,1,12,13,5,6,8,46,43})
-        { var s=index<u.Items.Count?u.Items[index]:ItemSlotData.Empty;p.WriteUInt32(s.ItemId).WriteInt16(s.Durability).WriteByte(0); }
+        { var s=index<u.Items.Count?u.Items[index]:ItemSlotData.Empty; if(s.IsEmpty || (knownItem is not null && !knownItem(s.ItemId))) s=ItemSlotData.Empty; p.WriteUInt32(s.ItemId).WriteInt16(s.Durability).WriteByte(0); }
         return p.WriteByte(u.Zone).Payload.ToArray();
     }
 }

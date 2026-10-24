@@ -11,6 +11,8 @@ internal static class FoundationsVerification
         var items=Enumerable.Range(0,73).Select(i=>new ItemSlotData((uint)(1000+i),(short)(100+i),1,(ulong)i,0)).ToArray();
         var info=PlayerPackets.Info(new("A",2,80,12,206,1234,5678,-30,1,2,1,1,-90,0,21,items));
         test("player info matches original C++ clanless wire layout and ten-slot order",Convert.ToHexString(info)=="01410200000000000000000000FFFF500CCE00D2042E16E2FF010201010000000101000000A6FF0000FFFFEC030000680000F20300006E0000E9030000650000F4030000700000F5030000710000ED030000690000EE0300006A0000F00300006C000016040000920000130400008F000015");
+        var filtered=PlayerPackets.Info(new("A",2,80,12,206,1234,5678,-30,1,2,1,1,-90,0,21,items),id=>id<1040);
+        test("remote appearance suppresses unknown costume models without changing saved items",filtered.AsSpan(filtered.Length-15,14).ToArray().All(b=>b==0)&&items[46].ItemId==1046);
         var hub=new PlayerHub();var a=new List<Packet>();var b=new List<Packet>();var c=new List<Packet>();
         PlayerPresence P(ushort id,ushort zone,float x,List<Packet> sink,int version=0)=>new(id,zone,x,0,info,version,p=>sink.Add(p));
         hub.Publish(P(1,21,0,a));hub.Publish(P(2,21,10,b));hub.Publish(P(3,1,10,c));

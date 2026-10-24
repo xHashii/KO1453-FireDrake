@@ -146,10 +146,19 @@ Key facts driving the rewrite:
   the doorway into the world. WIZ_GAMESTART answers the loading pull with the
   WIZ_MYINFO dump, and the equipment subset is live too: WIZ_ITEM_MOVE slot
   shuffles persist USERDATA.strItem and refresh SetUserAbility-derived stats.
-  Remaining: character delete, region/NPC pushes, save-on-logout, combat,
-  enter world (`WIZ_MYINFO`), movement/rotation, region user in/out, chat, time/weather.
-- **M5 — Core gameplay**: combat (`AttackHandler`, `Unit`), magic engine, items/inventory/
-  warehouse/trade/merchant/upgrade, parties, EXP/levels/stats.
+  Subsequent increments now implement MYINFO/world entry, source NPC/monster
+  pushes, validated movement/travel, logout/checkpoint saves, general/private
+  chat, nearby player IN/OUT, movement/rotation/state routing and appearance
+  refresh. Remaining M4 work includes character delete and complete original
+  spatial-region/time/weather synchronization rather than prototype snapshots.
+- **M5 — Core gameplay** ⏳ in progress: basic R attacks, corpse/respawn state,
+  stationary retaliation, supported single-target skills, solo XP/loot, skill
+  allocation, consumables and atomic NPC shops are implemented. The latest
+  foundation increment adds persistent shortcut bars and transactional account
+  warehouses (items/coins, stack/page moves, NPC/range/protection checks).
+  Full combat/magic, trade/player merchants, repairs/upgrades and parties remain
+  unported. See `COMBAT_AND_LOOT.md` and `MULTIPLAYER_AND_BANKING.md` for exact
+  supported scope and real-client acceptance checks.
 - **M6 — Social & meta**: Knights (clans) + alliances + siege, king system, friends, letters,
   rentals/seals, premium, shopping mall (PUS).
 - **M7 — AI + world**: AIServer port — spawns from `K_NPCPOS`, aggro/chase/attack, NPC magic,
