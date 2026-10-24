@@ -579,7 +579,7 @@ namespace; static NPC rows still resolve against `K_NPC`. Authored counts and
 rectangles are loaded for hosted zones, with globally unique runtime IDs and
 source HP shown by target-health requests. Startup validates map bounds and ID
 capacity. Monsters are stationary; the follow-up basic R-attack increment below adds
-damage and death/respawn. Retaliation, loot ownership and atomic pickup remain pending.
+damage and death/respawn. The solo reward/loot follow-up below adds stationary retaliation, XP and atomic pickup.
 Moradon has 474 authored monster instances in addition to its service NPCs.
 
 AdminPanel now has paginated empty character search, additional dashboard counts
@@ -596,7 +596,16 @@ shared per-spawn HP, and a bounded deterministic hit-versus-armor calculation.
 NPC services, players and unseen targets cannot be damaged. Attack result/HP/death
 packets are emitted and dead spawns return at their authored K_NPCPOS.RegTime.
 Stationary clients refresh nearby monster death/respawn visibility each second.
-This is the first basic PvE attack path, **not the full original damage/AI system**:
-retaliation, skills, XP/coin/item awards, loot pickup and weapon wear remain pending.
+This introduced the first basic PvE attack path. The follow-up below adds supported
+skills and solo rewards; the full original damage/AI system and weapon wear remain pending.
 Restart GameServer after rebuilding, approach a Worm, select it and press R.
 HP should decrease; on death the monster disappears and later respawns at full HP.
+
+### Solo combat and reward follow-up
+
+Armed R-hit range and corpse lifetime are corrected. The current build adds
+stationary retaliation, supported single-target attack skills and skill-point
+allocation, solo XP/level progression, source drop resolution, native loot chests
+and transactional owner-only pickup. Picked-up items/coins and XP survive reconnect.
+See [combat scope and test checklist](docs/COMBAT_AND_LOOT.md) for supported skill
+categories, deployment, ownership/expiry, and the remaining full-AI/party/buff work.

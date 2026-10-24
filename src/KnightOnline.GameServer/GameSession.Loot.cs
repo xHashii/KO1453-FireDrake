@@ -17,7 +17,7 @@ internal sealed partial class GameSession
             var npc = CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == bundle.Npc);
             if (!Near(bundle.X,bundle.Z,120) || !_visibleNpcs.Contains(bundle.Npc) || npc?.Combat.DeathToken != bundle.KillToken) continue;
             if (_announcedLoot.Add(bundle.Id))
-                Send(new Packet(WizOpcode.ItemDrop).WriteUInt16(bundle.Npc).WriteUInt32(bundle.Id));
+                Send(LootPackets.Spawn(bundle.Npc,bundle.Id));
         }
     }
     private LootBundle? FindLoot(uint id) => _characters.LoadLootAsync(_charId,_user!.Zone).GetAwaiter().GetResult()
@@ -31,13 +31,7 @@ internal sealed partial class GameSession
         {
             var bundle = FindLoot(id);
             if (bundle is null) return;
-            var reply = new Packet(WizOpcode.BundleOpenReq);
-            for (var i=0;i<6;i++)
-            {
-                var entry = i < bundle.Entries.Count ? bundle.Entries[i] : null;
-                reply.WriteUInt32(entry?.Item ?? 0).WriteUInt16(entry?.Count ?? 0);
-            }
-            Send(reply);
+            Send(LootPackets.Open(bundle.Entries.Select(e => (e.Item,e.Count)).ToArray()));
         }
         catch (Exception ex) { InventoryUnavailable(ex); }
     }
@@ -86,8 +80,7 @@ internal sealed partial class GameSession
                 Send(PotionRules.Stack(itemId,(byte)(position-14),proposed[position]));
                 _itemWeight=(int)Math.Clamp(ShopRules.MeasureInventory(_slots,_protos).Weight,0,int.MaxValue); SendItemWeight();
             }
-            Send(new Packet(WizOpcode.ItemGet).WriteByte(1).WriteByte(position < 0 ? (byte)255 : (byte)(position-14))
-                .WriteUInt32(itemId).WriteUInt16(position < 0 ? entry.Count : (ushort)proposed[position].Count).WriteUInt32((uint)gold));
+            Send(LootPackets.Taken(itemId,position < 0 ? entry.Count : (ushort)proposed[position].Count,gold,position < 0 ? (byte)255 : (byte)(position-14)));
             KoLog.Info($"[ LOOT ] {_charId} bundle={bundleId} item={itemId} count={entry.Count} gold={gold}");
         }
         catch (Exception ex) { InventoryUnavailable(ex); }

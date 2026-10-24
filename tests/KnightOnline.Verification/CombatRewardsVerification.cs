@@ -1,7 +1,9 @@
 using System.Text.RegularExpressions;
+using System.Text;
 using KnightOnline.Database;
 using KnightOnline.Database.Items;
 using KnightOnline.Database.World;
+using KnightOnline.Shared.Protocol;
 using MySqlConnector;
 
 namespace KnightOnline.Verification;
@@ -19,8 +21,15 @@ internal static class CombatRewardsVerification
         var skill = new CombatSkill(101003,1010,3,4,0,3100,0,1,120,0,0,0);
         test("skill class/level enforced", CombatSkillRules.Learned(skill,101,3,new byte[10]) && !CombatSkillRules.Learned(skill,201,3,new byte[10]) && !CombatSkillRules.Learned(skill,101,2,new byte[10]));
         test("allocated skill tree points enforced", !CombatSkillRules.Learned(skill with { SkillClass=1055 },105,80,new byte[10]));
+        var points = new byte[10]; points[0]=2;
+        test("skill point allocation respects class and category", SkillPointRules.Allocate(points,5,105,10) is { } allocated && allocated[0] == 1 && allocated[5] == 1 && points[0] == 2 && SkillPointRules.Allocate(points,5,101,10) is null && SkillPointRules.Allocate(points,255,105,10) is null);
+        test("master skill points require mastered class and level", SkillPointRules.Allocate(points,8,105,80) is null && SkillPointRules.Allocate(points,8,106,60) is null && SkillPointRules.Allocate(points,8,106,61) is not null);
+        test("loot spawn original NPC/bundle layout", Convert.ToHexString(LootPackets.Spawn(10001,0x01020304).Payload) == "112704030201");
+        test("loot box contains six padded entries", LootPackets.Open([(389014000,1)]).Length == 36 && LootPackets.Open([]).Payload.ToArray().All(b => b == 0));
+        test("solo loot reply retains 1453 no-bundle-ID layout", LootPackets.Taken(900000000,7,107).Length == 12 && LootPackets.Taken(900000000,7,107).Payload[1] == 255);
         var progress = ExperienceRules.Gain(new(1,90,0,new byte[10]),250,new Dictionary<byte,long>{{1,100},{2,200},{3,400}});
         test("XP multiple levels preserves remainder and points", progress.Level == 3 && progress.Exp == 40 && progress.Points == 6);
+        test("legacy empty skill blob gains usable free points", ExperienceRules.Gain(new(9,99,0,[]),1,new Dictionary<byte,long>{{9,100}}) is { Level:10, Skills.Length:10 } legacy && legacy.Skills[0] == 2);
         test("XP cap does not wrap signed storage", ExperienceRules.Gain(new(80,int.MaxValue,0,new byte[10]),int.MaxValue,new Dictionary<byte,long>()).Exp == int.MaxValue);
         var drops = new DropCatalog();
         drops.Drops[1] = new([100,0,389014000,0,0],[10000,0,10000,0,0]);
@@ -72,6 +81,7 @@ internal static class CombatRewardsVerification
         try { await repository.TryClaimLootAsync("combat-test",gold,after with { Gold=108 },item); } catch (MySqlException) { failed=true; }
         test("SQL pickup failure rolls back item and claim together", failed && (await repository.LoadLootAsync("combat-test",21)).Single().Entries.Count == 1);
         command.CommandText = "ALTER TABLE USERDATA DROP CONSTRAINT inject_pickup"; await command.ExecuteNonQueryAsync();
+        test("wrong drop quantity cannot consume an entry", await repository.TryClaimLootAsync("combat-test",gold,after,item with { Count=2 }) != InventorySaveResult.Saved);
         test("item pickup persists blobs and consumes entry", await repository.TryClaimLootAsync("combat-test",gold,after,item) == InventorySaveResult.Saved && (await repository.LoadLootAsync("combat-test",21)).Count == 0);
         command.CommandText = "SELECT Gold,strItem,strSerial,Level,Exp,Points FROM USERDATA WHERE strUserID='combat-test'";
         await using (var rows = await command.ExecuteReaderAsync())
@@ -96,5 +106,35 @@ internal static class CombatRewardsVerification
         }
         test("actual source Slash skill definition resolves", (await repository.LoadCombatSkillAsync(101003)) is { HitPercent:120, Mp:4, SkillClass:1010 });
         test("unsupported skill never resolves as combat", await repository.LoadCombatSkillAsync(101001) is null);
+        var newToken = Guid.NewGuid().ToString("N");
+        var repeated = await Task.WhenAll(repository.AwardKillAsync("combat-test",newToken,npc,21,reward.Progress,[new(900000000,1)]),repository.AwardKillAsync("combat-test",newToken,npc,21,reward.Progress,[new(900000000,1)]));
+        test("concurrent duplicate kill rewards commit exactly once", repeated.Count(r => r is not null) == 1);
+        var expiredId = repeated.First(r => r is not null)!.Bundle;
+        command.CommandText = "UPDATE KO_LOOT_BUNDLE SET ExpiresAt='2000-01-01' WHERE Id=@expired"; command.Parameters.AddWithValue("@expired",expiredId); await command.ExecuteNonQueryAsync(); command.Parameters.Clear();
+        test("expired loot cannot be opened or claimed", (await repository.LoadLootAsync("combat-test",21)).Count == 0 && await repository.TryClaimLootAsync("combat-test",after,after with { Gold=108 },new(expiredId,0,900000000,1,21,10,10)) != InventorySaveResult.Saved);
+        command.CommandText = "ALTER TABLE USERDATA ADD Class smallint DEFAULT 105; UPDATE USERDATA SET Level=80,strSkill=@skills WHERE strUserID='combat-test'";
+        var allocation = new byte[10]; allocation[0]=2; command.Parameters.AddWithValue("@skills",allocation); await command.ExecuteNonQueryAsync(); command.Parameters.Clear();
+        var allocatedSkills = SkillPointRules.Allocate(allocation,5,105,80)!;
+        test("skill point allocation persists once with blob CAS", await repository.SaveAllocatedSkillAsync("combat-test",allocation,allocatedSkills,105,80) && !await repository.SaveAllocatedSkillAsync("combat-test",allocation,allocatedSkills,105,80));
+        test("death and free town revival persist vitals/position", await repository.TrySaveCombatVitalsAsync("combat-test",80,32,0,32) && await repository.TrySaveCombatVitalsAsync("combat-test",0,32,100,50,new(21,"Town",30000,35000,0)));
+        // Smoke-test the actual runtime loader, not just hand-built combat records.
+        foreach (var table in new[] { "ZONE_INFO","K_NPC","K_NPCPOS","K_OBJECTPOS","K_MONSTER","K_MONSTER_ITEM","MAKE_ITEM_GROUP","MAKE_ITEM_GRADECODE","MAKE_WEAPON","MAKE_DEFENSIVE","MAKE_ITEM_LARECODE" })
+        {
+            var ddl = Regex.Match(schema,$@"CREATE TABLE `{table}`\([\s\S]*?\) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;").Value;
+            command.CommandText = $"DROP TABLE IF EXISTS `{table}`; " + ddl; await command.ExecuteNonQueryAsync();
+            var batch = new StringBuilder(); var count=0;
+            foreach (var line in File.ReadLines("sql/mysql/kn_online/0003_data.sql").Where(l => l.StartsWith($"INSERT `{table}` ")))
+            {
+                batch.AppendLine(line.Replace("INSERT `","INSERT INTO `")); count++;
+                if (count%128 != 0) continue;
+                command.CommandText=batch.ToString(); await command.ExecuteNonQueryAsync(); batch.Clear();
+            }
+            if (batch.Length > 0) { command.CommandText=batch.ToString(); await command.ExecuteNonQueryAsync(); }
+        }
+        var data = await repository.LoadWorldDataAsync();
+        var world = new WorldCatalog(data,WorldCatalog.FindMapDirectory());
+        test("actual world/drop catalogs load with full shipped source", data.Monsters!.Count == 790 && world.Drops.Drops.Count == 756 && world.Drops.Groups.Count == 69 && world.Zones[21].Npcs.Count(n => n.Prototype.IsMonster) == 474);
+
+
     }
 }

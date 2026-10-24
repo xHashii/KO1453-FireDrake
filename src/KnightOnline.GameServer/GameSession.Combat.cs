@@ -124,6 +124,23 @@ internal sealed partial class GameSession
         return true;
     }
 
+    private void AllocateSkillPoint(Packet packet)
+    {
+        if (!CanTravel() || _user is null || packet.RemainingToRead != 1) return;
+        var type = packet.ReadByte();
+        var skills = SkillPointRules.Allocate(_user.Skill,type,_user.Class,_user.Level);
+        if (skills is null)
+        { Send(new Packet(WizOpcode.SkillptChange).WriteByte(type).WriteByte(type < _user.Skill.Length ? _user.Skill[type] : (byte)0)); return; }
+        try
+        {
+            if (!_characters.SaveAllocatedSkillAsync(_charId,_user.Skill,skills,_user.Class,_user.Level).GetAwaiter().GetResult())
+                throw new InvalidOperationException("Stale skill point allocation.");
+            _user = _user with { Skill=skills };
+            // Like CUser::SkillPointChange, success is client-predicted; only failures reply.
+        }
+        catch (Exception ex) { InventoryUnavailable(ex); }
+    }
+
     private bool PersistCombatVitals(int hp, int mp)
     {
         if (!_characters.TrySaveCombatVitalsAsync(_charId,_user!.Hp,_user.Mp,hp,mp).GetAwaiter().GetResult())
@@ -166,7 +183,7 @@ internal sealed partial class GameSession
             destination = destination with { Py=(int)(zone.Map.Height(destination.Px/100f,destination.Pz/100f)*100) };
             if (!_characters.TrySaveCombatVitalsAsync(_charId,_user.Hp,_user.Mp,_maxHp,_maxMp,destination).GetAwaiter().GetResult())
                 throw new InvalidOperationException("Stale revival snapshot.");
-            _user = _user with { Hp=_maxHp, Mp=_maxMp, Px=destination.Px, Pz=destination.Pz, Py=destination.Py };
+            _user = _user with { Hp=_maxHp, Mp=_maxMp, Zone=destination.Zone, Px=destination.Px, Pz=destination.Pz, Py=destination.Py };
             _sitting=false;
             Send(new Packet(WizOpcode.Regene).WriteUInt16((ushort)(destination.Px/10)).WriteUInt16((ushort)(destination.Pz/10)).WriteUInt16(unchecked((ushort)(short)(destination.Py/10))));
             RestoreVitals(_maxHp-_currentHp,_maxMp-_currentMp);

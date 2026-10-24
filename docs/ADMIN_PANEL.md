@@ -100,9 +100,10 @@ editors — which is also how KOWEB-style tools present it.
   New/activated references are validated; existing broken source references can
   be disabled. Duplicate IDs and stale saves are rejected. Before/after JSON is
   retained in `_ko_admin_audit` in the same transaction as the update.
-- The editor is database tooling, **not working in-game loot**. Monster spawns
-  support basic R attacks, death and respawn; AI, rewards and pickup remain pending.
-  There is no live reload. Restart after catalog edits once loot is implemented.
+- Solo in-game loot now resolves this catalog (including procedural/group slots).
+  There is no live reload. Restart GameServer after catalog edits. Stationary
+  retaliation and selected single-target skills are implemented; full chasing AI,
+  party rewards, buffs, DoTs and AoE remain unsupported.
 - **Deploy the panel and GameServer from the same updated build.** The server
   holds MariaDB account/character advisory locks from character selection until
   its disconnect save finishes. Admin saves acquire the same locks, including
@@ -120,4 +121,5 @@ Before testing, back up the database, rebuild the solution and restart GameServe
 and AdminPanel. Browse Characters with no search text, edit an offline character,
 verify a second stale editor is rejected, then log in and verify character/account
 edits are refused. Open Monster drops, lower a chance, save/reload, and inspect
-`_ko_admin_audit`; this must not be interpreted as an in-game loot test.
+`_ko_admin_audit`; then restart GameServer and use the end-to-end combat checklist
+in `docs/COMBAT_AND_LOOT.md`.

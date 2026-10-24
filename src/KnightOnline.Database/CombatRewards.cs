@@ -13,12 +13,12 @@ public static class ExperienceRules
     public static ExperienceState Gain(ExperienceState old, int reward, IReadOnlyDictionary<byte,long> thresholds)
     {
         var level = old.Level; long exp = (long)old.Exp + Math.Max(0,reward); int points = old.Points;
-        var skills = (byte[])old.Skills.Clone();
+        var skills = new byte[Math.Max(10,old.Skills.Length)]; old.Skills.CopyTo(skills,0);
         while (level < 80 && thresholds.TryGetValue(level,out var threshold) && threshold > 0 && exp >= threshold)
         {
             exp -= threshold; level++;
             points = Math.Min(short.MaxValue, points + (level > 60 ? 5 : 3));
-            if (level >= 10 && skills.Length > 0) skills[0] = (byte)Math.Min(255,skills[0]+2);
+            if (level >= 10 && new[] {0,5,6,7,8}.Sum(i => (int)skills[i]) < 2*(level-9)) skills[0] = (byte)Math.Min(255,skills[0]+2);
         }
         if (level >= 80 && thresholds.TryGetValue(level,out var cap) && cap > 0) exp = Math.Min(exp,cap);
         return new(level,(int)Math.Clamp(exp,0,int.MaxValue),(short)points,skills);
@@ -49,7 +49,7 @@ public sealed partial class MariaDbCharacterRepository
         await using (var rows = await command.ExecuteReaderAsync())
         {
             if (!await rows.ReadAsync()) throw new InvalidOperationException("Missing character progression.");
-            current = new(Convert.ToByte(rows[0]),Convert.ToInt32(rows[1]),Convert.ToInt16(rows[2]),(byte[])rows[3]);
+            current = new(Convert.ToByte(rows[0]),Convert.ToInt32(rows[1]),Convert.ToInt16(rows[2]),rows.IsDBNull(3) ? [] : (byte[])rows[3]);
             if (await rows.ReadAsync()) throw new InvalidOperationException("Ambiguous character progression.");
         }
         command.CommandText = "SELECT COUNT(*) FROM KO_KILL_REWARD WHERE KillToken=@token";

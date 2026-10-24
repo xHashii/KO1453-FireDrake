@@ -122,7 +122,7 @@ internal sealed partial class GameSession
             TravelMessage("Move closer to the NPC and right-click again.");
             return;
         }
-        if (npc.Prototype.IsMonster) { TravelMessage("Use R for a basic melee attack. Monster skills, retaliation and loot are not implemented yet."); return; }
+        if (npc.Prototype.IsMonster) { TravelMessage("Use R or a supported attack skill. Loot belongs to the killer; chasing AI and party rewards are not implemented."); return; }
         KoLog.Info($"[ NPC ] {_charId} opened {npc.Prototype.Name} id={id} type={npc.Prototype.Type} shop={npc.Prototype.SellingGroup}");
         switch (npc.Prototype.Type)
         {

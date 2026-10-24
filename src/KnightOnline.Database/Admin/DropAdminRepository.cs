@@ -118,7 +118,7 @@ public sealed partial class CharacterAdminRepository
             audit.CommandText = "INSERT INTO _ko_admin_audit(admin_user,action,target,detail,created_utc) VALUES(@admin,'Drop.Save',@id,@detail,UTC_TIMESTAMP())";
             audit.Parameters.AddWithValue("@admin", admin);
             audit.Parameters.AddWithValue("@id", drop.Id.ToString());
-            audit.Parameters.AddWithValue("@detail", JsonSerializer.Serialize(new { before = DropJson(before), after = DropJson(drop), activation = "restart after combat/loot milestone" }));
+            audit.Parameters.AddWithValue("@detail", JsonSerializer.Serialize(new { before = DropJson(before), after = DropJson(drop), activation = "GameServer restart required" }));
             await audit.ExecuteNonQueryAsync(cancellationToken);
         }
         await transaction.CommitAsync(cancellationToken);
