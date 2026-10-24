@@ -39,7 +39,7 @@ public sealed class WorldCatalog
                     var x = Math.Min(spawn.Left, spawn.Right) + Math.Abs(spawn.Left - spawn.Right) * u;
                     var z = Math.Min(spawn.Top, spawn.Bottom) + Math.Abs(spawn.Top - spawn.Bottom) * v;
                     if (!map.Contains(x, z)) throw new InvalidDataException($"Zone {definition.Id}: NPC {proto.Id} outside map at {x},{z}.");
-                    npcs.Add(new WorldNpc(Allocate(), proto, x, map.Height(x, z), z, spawn.Direction));
+                    npcs.Add(new WorldNpc(Allocate(), proto, x, map.Height(x, z), z, spawn.Direction, RespawnSeconds: spawn.RespawnSeconds));
                 }
             }
             var objects = data.Objects.Where(o => o.Zone == definition.Id).ToArray();

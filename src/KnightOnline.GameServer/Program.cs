@@ -266,6 +266,9 @@ internal sealed partial class GameSession : KoSession
                 case WizOpcode.MagicProcess:
                     UsePotion(packet);
                     break;
+                case WizOpcode.Attack:
+                    MeleeAttack(packet);
+                    break;
                 case WizOpcode.TargetHp:
                     TargetHp(packet);
                     break;

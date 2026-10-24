@@ -587,3 +587,16 @@ AdminPanel now has paginated empty character search, additional dashboard counts
 existing-group drop editor. See [admin documentation](docs/ADMIN_PANEL.md) for
 source drop semantics, auditing and deployment precautions. Deploy the new server
 and panel together; legacy servers must be stopped before character editing.
+
+### Basic R-attack increment
+
+The captured eight-byte `WIZ_ATTACK` request is now handled for visible same-zone
+monsters. R hits use server weapon timing/range (not the client's delay/distance),
+shared per-spawn HP, and a bounded deterministic hit-versus-armor calculation.
+NPC services, players and unseen targets cannot be damaged. Attack result/HP/death
+packets are emitted and dead spawns return at their authored K_NPCPOS.RegTime.
+Stationary clients refresh nearby monster death/respawn visibility each second.
+This is the first basic PvE attack path, **not the full original damage/AI system**:
+retaliation, skills, XP/coin/item awards, loot pickup and weapon wear remain pending.
+Restart GameServer after rebuilding, approach a Worm, select it and press R.
+HP should decrease; on death the monster disappears and later respawns at full HP.

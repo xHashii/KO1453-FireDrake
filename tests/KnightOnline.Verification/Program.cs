@@ -517,6 +517,7 @@ ChatVerification.Run((name, ok) => Check(name, ok));
 
 LoggingVerification.Run((name, ok) => Check(name, ok));
 
+MeleeVerification.Run((name, ok) => Check(name, ok));
 try { await ShopVerification.RunAsync((name, ok) => Check(name, ok)); }
 catch (Exception ex)
 {

@@ -3,13 +3,15 @@ using KnightOnline.Shared.Protocol;
 namespace KnightOnline.Database.World;
 
 public sealed record NpcPrototype(ushort Id, string Name, ushort Model, ushort Size, uint Weapon1,
-    uint Weapon2, byte Nation, byte Type, int SellingGroup, byte Level, int MaxHp = 1, bool IsMonster = false, int DropGroup = 0);
-public sealed record NpcSpawn(ushort Zone, ushort Prototype, int Left, int Top, int Right, int Bottom, int Count, byte Direction, bool IsMonster = false);
+    uint Weapon2, byte Nation, byte Type, int SellingGroup, byte Level, int MaxHp = 1, bool IsMonster = false, int DropGroup = 0, int Armor = 0);
+public sealed record NpcSpawn(ushort Zone, ushort Prototype, int Left, int Top, int Right, int Bottom, int Count, byte Direction, bool IsMonster = false, int RespawnSeconds = 30);
 public sealed record WorldObject(ushort Zone, ushort Index, byte Type, ushort Control, byte Nation,
     byte Status, float X, float Y, float Z);
 public sealed record WorldNpc(ushort Id, NpcPrototype Prototype, float X, float Y, float Z,
-    byte Direction, byte ObjectType = 0, byte GateOpen = 0)
+    byte Direction, byte ObjectType = 0, byte GateOpen = 0, int RespawnSeconds = 30)
 {
+    public MonsterCombat Combat { get; } = new(Prototype.MaxHp, RespawnSeconds);
+    public int Health => Prototype.IsMonster ? Combat.Health(Environment.TickCount64) : Prototype.MaxHp;
     /// <summary>Legacy clients can refuse right-clicks on an opposing-faction NPC
     /// before emitting WIZ_NPC_EVENT. Moradon has shared services, but its source
     /// prototypes mix Karus and El Morad groups. Only presentation of shared

@@ -7,10 +7,20 @@ internal sealed partial class GameSession
     // Packet processing, timer callbacks and disconnect saves share one game-state lock.
     private readonly object _gameGate = new();
     private Timer? _recoveryTimer;
+    private Timer? _worldTimer;
     private bool _sitting;
 
     private void StartRecovery()
     {
+        _worldTimer ??= new Timer(_ =>
+        {
+            lock (_gameGate)
+            {
+                if (!_inGame || !IsConnected || _user is null || _travelStage != 0) return;
+                try { SyncWorldNpcs(); }
+                catch (Exception ex) { KoLog.Error("World visibility refresh failed.", ex); }
+            }
+        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
         _recoveryTimer ??= new Timer(_ =>
         {
             lock (_gameGate)
@@ -42,6 +52,7 @@ internal sealed partial class GameSession
         lock (_gameGate)
         {
             _chat.Remove(_socketId);
+            _worldTimer?.Dispose(); _worldTimer = null;
             _recoveryTimer?.Dispose();
             _recoveryTimer = null;
             if (_inGame && _user is not null && !_inventoryFaulted)

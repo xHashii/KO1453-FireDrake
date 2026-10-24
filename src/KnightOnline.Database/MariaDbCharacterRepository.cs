@@ -689,7 +689,7 @@ public sealed partial class MariaDbCharacterRepository
             "SELECT Num, Kind, Slot, Damage, Weight, Duration, Ac, Hitrate, Evasionrate, " +
             "StrB, StaB, DexB, IntelB, ChaB, MaxHpB, MaxMpB, FireR, ColdR, LightningR, MagicR, " +
             "PoisonR, CurseR, ReqLevel, ReqLevelMax, ReqRank, ReqTitle, ReqStr, ReqSta, ReqDex, " +
-            "ReqIntel, ReqCha, Countable FROM ITEM WHERE Num IN (" +
+            "ReqIntel, ReqCha, Countable, COALESCE(`Delay`,100), COALESCE(`Range`,10) FROM ITEM WHERE Num IN (" +
             string.Join(", ", ids) + ")";
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -727,7 +727,7 @@ public sealed partial class MariaDbCharacterRepository
                 Convert.ToByte(reader.GetValue(28)),
                 Convert.ToByte(reader.GetValue(29)),
                 Convert.ToByte(reader.GetValue(30)),
-                Convert.ToByte(reader.GetValue(31)));
+                Convert.ToByte(reader.GetValue(31)), Convert.ToInt16(reader.GetValue(32)), Convert.ToInt16(reader.GetValue(33)));
             result[proto.Num] = proto;
         }
 

@@ -68,8 +68,6 @@ internal sealed partial class GameSession
         }
         var npc = CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == id);
         if (npc is null || !_visibleNpcs.Contains(id) || !Near(npc.X, npc.Z, 120)) return;
-        // Static NPCs do not yet take damage. Use their authored HP, not a
-        // made-up percentage or the player's HP. No unspawned monsters invented.
-        Send(TargetHealthPackets.Reply(id, echo, npc.Prototype.MaxHp, npc.Prototype.MaxHp));
+        Send(TargetHealthPackets.Reply(id, echo, npc.Prototype.MaxHp, npc.Health));
     }
 }

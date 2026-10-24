@@ -28,7 +28,7 @@ public sealed partial class MariaDbCharacterRepository
                 protos.Add(p.Id, p);
             }
         var monsters = new Dictionary<ushort, NpcPrototype>();
-        command.CommandText = "SELECT sSid,strName,sPid,sSize,iWeapon1,iWeapon2,byGroup,byType,sLevel,iHpPoint,sItem FROM K_MONSTER";
+        command.CommandText = "SELECT sSid,strName,sPid,sSize,iWeapon1,iWeapon2,byGroup,byType,sLevel,iHpPoint,sItem,sAc FROM K_MONSTER";
         await using (var r = await command.ExecuteReaderAsync().ConfigureAwait(false))
             while (await r.ReadAsync().ConfigureAwait(false))
             {
@@ -37,18 +37,18 @@ public sealed partial class MariaDbCharacterRepository
                     unchecked((uint)Convert.ToInt32(r.GetValue(4))), unchecked((uint)Convert.ToInt32(r.GetValue(5))),
                     Convert.ToByte(r.GetValue(6)), Convert.ToByte(r.GetValue(7)), 0,
                     checked((byte)Math.Clamp(Convert.ToInt32(r.GetValue(8)), 0, 255)), Math.Max(1, Convert.ToInt32(r.GetValue(9))), true,
-                    Convert.ToInt32(r.GetValue(10)));
+                    Convert.ToInt32(r.GetValue(10)), Math.Max(0, Convert.ToInt32(r.GetValue(11))));
                 monsters.Add(monster.Id, monster);
             }
         var spawns = new List<NpcSpawn>();
         // AIServer::LoadSpawnCallback: ActType >= 100 selects K_NPC, below 100 selects K_MONSTER.
-        command.CommandText = "SELECT ZoneID,NpcID,LeftX,TopZ,RightX,BottomZ,NumNPC,byDirection,ActType FROM K_NPCPOS " +
+        command.CommandText = "SELECT ZoneID,NpcID,LeftX,TopZ,RightX,BottomZ,NumNPC,byDirection,ActType,RegTime FROM K_NPCPOS " +
             "ORDER BY ZoneID,NpcID,LeftX,TopZ,RightX,BottomZ,byDirection";
         await using (var r = await command.ExecuteReaderAsync().ConfigureAwait(false))
             while (await r.ReadAsync().ConfigureAwait(false))
                 spawns.Add(new NpcSpawn(Convert.ToUInt16(r.GetValue(0)), Convert.ToUInt16(r.GetValue(1)),
                     Convert.ToInt32(r.GetValue(2)), Convert.ToInt32(r.GetValue(3)), Convert.ToInt32(r.GetValue(4)),
-                    Convert.ToInt32(r.GetValue(5)), Convert.ToInt32(r.GetValue(6)), Convert.ToByte(r.GetValue(7)), Convert.ToInt32(r.GetValue(8)) < 100));
+                    Convert.ToInt32(r.GetValue(5)), Convert.ToInt32(r.GetValue(6)), Convert.ToByte(r.GetValue(7)), Convert.ToInt32(r.GetValue(8)) < 100, Math.Max(1, Convert.ToInt32(r.GetValue(9)))));
         var objects = new List<WorldObject>();
         command.CommandText = "SELECT ZoneID,sIndex,Type,ControlNpcID,Belong,Status,PosX,PosY,PosZ FROM K_OBJECTPOS ORDER BY ZoneID,sIndex";
         await using (var r = await command.ExecuteReaderAsync().ConfigureAwait(false))

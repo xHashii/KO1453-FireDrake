@@ -35,6 +35,16 @@ public sealed class ChatHub
         return sent;
     }
 
+    public void Region(ushort zone, float x, float z, float radius, Packet packet)
+    {
+        foreach (var member in _members.Values)
+        {
+            var dx = member.X - x; var dz = member.Z - z;
+            if (member.Zone == zone && dx * dx + dz * dz <= radius * radius)
+                member.Deliver(packet);
+        }
+    }
+
     public bool Whisper(ushort senderId, ushort targetId, out string targetName, string message)
     {
         targetName = "";

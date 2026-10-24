@@ -14,7 +14,7 @@ internal sealed partial class GameSession
     private float PlayerZ => _user!.Pz / 100f;
     private bool Near(float x, float z, float radius) => (PlayerX - x) * (PlayerX - x) + (PlayerZ - z) * (PlayerZ - z) <= radius * radius;
 
-    private IEnumerable<WorldNpc> NearbyNpcs() => CurrentWorld?.Npcs.Where(n => Near(n.X, n.Z, 120)) ?? Enumerable.Empty<WorldNpc>();
+    private IEnumerable<WorldNpc> NearbyNpcs() => CurrentWorld?.Npcs.Where(n => n.Health > 0 && Near(n.X, n.Z, 120)) ?? Enumerable.Empty<WorldNpc>();
 
     private void SendWorldNpcs()
     {
@@ -51,9 +51,18 @@ internal sealed partial class GameSession
         if (!zone.Map.Contains(x, z)) return;
         if (speed != 0) _sitting = false;
         _user = _user! with { Px = wireX * 10, Pz = wireZ * 10, Py = wireY * 10 };
+        SyncWorldNpcs();
+        if (_activeGate is not null && !Near(_activeGate.X, _activeGate.Z, 10)) ClearGate();
+    }
+
+    private void SyncWorldNpcs()
+    {
         var nearby = NearbyNpcs().ToDictionary(n => n.Id);
         foreach (var id in _visibleNpcs.Where(id => !nearby.ContainsKey(id)).ToArray())
         {
+            var removed = CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == id);
+            if (removed is not null && removed.Health == 0)
+                Send(new Packet(WizOpcode.Dead).WriteUInt16(id));
             Send(new Packet(WizOpcode.NpcInout, (byte)2).WriteUInt16(id));
             _visibleNpcs.Remove(id);
         }
@@ -64,7 +73,6 @@ internal sealed partial class GameSession
             Send(reply);
             _visibleNpcs.Add(npc.Id);
         }
-        if (_activeGate is not null && !Near(_activeGate.X, _activeGate.Z, 10)) ClearGate();
     }
 
     private void WorldNpcRequest(Packet packet)
@@ -100,7 +108,7 @@ internal sealed partial class GameSession
             TravelMessage("Move closer to the NPC and right-click again.");
             return;
         }
-        if (npc.Prototype.IsMonster) { TravelMessage("Monster combat is the next milestone; this spawn is currently stationary."); return; }
+        if (npc.Prototype.IsMonster) { TravelMessage("Use R for a basic melee attack. Monster skills, retaliation and loot are not implemented yet."); return; }
         KoLog.Info($"[ NPC ] {_charId} opened {npc.Prototype.Name} id={id} type={npc.Prototype.Type} shop={npc.Prototype.SellingGroup}");
         switch (npc.Prototype.Type)
         {
