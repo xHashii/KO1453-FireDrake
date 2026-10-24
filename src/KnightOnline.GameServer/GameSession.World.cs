@@ -7,6 +7,7 @@ internal sealed partial class GameSession
 {
     private readonly WorldCatalog _world;
     private readonly HashSet<ushort> _visibleNpcs = new();
+    private readonly HashSet<ushort> _deadNpcs = new();
     private readonly Dictionary<ushort, MapWarp> _gateWarps = new();
     private WorldObject? _activeGate;
     private WorldZone? CurrentWorld => _user is not null && _world.Zones.TryGetValue(_user.Zone, out var zone) ? zone : null;
@@ -14,13 +15,15 @@ internal sealed partial class GameSession
     private float PlayerZ => _user!.Pz / 100f;
     private bool Near(float x, float z, float radius) => (PlayerX - x) * (PlayerX - x) + (PlayerZ - z) * (PlayerZ - z) <= radius * radius;
 
-    private IEnumerable<WorldNpc> NearbyNpcs() => CurrentWorld?.Npcs.Where(n => n.Health > 0 && Near(n.X, n.Z, 120)) ?? Enumerable.Empty<WorldNpc>();
+    private IEnumerable<WorldNpc> NearbyNpcs() => CurrentWorld?.Npcs.Where(n => (n.Health > 0 || n.Combat.CorpseVisible(Environment.TickCount64)) && Near(n.X, n.Z, 120)) ?? Enumerable.Empty<WorldNpc>();
 
     private void SendWorldNpcs()
     {
         foreach (var id in _visibleNpcs)
             Send(new Packet(WizOpcode.NpcInout, (byte)2).WriteUInt16(id));
         _visibleNpcs.Clear();
+        _deadNpcs.Clear();
+        _announcedLoot.Clear();
         var nearby = NearbyNpcs().ToArray();
         // Full NPC records are batched well below the 16-bit frame limit.
         foreach (var batch in nearby.Chunk(30))
@@ -34,6 +37,8 @@ internal sealed partial class GameSession
             }
             Send(reply);
         }
+        SendCorpseAnimations();
+        RefreshLoot();
         if (nearby.Length == 0) Send(new Packet(WizOpcode.ReqNpcin).WriteUInt16(0));
         KoLog.Info($"[ WORLD ] {_charId} zone={_user!.Zone} visibleNPCs={nearby.Length}");
     }
@@ -49,7 +54,7 @@ internal sealed partial class GameSession
         var speed = packet.ReadInt16();
         packet.ReadByte();
         if (!zone.Map.Contains(x, z)) return;
-        if (speed != 0) _sitting = false;
+        if (speed != 0) { _sitting = false; _casting = null; }
         _user = _user! with { Px = wireX * 10, Pz = wireZ * 10, Py = wireY * 10 };
         SyncWorldNpcs();
         if (_activeGate is not null && !Near(_activeGate.X, _activeGate.Z, 10)) ClearGate();
@@ -57,14 +62,15 @@ internal sealed partial class GameSession
 
     private void SyncWorldNpcs()
     {
+        // A respawn reuses its runtime ID, but requires a fresh IN packet.
+        foreach (var id in _deadNpcs.ToArray())
+            if (CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == id)?.Health > 0)
+            { Send(new Packet(WizOpcode.NpcInout, (byte)2).WriteUInt16(id)); _visibleNpcs.Remove(id); _deadNpcs.Remove(id); }
         var nearby = NearbyNpcs().ToDictionary(n => n.Id);
         foreach (var id in _visibleNpcs.Where(id => !nearby.ContainsKey(id)).ToArray())
         {
-            var removed = CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == id);
-            if (removed is not null && removed.Health == 0)
-                Send(new Packet(WizOpcode.Dead).WriteUInt16(id));
             Send(new Packet(WizOpcode.NpcInout, (byte)2).WriteUInt16(id));
-            _visibleNpcs.Remove(id);
+            _visibleNpcs.Remove(id); _deadNpcs.Remove(id);
         }
         foreach (var npc in nearby.Values.Where(n => !_visibleNpcs.Contains(n.Id)))
         {
@@ -73,6 +79,14 @@ internal sealed partial class GameSession
             Send(reply);
             _visibleNpcs.Add(npc.Id);
         }
+        SendCorpseAnimations();
+    }
+
+    private void SendCorpseAnimations()
+    {
+        foreach (var npc in CurrentWorld?.Npcs ?? [])
+            if (_visibleNpcs.Contains(npc.Id) && npc.Prototype.IsMonster && npc.Health == 0 && _deadNpcs.Add(npc.Id))
+                Send(new Packet(WizOpcode.Dead).WriteUInt16(npc.Id));
     }
 
     private void WorldNpcRequest(Packet packet)

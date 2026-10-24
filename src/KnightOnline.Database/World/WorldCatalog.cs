@@ -6,9 +6,11 @@ namespace KnightOnline.Database.World;
 public sealed class WorldCatalog
 {
     public IReadOnlyDictionary<ushort, WorldZone> Zones { get; }
+    public DropCatalog Drops { get; }
 
     public WorldCatalog(WorldData data, string mapDirectory)
     {
+        Drops = data.Drops ?? new DropCatalog();
         if (data.Prototypes.Count == 0 || data.Spawns.Count == 0 || data.Objects.Count == 0)
             throw new InvalidDataException("NPC/object tables are empty. Import K_NPC, K_NPCPOS and K_OBJECTPOS before starting the world.");
         var zones = new Dictionary<ushort, WorldZone>();

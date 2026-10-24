@@ -42,6 +42,7 @@ var characters = new MariaDbCharacterRepository(settings.Database);
 try
 {
     await characters.EnsureTravelSchemaAsync();
+    await characters.EnsureCombatSchemaAsync();
     await characters.EnsurePotionDataAsync();
     var catalogRepair = await characters.RepairItemCatalogAsync();
     KoLog.Info($"Item catalog: restored {catalogRepair.Restored} missing ITEM row(s) from {catalogRepair.SourceCount} shipped definitions; existing definitions and saved inventory unchanged.");
@@ -264,7 +265,16 @@ internal sealed partial class GameSession : KoSession
                     WorldNpcRequest(packet);
                     break;
                 case WizOpcode.MagicProcess:
-                    UsePotion(packet);
+                    if (!UseCombatSkill(packet)) UsePotion(packet);
+                    break;
+                case WizOpcode.BundleOpenReq:
+                    OpenLoot(packet);
+                    break;
+                case WizOpcode.ItemGet:
+                    PickupLoot(packet);
+                    break;
+                case WizOpcode.Regene:
+                    RevivePlayer(packet);
                     break;
                 case WizOpcode.Attack:
                     MeleeAttack(packet);

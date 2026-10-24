@@ -17,7 +17,13 @@ internal sealed partial class GameSession
             lock (_gameGate)
             {
                 if (!_inGame || !IsConnected || _user is null || _travelStage != 0) return;
-                try { SyncWorldNpcs(); }
+                try
+                {
+                    SyncWorldNpcs();
+                    MonsterRetaliation();
+                    if (Environment.TickCount64 >= _nextLootRefresh)
+                    { _nextLootRefresh = Environment.TickCount64+5000; RefreshLoot(); }
+                }
                 catch (Exception ex) { KoLog.Error("World visibility refresh failed.", ex); }
             }
         }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));

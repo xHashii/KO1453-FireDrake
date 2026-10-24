@@ -3,7 +3,7 @@ using KnightOnline.Shared.Protocol;
 namespace KnightOnline.Database.World;
 
 public sealed record NpcPrototype(ushort Id, string Name, ushort Model, ushort Size, uint Weapon1,
-    uint Weapon2, byte Nation, byte Type, int SellingGroup, byte Level, int MaxHp = 1, bool IsMonster = false, int DropGroup = 0, int Armor = 0);
+    uint Weapon2, byte Nation, byte Type, int SellingGroup, byte Level, int MaxHp = 1, bool IsMonster = false, int DropGroup = 0, int Armor = 0, int Experience = 0, int Money = 0, int AttackDamage = 1, int AttackDelayMs = 2000, int AttackRange = 3);
 public sealed record NpcSpawn(ushort Zone, ushort Prototype, int Left, int Top, int Right, int Bottom, int Count, byte Direction, bool IsMonster = false, int RespawnSeconds = 30);
 public sealed record WorldObject(ushort Zone, ushort Index, byte Type, ushort Control, byte Nation,
     byte Status, float X, float Y, float Z);
@@ -38,5 +38,5 @@ public sealed record WorldNpc(ushort Id, NpcPrototype Prototype, float X, float 
 }
 public sealed record ZoneDefinition(ushort Id, string MapName);
 public sealed record WorldData(IReadOnlyList<ZoneDefinition> Zones, IReadOnlyDictionary<ushort, NpcPrototype> Prototypes,
-    IReadOnlyList<NpcSpawn> Spawns, IReadOnlyList<WorldObject> Objects, IReadOnlyDictionary<ushort, NpcPrototype>? Monsters = null);
+    IReadOnlyList<NpcSpawn> Spawns, IReadOnlyList<WorldObject> Objects, IReadOnlyDictionary<ushort, NpcPrototype>? Monsters = null, DropCatalog? Drops = null);
 public sealed record WorldZone(ushort Id, SmdMap Map, IReadOnlyList<WorldNpc> Npcs, IReadOnlyList<WorldObject> Objects);

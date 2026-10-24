@@ -160,6 +160,7 @@ internal static class ShopVerification
         await ItemCatalogVerification.RunAsync(settings, test);
         await PotionVerification.DatabaseAsync(settings, test);
         await AdminVerification.RunAsync(settings, test);
+        await CombatRewardsVerification.DatabaseAsync(settings,test);
 
     }
 }
