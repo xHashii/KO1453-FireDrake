@@ -44,7 +44,6 @@ try
     await characters.EnsureTravelSchemaAsync();
     await characters.EnsureCombatSchemaAsync();
     await characters.EnsureFoundationSchemaAsync();
-    await characters.EnsureItemSealSchemaAsync();
     await characters.EnsurePotionDataAsync();
     var catalogRepair = await characters.RepairItemCatalogAsync();
     KoLog.Info($"Item catalog: restored {catalogRepair.Restored} missing ITEM row(s) from {catalogRepair.SourceCount} shipped definitions; existing definitions and saved inventory unchanged.");
@@ -53,31 +52,6 @@ catch (Exception ex)
 {
     KoLog.Error("Game data initialization failed. Check database connectivity and ITEM/KO_WORLD_TRAVEL table permissions before retrying.", ex);
     return 1;
-}
-
-// Local operator provisioning only. Never accept the code in args or a game chat command.
-if (args.Length == 2 && args[0] == "--set-seal-code")
-{
-    if (Console.IsInputRedirected) { Console.Error.WriteLine("Use an interactive local console; code input must not be redirected."); return 1; }
-    string ReadCode(string prompt)
-    {
-        Console.Write(prompt); var value = new StringBuilder();
-        while (true)
-        {
-            var key = Console.ReadKey(intercept: true);
-            if (key.Key == ConsoleKey.Enter) { Console.WriteLine(); return value.ToString(); }
-            if (key.Key == ConsoleKey.Backspace) { if (value.Length > 0) value.Length--; }
-            else if (key.KeyChar is >= '0' and <= '9' && value.Length < 9) value.Append(key.KeyChar);
-        }
-    }
-    try
-    {
-        var code = ReadCode("New eight-digit item security code (hidden): ");
-        if (code != ReadCode("Confirm code (hidden): ")) { Console.Error.WriteLine("Codes do not match."); return 1; }
-        await characters.SetItemSealCodeAsync(args[1], code);
-        Console.WriteLine("Item security code provisioned. Existing protection records unchanged."); return 0;
-    }
-    catch { Console.Error.WriteLine("Code provisioning failed. Check account identity, code policy and database access; no code has been logged."); return 1; }
 }
 
 if (args.Length == 2 && args[0] == "--grant-gm")
@@ -633,8 +607,6 @@ internal sealed partial class GameSession : KoSession
         var serialBlob = user.Serials ?? Array.Empty<byte>();
         _slotCount = Math.Max(InventoryTotal, Math.Max((user.Items.Length + 7) / 8, (serialBlob.Length + 7) / 8));
         _slots = ItemBlobs.Parse(user.Items, serialBlob, ReadOnlySpan<byte>.Empty, _slotCount);
-        try { _slots = _characters.ApplyItemSealFlagsAsync(_accountId, _slots).GetAwaiter().GetResult(); }
-        catch (Exception ex) { InventoryUnavailable(ex); return; }
         _stats[0] = user.Str; _stats[1] = user.Sta; _stats[2] = user.Dex;
         _stats[3] = user.Int; _stats[4] = user.Cha;
         _points = user.Points;
@@ -823,7 +795,7 @@ internal sealed partial class GameSession : KoSession
             result.WriteUInt32(slot.ItemId)
                 .WriteUInt16((ushort)slot.Durability)
                 .WriteUInt16((ushort)slot.Count)
-                .WriteByte(slot.Flag) // authoritative persisted protection overlay
+                .WriteByte(0) // bFlag (rented etc.) - rental system
                 .WriteUInt16(0); // sRemainingRentalTime
             if (full)
                 result.WriteUInt32(0); // unknown; always 0 in the original

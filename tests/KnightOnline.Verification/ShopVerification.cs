@@ -162,7 +162,6 @@ internal static class ShopVerification
         await AdminVerification.RunAsync(settings, test);
         await CombatRewardsVerification.DatabaseAsync(settings,test);
         await FoundationsVerification.DatabaseAsync(settings,test);
-        await ItemSealVerification.DatabaseAsync(settings,test);
 
     }
 }

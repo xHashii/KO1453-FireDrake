@@ -104,10 +104,5 @@ World entry/completed zone loading now send viewer-specific region-ID lists.
 The original discrepancy table above is the historical comparison, not the
 current implementation status. Missing-versus-empty skillbar behavior, spatial
 grid fidelity and actual native-client acceptance remain separate checks.
-Sealing status and required ownership invariants are recorded in
-`SEALING_VERIFICATION.md`; no transfer success is fabricated.
-
-The owner subsequently approved non-retail sealing as an intentional extension.
-Item protection is implemented from the source item protocol with hashed code
-provisioning and transactional ownership checks. Character transfer is still
-unimplemented; see `SEALING_VERIFICATION.md` rather than the historical table.
+The later sealing extension was removed at the owner's request; see
+`IMPLEMENTATION_STATUS_AND_ROADMAP.md` for the current 1453 scope.

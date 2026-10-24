@@ -22,12 +22,6 @@ internal static class FoundationsVerification
         test("native region list contains viewer plus visible actor IDs",Convert.ToHexString(envelopeHub.RegionList(0x2345).Payload)=="020034124523");
         envelopes.Clear();envelopeHub.Remove(0x1234);
         test("native OUT is exactly byte subtype and actor ID",Convert.ToHexString(envelopes.Single().Payload)=="023412");
-        ItemSealVerification.Rules(test);
-        var sealWire=new Packet(WizOpcode.ItemUpgrade).WriteByte(1).WriteInt16(-1).WriteUInt32(146211041).WriteByte(27).WriteString("sample");
-        test("source item seal request validates exact slot and password framing",ItemSealPackets.TryRead(sealWire,out var seal)&&seal!.Action==1&&seal.Item==146211041&&seal.Position==27&&!seal.ToString().Contains("sample"));
-        test("source item seal refusal is not a successful transaction",Convert.ToHexString(ItemSealPackets.Refused(1).Payload)=="080102");
-        test("item seal rejects out-of-bag position",!ItemSealPackets.TryRead(new Packet(WizOpcode.ItemUpgrade).WriteByte(1).WriteInt16(-1).WriteUInt32(1).WriteByte(28).WriteString("sample"),out _));
-        test("item seal rejects overlong password and trailing bytes",!ItemSealPackets.TryRead(new Packet(WizOpcode.ItemUpgrade).WriteByte(2).WriteInt16(-1).WriteUInt32(1).WriteByte(0).WriteString("123456789"),out _)&&!ItemSealPackets.TryRead(new Packet(WizOpcode.ItemUpgrade).WriteByte(1).WriteInt16(-1).WriteUInt32(1).WriteByte(0).WriteString("sample").WriteByte(0),out _));
         var filtered=PlayerPackets.Info(new("A",2,80,12,206,1234,5678,-30,1,2,1,1,-90,0,21,items),id=>id<1040);
         test("remote appearance suppresses unknown costume models without changing saved items",filtered.AsSpan(filtered.Length-15,14).ToArray().All(b=>b==0)&&items[46].ItemId==1046);
         var gmAppearance=new PlayerAppearance("A",2,80,12,206,1234,5678,-30,1,2,1,0,-90,0,21,items);

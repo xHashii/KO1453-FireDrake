@@ -65,7 +65,6 @@ public static class ShopRules
         var count = request.Count;
         long price;
         ItemSlotData replacement;
-        if (source.Flag != 0) return null;
         if (request.Type == 1)
         {
             error = 3;

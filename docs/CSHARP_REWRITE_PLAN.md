@@ -1,6 +1,8 @@
 # Knight Online v1453 — C++ → C# Rewrite Plan
 
-> Status: **planning** — pending owner decisions (see §10) and runtime assets (DB, maps, quests).
+> Current status: **partial implementation**, not planning-only. The original design
+> below is historical. For the audited live scope and next milestones, see
+> [Implementation status and roadmap](IMPLEMENTATION_STATUS_AND_ROADMAP.md) (2026-10-25).
 > Goal: a C# server that is **wire-compatible with the unmodified v1453 (Reign of the Fire Drake) client**
 > and can run against a **MySQL/MariaDB** database converted from the current SQL Server one.
 

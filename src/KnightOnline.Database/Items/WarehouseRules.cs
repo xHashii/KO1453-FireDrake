@@ -54,7 +54,7 @@ public static class WarehouseRules
     {
         var all=slots.ToArray(); if(all.Length!=192) throw new ArgumentException("Warehouse requires 192 slots.");
         var p=Result(1,true).WriteUInt32((uint)bank);
-        foreach(var s in all) p.WriteUInt32(s.ItemId).WriteInt16(s.Durability).WriteInt16(s.Count).WriteByte(s.Flag).WriteUInt32(0).WriteUInt32(s.ExpirationUnixTime);
+        foreach(var s in all) p.WriteUInt32(s.ItemId).WriteInt16(s.Durability).WriteInt16(s.Count).WriteByte(0).WriteUInt32(0).WriteUInt32(s.ExpirationUnixTime);
         return p;
     }
 }

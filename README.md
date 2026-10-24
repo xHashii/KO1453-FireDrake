@@ -1,3 +1,7 @@
+> **Current C# implementation status:** [full audit and delivery roadmap](docs/IMPLEMENTATION_STATUS_AND_ROADMAP.md)
+> (25 October 2026). This is a partial solo-PvE/multiplayer foundation, not a
+> retail-complete server. Newer-version sealing has been removed from scope.
+
 # KO1453-FireDrake — Knight Online v1453 server
 
 Server for **Knight Online v1453 (Reign of the Fire Drake)**, being rewritten
@@ -642,11 +646,3 @@ features still need visual verification with the actual Windows 1453 client.
 GM characters now start hidden from other players. Full/limited GMs can use
 `+visible` and `+invisible` (also `/visible` and `/invisible`) to change their
 session's visibility. Reconnecting resets to hidden; GM permissions are unchanged.
-
-### Optional newer-version item protection
-
-Password-protected item seal/unseal is an intentional extension, not retail-1453
-certification. Provision a separate code locally with the GameServer's
-`--set-seal-code ACCOUNT_ID` mode (hidden prompts, never put the code in arguments).
-See [sealing policy and setup](docs/SEALING_VERIFICATION.md). Character-to-ring
-transfer and voucher unbinding are not yet implemented.

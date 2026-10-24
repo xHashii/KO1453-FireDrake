@@ -1,8 +1,3 @@
-> Scope update: the owner approved newer-version sealing as an intentional security
-> extension. Item lock/unlock is now implemented; see `SEALING_VERIFICATION.md`
-> for its explicit policy, provisioning and remaining character-transfer work.
-> Earlier "not implemented" entries below are historical audit findings.
-
 # Retail 1453 fidelity audit — initial findings
 
 Goal: reproduce a specific retail 1453 behavior, not modern Knight Online or a
@@ -19,48 +14,15 @@ skipped the menu and directly opened storage; that is now corrected. NPC/range/
 friendly checks still apply. Talking to the Inn does not charge an opening fee
 or load storage. Storage action 1 revalidates access and applies the source PK fee.
 
-## Sealing evidence and blockers
+## Sealing excluded by scope decision (2026-10-25)
 
-- `GameServer/SealHandler.cpp` contains an item-seal handler: upgrade subopcode 8,
-  action 1 seal / action 2 unseal, inventory position and password, error codes,
-  and a 1000000-coin sealing charge. It explicitly leaves premium eligibility
-  unresolved and queues database work; it is not an end-to-end verified reference.
-- Its `CharacterSealProcess` (upgrade subopcode 9) is **empty**. A menu option or
-  a UI screenshot is not evidence of implemented character-transfer semantics.
-- Current C# sealing is not implemented. Do not advertise it as functional or
-  consume a scroll/coins/create a ring merely because the menu is now displayed.
-- Seal packets may contain security passwords. Their raw payloads are now
-  redacted from logs. Do not request users' seal passwords or log them to reverse
-  engineer the protocol.
-
-Web research performed October 24, 2026:
-
-1. Historical **October 1, 2008** FAQ (secondary source):
-   http://ploytk.blogspot.com/2008/10/knight-character-seal-faq.html
-   Describes sealing another character on the same account with a PUS scroll,
-   producing a tradable Cypher Ring; one item allowed in the last inventory
-   slot; magic-bag items disallowed; unsealing needs a free character slot.
-   This is historical evidence, but does **not prove availability/rules in 1453**.
-2. Dated **August 18, 2016** change notice/discussion:
-   https://steamcommunity.com/app/389430/discussions/0/361798516942634756/
-   Says all items must be removed and magic bags prevent sealing. This differs
-   from the 2008 one-item exception and must not be silently backported.
-3. Later official PUS page:
-   http://www.nttgameonline.com/knight/en/news/news_detail/99/1
-   Describes a CSS, security code and one-last-slot-item exception. Its web
-   publication date does not establish an exact 1453 protocol or ruleset.
-4. Modern item-unseal guide:
-   https://helpdesk.bynogame.com/en/knight-online/knight-online-item-unseal-make-tradable
-   Describes Inn > Seal/Cancel, but modern voucher mechanics are not a verified
-   1453 item-seal reference.
-
-Before implementing character transfer, establish the actual target client build
-and period-correct protocol/rules. Needed verification includes: seal-code
-validation and premium eligibility; CSS/ring item IDs; which character is eligible;
-allowed last-slot items/magic bags; clan/king/online-character restrictions;
-source/target nation and account-slot constraints; exact request/reply records;
-and transaction/replay protection for both character ownership and ring serial.
-No invented zero-cost or password-bypass fallback is acceptable.
+The owner withdrew the newer-version item/character sealing extension. Its C#
+service, password provisioning, decoder, tests and active migration have been
+removed. The original C++ reference is retained as historical source, not live
+C# functionality. Existing database records are not dropped or rewritten.
+Native client Inn labels are client-owned; an unavailable entry may still appear.
+Unsupported requests never charge coins, consume scrolls or transfer ownership.
+Raw potentially sensitive request payloads remain redacted as a logging safeguard.
 
 ## Other known retail gaps (not fixed by the Inn change)
 

@@ -60,7 +60,7 @@ public sealed class DatabaseMigrator
     /// </summary>
     private static readonly HashSet<string> PlayerTables = new(StringComparer.OrdinalIgnoreCase)
     {
-        "KO_ITEM_SEAL_SECURITY", "KO_ITEM_SEAL_LOCK", "TB_USER", "ACCOUNT_CHAR", "CURRENTUSER", "USERDATA", "USERDATA_SKILLSHORTCUT",
+        "TB_USER", "ACCOUNT_CHAR", "CURRENTUSER", "USERDATA", "USERDATA_SKILLSHORTCUT",
         "USER_SAVED_MAGIC", "USER_ITEMS", "USER_RENTAL_ITEM", "RENTAL_ITEM",
         "RENTAL_ITEM_LIST", "WAREHOUSE", "KNIGHTS", "KNIGHTS_USER", "KNIGHTS_CAPE",
         "KNIGHTS_RATING", "KNIGHTS_ALLIANCE", "KNIGHTS_SIEGE_WARFARE", "MAIL_BOX",

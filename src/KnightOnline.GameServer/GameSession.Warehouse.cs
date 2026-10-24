@@ -30,7 +30,7 @@ internal sealed partial class GameSession
         try
         {
             loaded=_characters.LoadWarehouseAsync(_accountId).GetAwaiter().GetResult();
-            reply=WarehouseRules.Open(loaded.Gold,_characters.ApplyItemSealFlagsAsync(_accountId,ItemBlobs.Parse(loaded.Items,loaded.Serials,loaded.Times,192)).GetAwaiter().GetResult());
+            reply=WarehouseRules.Open(loaded.Gold,ItemBlobs.Parse(loaded.Items,loaded.Serials,loaded.Times,192));
         }
         catch(Exception ex)
         {

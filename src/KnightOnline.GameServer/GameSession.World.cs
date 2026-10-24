@@ -227,16 +227,11 @@ internal sealed partial class GameSession
     {
         if (!_inGame || packet.RemainingToRead < 1) return;
         var sub = packet.ReadByte();
-        if (sub == 8)
+        if (sub is 8 or 9)
         {
-            ProcessItemSeal(packet);
-            return;
-        }
-        if (sub == 9)
-        {
-            // The original CharacterSealProcess is empty. Do not interpret
-            // unknown payload bytes as account/slot ownership instructions.
-            TravelMessage("Character sealing is not enabled: the native transfer protocol is not verified. No scroll consumed and no character ownership changed.");
+            // Later-version sealing is intentionally outside this 1453 port.
+            // A client-supplied menu entry does not authorize any mutation.
+            TravelMessage("Sealing is not supported by this server's 1453 ruleset. No items or coins changed.");
             return;
         }
         if ((sub is 2 or 3 or 7) && packet.RemainingToRead == 53)

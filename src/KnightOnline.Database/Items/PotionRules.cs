@@ -27,7 +27,7 @@ public static class PotionRules
         for (var i = InventorySlots.InventoryStart; i < Math.Min(slots.Count, InventorySlots.CospreStart); i++)
         {
             var item = slots[i];
-            if (item.ItemId != definition.Item || item.Count <= 0 || item.Flag != 0 || item.ExpirationUnixTime != 0) continue;
+            if (item.ItemId != definition.Item || item.Count <= 0 || item.ExpirationUnixTime != 0) continue;
             var proposed = slots.ToArray();
             proposed[i] = item.Count == 1 ? ItemSlotData.Empty : item with { Count = (short)(item.Count - 1) };
             return new(proposed, i, definition.Resource == 1 ? (int)Math.Min(maxHp, (long)hp + definition.Amount) : hp,
@@ -46,5 +46,5 @@ public static class PotionRules
 
     public static Packet Stack(uint itemId, byte position, ItemSlotData slot) => new Packet(WizOpcode.ItemCountChange)
         .WriteUInt16(1).WriteByte(1).WriteByte(position).WriteUInt32(itemId).WriteUInt32((uint)Math.Max(0, (int)slot.Count))
-        .WriteByte(slot.Flag).WriteUInt16((ushort)slot.Durability);
+        .WriteByte(0).WriteUInt16((ushort)slot.Durability);
 }
