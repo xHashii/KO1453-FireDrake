@@ -328,27 +328,26 @@ If the connection closes immediately after `AllcharInfoReq`, before `SelChar`,
 the in-world NPC handlers have not run. Do not reset NPC tables or inventories
 based on that log alone. It identifies the stage, not the client's crash cause.
 
-The default character preview now suppresses its eight equipped-model references
-on the wire. This is a **reversible recovery/isolation measure for equipment
-asset failures**, not proof that an item model caused the crash. Names, character
-identity, face/hair, levels and zones are preserved, as is the three-slot packet
-layout. Saved equipment/inventory and world-entry equipment are not modified.
-The same serializer also safely handles null-filled empty-slot equipment lists.
+Character selection now reads and displays the latest saved eight equipped-model
+references by default. Names, face/hair, levels, zones and the fixed three-slot
+packet layout are preserved. There is no separate cached appearance snapshot;
+equipment changes already saved by inventory operations appear in the next list.
 
-To restore equipment models on the character screen after verifying client
-assets, set this in the actual `GameServer.ini` used to launch the server:
+Older builds defaulted to naked previews for crash isolation. The old
+`CHARACTER_PREVIEW_EQUIPMENT=0` setting is retired and no longer hides saved gear.
+For deliberate client-asset diagnosis only, opt into recovery mode in the actual
+`GameServer.ini` used to launch the server:
 
 ```ini
 [SETTINGS]
-CHARACTER_PREVIEW_EQUIPMENT=1
+CHARACTER_PREVIEW_RECOVERY=1
 ```
 
-The default is `0`, even if the setting is absent. Restart and reconnect to
-apply it. `[ CHAR PREVIEW ]` logs state the active mode, original equipment IDs,
-appearance fields and the exact response payload. If the client still crashes
-with preview equipment suppressed, retain that log and obtain the client crash
-log/Windows Application Error entry: the client renderer and assets are not in
-this server repository, so this patch cannot claim to fix every client crash.
+Leave this new setting absent or `0` for normal saved-equipment previews. Restart
+and reconnect after changing it. Recovery remains wire-only: it does not unequip,
+reset or otherwise modify inventory. `[ CHAR PREVIEW ]` logs show the active mode
+and saved item IDs. Missing client assets still require client-side diagnosis;
+server preview synchronization is not a fix for every possible renderer crash.
 
 
 ### NPC shop purchases and sales
@@ -609,3 +608,20 @@ allocation, solo XP/level progression, source drop resolution, native loot chest
 and transactional owner-only pickup. Picked-up items/coins and XP survive reconnect.
 See [combat scope and test checklist](docs/COMBAT_AND_LOOT.md) for supported skill
 categories, deployment, ownership/expiry, and the remaining full-AI/party/buff work.
+
+### Saved logout location and melee windup
+
+Normal movement is checkpointed every ten seconds and saved again on disconnect,
+using the same centimeter coordinates loaded by character selection/world entry.
+Saves modify only zone/position, preserve rewards/inventory, and mark the location
+as intentional so legacy starter-spawn repair cannot relocate it. Warp/revival
+operations refresh the expected saved snapshot. Graceful server shutdown waits
+for logout saves; forced process termination can lose movement since the latest
+checkpoint. Position failures are logged as `[ POSITION SAVE ]`/logout errors.
+
+R attacks now start their swing before damage is resolved at a bounded impact
+windup (250–600 ms based on weapon cadence). A one-shot no longer sends its kill
+and death packets at swing frame zero. Impact revalidates target life, zone,
+range, weapon state and player state; movement/travel/disconnect cancel pending
+hits. This does not reduce damage or inflate weak-monster HP. Client animation
+assets/timing still require visual confirmation in the real 1453 client.

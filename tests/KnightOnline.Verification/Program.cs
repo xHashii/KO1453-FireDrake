@@ -531,7 +531,11 @@ LoggingVerification.Run((name, ok) => Check(name, ok));
 
 MeleeVerification.Run((name, ok) => Check(name, ok));
 CombatRewardsVerification.Rules((name, ok) => Check(name, ok));
-try { await ShopVerification.RunAsync((name, ok) => Check(name, ok)); }
+try
+{
+    await ShutdownVerification.RunAsync((name,ok) => Check(name,ok));
+    await ShopVerification.RunAsync((name, ok) => Check(name, ok));
+}
 catch (Exception ex)
 {
     if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
