@@ -373,7 +373,8 @@ wire reference. This is not player-to-player trading or player merchant stalls.
   are conservative, including legacy serial-zero items. The shipped schema
   stores serials but not item expiration blobs; timed-item support is not added.
 - Item IDs, durability/count, serials and coins are saved in **one conditional
-  InnoDB UPDATE** before the session changes or success is sent. Normal item
+  InnoDB UPDATE inside a row-locked transaction** before the session changes
+  or success is sent. Duplicate character rows are rejected. Normal item
   moves now use this same persistence boundary, preserving serials on swaps.
   Stale item/serial/coin snapshots are rejected, not overwritten. A stale state,
   protected-item rejection at save, or ambiguous database failure disconnects

@@ -22,7 +22,7 @@ public sealed partial class MariaDbCharacterRepository
             : null;
     }
 
-    /// <summary>A single InnoDB statement commits coins AND both parallel blobs, or neither.
+    /// <summary>A row-locked transaction commits coins AND both parallel blobs, or neither.
     /// Compare-and-swap rejects stale sessions/admin edits. A response lost after commit is
     /// never retried by the server: reconnect reads the committed state. The legacy protocol
     /// has no transaction nonce; two valid purchases are two separately charged purchases.</summary>
@@ -32,14 +32,23 @@ public sealed partial class MariaDbCharacterRepository
         if (proposed.Gold < 0 || proposed.Gold > ShopRules.CoinMax) return false;
         await using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync().ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync().ConfigureAwait(false);
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.Parameters.AddWithValue("@id", charId);
+        // The shipped USERDATA DDL has no unique key. Reject ambiguous identity
+        // instead of committing multiple rows, or only one of several duplicates.
+        command.CommandText = "SELECT strUserID FROM USERDATA WHERE strUserID=@id FOR UPDATE";
+        await using (var rows = await command.ExecuteReaderAsync().ConfigureAwait(false))
+        {
+            if (!await rows.ReadAsync().ConfigureAwait(false) || await rows.ReadAsync().ConfigureAwait(false)) return false;
+        }
         command.CommandText = "UPDATE USERDATA SET strItem=@items,strSerial=@serials,Gold=@gold " +
             "WHERE strUserID=@id AND Gold=@oldGold AND COALESCE(strItem,X'')=@oldItems AND COALESCE(strSerial,X'')=@oldSerials " +
             "AND (@protectedItem=0 OR (" +
             "NOT EXISTS (SELECT 1 FROM SEALED_ITEMS WHERE nItemID=@protectedItem AND ((@serial<>0 AND nItemSerial=@serial) OR (@serial=0 AND strUserID=@id))) " +
             "AND NOT EXISTS (SELECT 1 FROM USER_RENTAL_ITEM WHERE nItemIndex=@protectedItem AND ((@serial<>0 AND nSerialNumber=@serial) OR (@serial=0 AND strUserID=@id))) " +
             "AND NOT EXISTS (SELECT 1 FROM RENTAL_ITEM WHERE nItemIndex=@protectedItem AND ((@serial<>0 AND nSerialNumber=@serial) OR (@serial=0 AND strBorrowerCharID=@id)))))";
-        command.Parameters.AddWithValue("@id", charId);
         command.Parameters.AddWithValue("@oldGold", expected.Gold);
         command.Parameters.AddWithValue("@oldItems", expected.Items);
         command.Parameters.AddWithValue("@oldSerials", expected.Serials);
@@ -48,6 +57,8 @@ public sealed partial class MariaDbCharacterRepository
         command.Parameters.AddWithValue("@serials", proposed.Serials);
         command.Parameters.AddWithValue("@protectedItem", protectedItem);
         command.Parameters.AddWithValue("@serial", unchecked((long)protectedSerial));
-        return await command.ExecuteNonQueryAsync().ConfigureAwait(false) == 1;
+        if (await command.ExecuteNonQueryAsync().ConfigureAwait(false) != 1) return false;
+        await transaction.CommitAsync().ConfigureAwait(false);
+        return true;
     }
 }

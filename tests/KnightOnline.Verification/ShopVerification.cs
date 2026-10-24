@@ -82,7 +82,7 @@ internal static class ShopVerification
         await using var connection = new MySqlConnection(settings.BuildConnectionString());
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "CREATE TABLE USERDATA (strUserID varchar(21) PRIMARY KEY, Gold int NOT NULL,strItem blob,strSerial blob) ENGINE=InnoDB; " +
+        command.CommandText = "CREATE TABLE USERDATA (strUserID varchar(21) NOT NULL, Gold int NOT NULL,strItem blob,strSerial blob) ENGINE=InnoDB; " +
             "CREATE TABLE SEALED_ITEMS (strUserID varchar(21),nItemID int,nItemSerial bigint) ENGINE=InnoDB; " +
             "CREATE TABLE USER_RENTAL_ITEM (strUserID varchar(21),nItemIndex int,nSerialNumber bigint) ENGINE=InnoDB; " +
             "CREATE TABLE RENTAL_ITEM (strBorrowerCharID varchar(21),nItemIndex int,nSerialNumber bigint) ENGINE=InnoDB; " +
@@ -98,6 +98,11 @@ internal static class ShopVerification
             new InventorySnapshot(new byte[] { 1 }, new byte[] { 2 }, 900)));
         var before = new InventorySnapshot(new byte[] { 1, 2, 3 }, new byte[] { 4, 5, 6 }, 1000);
         var after = new InventorySnapshot(new byte[] { 7, 8 }, new byte[] { 9, 10 }, 400);
+        command.CommandText = "INSERT INTO USERDATA VALUES ('duplicate',1000,X'010203',X'040506'),('duplicate',999,NULL,NULL)";
+        await command.ExecuteNonQueryAsync();
+        test("DB ambiguous duplicate identity rejected", !await repository.TrySaveInventoryAsync("duplicate", before, after));
+        command.CommandText = "SELECT SUM(Gold) FROM USERDATA WHERE strUserID='duplicate'";
+        test("DB duplicate rejection writes neither row", Convert.ToInt32(await command.ExecuteScalarAsync()) == 1999);
         test("DB atomic commit succeeds", await repository.TrySaveInventoryAsync("shop-test", before, after));
         test("DB stale/replayed snapshot rejected", !await repository.TrySaveInventoryAsync("shop-test", before, after));
         var next = new InventorySnapshot(new byte[] { 11 }, new byte[] { 12 }, 500);
