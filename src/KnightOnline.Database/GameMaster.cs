@@ -35,12 +35,14 @@ public sealed partial class MariaDbCharacterRepository
         return names.Count;
     }
 
-    public async Task SaveVitalsAsync(string charId, int hp, int mp)
+    public async Task SaveVitalsAsync(string charId, int hp, int mp, int expectedHp, int expectedMp)
     {
         await using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync().ConfigureAwait(false);
         await using var command = connection.CreateCommand();
-        command.CommandText = "UPDATE USERDATA SET Hp = @hp, Mp = @mp WHERE strUserID = @id";
+        command.CommandText = "UPDATE USERDATA SET Hp = @hp, Mp = @mp WHERE strUserID = @id AND Hp=@expectedHp AND Mp=@expectedMp";
+        command.Parameters.AddWithValue("@expectedHp", expectedHp);
+        command.Parameters.AddWithValue("@expectedMp", expectedMp);
         command.Parameters.AddWithValue("@hp", hp);
         command.Parameters.AddWithValue("@mp", mp);
         command.Parameters.AddWithValue("@id", charId);

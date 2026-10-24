@@ -503,6 +503,8 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     Check("char preview: opt-in restores equipment", !normal.Payload.SequenceEqual(safe.Payload));
 }
 
+PotionVerification.Rules((name, ok) => Check(name, ok));
+
 ChatVerification.Run((name, ok) => Check(name, ok));
 
 LoggingVerification.Run((name, ok) => Check(name, ok));

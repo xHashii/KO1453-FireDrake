@@ -42,6 +42,7 @@ var characters = new MariaDbCharacterRepository(settings.Database);
 try
 {
     await characters.EnsureTravelSchemaAsync();
+    await characters.EnsurePotionDataAsync();
     var catalogRepair = await characters.RepairItemCatalogAsync();
     KoLog.Info($"Item catalog: restored {catalogRepair.Restored} missing ITEM row(s) from {catalogRepair.SourceCount} shipped definitions; existing definitions and saved inventory unchanged.");
 }
@@ -259,6 +260,12 @@ internal sealed partial class GameSession : KoSession
                     break;
                 case WizOpcode.ReqNpcin:
                     WorldNpcRequest(packet);
+                    break;
+                case WizOpcode.MagicProcess:
+                    UsePotion(packet);
+                    break;
+                case WizOpcode.TargetHp:
+                    TargetHp(packet);
                     break;
                 case WizOpcode.ItemTrade:
                     ItemTrade(packet);

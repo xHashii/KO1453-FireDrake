@@ -45,6 +45,15 @@ internal sealed partial class GameSession
         KoLog.Info($"[ COMMAND ] {_charId}: {message}");
         switch ("/" + words[0][1..].ToLowerInvariant())
         {
+            case "/testvitals":
+                if (_user!.Authority != 0) { TravelMessage("Test vitals requires GM authority."); break; }
+                if (words.Length != 3 || !int.TryParse(words[1], out var testHp) || !int.TryParse(words[2], out var testMp) ||
+                    testHp < 1 || testHp > _maxHp || testMp < 0 || testMp > _maxMp)
+                { TravelMessage("Usage: +testvitals <HP 1..max> <MP 0..max>"); break; }
+                _sitting = false;
+                RestoreVitals(testHp - _currentHp, testMp - _currentMp);
+                TravelMessage("Test vitals set. Use your HP/MP potions now; normal regeneration still applies.");
+                break;
             case "/heal":
                 if (_user!.Authority == 0) RestoreVitals(_maxHp, _maxMp);
                 else TravelMessage("Healing command requires GM authority.");

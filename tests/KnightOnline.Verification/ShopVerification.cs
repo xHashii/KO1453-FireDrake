@@ -158,6 +158,7 @@ internal static class ShopVerification
             test("DB SQL failure rolls back coins/items/serials together", row.GetInt32(0) == next.Gold && ((byte[])row.GetValue(1)).SequenceEqual(next.Items) && ((byte[])row.GetValue(2)).SequenceEqual(next.Serials));
         }
         await ItemCatalogVerification.RunAsync(settings, test);
+        await PotionVerification.DatabaseAsync(settings, test);
 
     }
 }

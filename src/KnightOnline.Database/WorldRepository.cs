@@ -16,7 +16,7 @@ public sealed partial class MariaDbCharacterRepository
             while (await r.ReadAsync().ConfigureAwait(false))
                 zones.Add(new ZoneDefinition(Convert.ToUInt16(r.GetValue(0)), r.GetString(1)));
         var protos = new Dictionary<ushort, NpcPrototype>();
-        command.CommandText = "SELECT sSid,strName,sPid,sSize,iWeapon1,iWeapon2,byGroup,byType,iSellingGroup,sLevel FROM K_NPC";
+        command.CommandText = "SELECT sSid,strName,sPid,sSize,iWeapon1,iWeapon2,byGroup,byType,iSellingGroup,sLevel,iHpPoint FROM K_NPC";
         await using (var r = await command.ExecuteReaderAsync().ConfigureAwait(false))
             while (await r.ReadAsync().ConfigureAwait(false))
             {
@@ -24,7 +24,7 @@ public sealed partial class MariaDbCharacterRepository
                     Convert.ToUInt16(r.GetValue(2)), Convert.ToUInt16(r.GetValue(3)),
                     unchecked((uint)Convert.ToInt32(r.GetValue(4))), unchecked((uint)Convert.ToInt32(r.GetValue(5))),
                     Convert.ToByte(r.GetValue(6)), Convert.ToByte(r.GetValue(7)), Convert.ToInt32(r.GetValue(8)),
-                    checked((byte)Math.Clamp(Convert.ToInt32(r.GetValue(9)), 0, 255)));
+                    checked((byte)Math.Clamp(Convert.ToInt32(r.GetValue(9)), 0, 255)), Math.Max(1, Convert.ToInt32(r.GetValue(10))));
                 protos.Add(p.Id, p);
             }
         var spawns = new List<NpcSpawn>();

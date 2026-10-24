@@ -44,9 +44,9 @@ internal sealed partial class GameSession
             _chat.Remove(_socketId);
             _recoveryTimer?.Dispose();
             _recoveryTimer = null;
-            if (_inGame && _user is not null)
+            if (_inGame && _user is not null && !_inventoryFaulted)
             {
-                try { _characters.SaveVitalsAsync(_charId, _currentHp, _currentMp).GetAwaiter().GetResult(); }
+                try { _characters.SaveVitalsAsync(_charId, _currentHp, _currentMp, _user.Hp, _user.Mp).GetAwaiter().GetResult(); }
                 catch (Exception ex) { KoLog.Error($"Could not save HP/MP for {_charId}.", ex); }
             }
             _inGame = false;

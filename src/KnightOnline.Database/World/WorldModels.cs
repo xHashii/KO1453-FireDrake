@@ -3,7 +3,7 @@ using KnightOnline.Shared.Protocol;
 namespace KnightOnline.Database.World;
 
 public sealed record NpcPrototype(ushort Id, string Name, ushort Model, ushort Size, uint Weapon1,
-    uint Weapon2, byte Nation, byte Type, int SellingGroup, byte Level);
+    uint Weapon2, byte Nation, byte Type, int SellingGroup, byte Level, int MaxHp = 1);
 public sealed record NpcSpawn(ushort Zone, ushort Prototype, int Left, int Top, int Right, int Bottom, int Count, byte Direction);
 public sealed record WorldObject(ushort Zone, ushort Index, byte Type, ushort Control, byte Nation,
     byte Status, float X, float Y, float Z);

@@ -526,3 +526,48 @@ startup, failure rollback, and real buy/save/reload flows for health/mana
 potions, a weapon, armor and sundries. Normal shop range/group, slot, stacking,
 weight and coin validation remains enforced: restoring all definitions does
 not make every item purchasable at every merchant, nor invent client-only IDs.
+
+### Instant HP/MP consumables and target HP
+
+`WIZ_MAGIC_PROCESS` now handles self-targeted, instant positive HP/MP consumables
+whose `MAGIC`, `MAGIC_TYPE3` and `ITEM` definitions agree. This includes the
+purchased Water of favors (720 HP) and Potion of soul (1920 MP), plus equivalent
+instant consumables. Both observed 21-byte client requests and the original
+23-byte form are accepted, including quick-slot requests. Other skills, buffs,
+transformations, regeneration-over-time and offensive magic remain unimplemented
+and receive a failure rather than being interpreted as healing.
+
+The server checks caster/target identity, alive/in-game state, level, ownership,
+count, effect and resource caps. Full-resource uses are rejected without consuming
+an item. Exactly one inventory item is consumed on success, then the client gets
+HP/MP, stack count, weight and magic-result updates. No client-supplied heal amount
+or item count is trusted. Casting-stage packets do not consume or heal; the effect
+stage does. Standard potion recast values are in 100ms units (20 = 2 seconds),
+with shared per-resource cooldowns, independently for HP and MP.
+
+Inventory, serials, HP/MP and cooldown are committed together under the existing
+row lock and stale-snapshot protection. The cooldown is stored in the automatically
+created `KO_POTION_COOLDOWN` table, using database UTC time, so reconnecting cannot
+bypass it. Ambiguous database outcomes disconnect without a stale logout HP/MP
+save overwriting a possible committed potion. Normal logout HP/MP saves also
+compare the last persisted vitals before writing.
+
+Startup restores only missing definitions for 41 shipped instant consumable
+skills; existing magic overrides are preserved. Normal migration tables MAGIC
+and MAGIC_TYPE3 must already exist. Runtime CREATE TABLE permission is required
+for the cooldown table, as for the existing travel table. No manual migration is
+needed for an otherwise migrated database.
+
+`WIZ_TARGET_HP` now returns target ID, echoed flag, 32-bit maximum/current HP and
+damage in the original layout. Nearby visible static NPCs use their authored
+`K_NPC.iHpPoint`; self-targets use current player HP. Static NPCs currently do
+not take combat damage. **Monster spawning/AI/combat are still not implemented**;
+this does not invent monsters, HP values or combat state for unknown target IDs.
+
+Manual check: buy two of each potion. A GM can use `+testvitals 100 0` to lower
+HP/MP for testing before combat exists (GM-only; does not kill the character).
+Use a potion from inventory/quick slot and check recovery plus one remaining;
+repeat immediately to check cooldown, then reconnect to check persistence.
+Full HP/MP should not consume the corresponding potion. Stand rather than sit
+while testing: GM sitting recovery intentionally fills both bars. Click a
+merchant/guard to verify its HP bar. Client confirmation is still required.

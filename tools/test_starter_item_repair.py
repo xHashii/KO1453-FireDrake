@@ -53,5 +53,18 @@ class StarterItemRepairTests(unittest.TestCase):
         self.assertTrue(all(index >= 42 for index, *_ in actual))
 
 
+    def test_potion_magic_repair_is_copied_from_source(self):
+        source = (ROOT / 'sql/mysql/kn_online/0003_data.sql').read_text()
+        repair = (ROOT / 'src/KnightOnline.Database/Items/PotionMagicRepair.sql').read_text()
+        rows = [line for line in repair.splitlines() if line.startswith('INSERT INTO')]
+        self.assertEqual(len(rows), 82)
+        for row in rows:
+            match = re.fullmatch(r'INSERT INTO `(MAGIC|MAGIC_TYPE3)` (\(.*?\)) SELECT (.*) WHERE NOT EXISTS \(SELECT 1 FROM `.*?` WHERE `.*?` = (\d+)\);', row)
+            self.assertIsNotNone(match)
+            self.assertIn(f'INSERT `{match[1]}` {match[2]} VALUES ({match[3]});', source)
+        self.assertIn('490014', repair)
+        self.assertIn('490020', repair)
+
+
 if __name__ == '__main__':
     unittest.main()
