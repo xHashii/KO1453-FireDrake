@@ -66,7 +66,7 @@ internal static class ShopVerification
         var raw = new Packet(WizOpcode.ItemTrade).WriteByte(1).WriteInt32(253000).WriteUInt16(10001).WriteUInt32(potion.Id).WriteByte(0).WriteUInt16(5);
         Test("buy request matches C++ layout", ShopRules.TryRead(Packet.FromReceived(raw.Opcode, raw.Payload), out var parsed) && parsed == buy);
         Test("truncated/trailing/unknown packets rejected", !ShopRules.TryRead(Received(), out _) && !ShopRules.TryRead(Received(1), out _) &&
-            !ShopRules.TryRead(Received(4, 0, 0, 0, 0, 0, 0), out _) && !ShopRules.TryRead(Packet.FromReceived(raw.Opcode, raw.Payload.Concat(new byte[] { 0 }).ToArray()), out _));
+            !ShopRules.TryRead(Received(4, 0, 0, 0, 0, 0, 0), out _) && !ShopRules.TryRead(Packet.FromReceived(raw.Opcode, raw.Payload.ToArray().Concat(new byte[] { 0 }).ToArray()), out _));
         Test("move request layout", ShopRules.TryRead(Received(3, 0x11, 0, 0, 0, 2, 3), out var parsedMove) && parsedMove == new ShopRequest(3, 0, 0, 17, 2, 0, 3));
         Test("success reply golden payload", Convert.ToHexString(ShopRules.Success(new ShopChange(slots, 9400, 600, 253), 1).Payload) == "01B824000058020000FD");
         Test("failure and move golden payloads", Convert.ToHexString(ShopRules.Failure(3).Payload) == "0003" && Convert.ToHexString(ShopRules.Success(moved, 3).Payload) == "03");
@@ -86,9 +86,16 @@ internal static class ShopVerification
             "CREATE TABLE SEALED_ITEMS (strUserID varchar(21),nItemID int,nItemSerial bigint) ENGINE=InnoDB; " +
             "CREATE TABLE USER_RENTAL_ITEM (strUserID varchar(21),nItemIndex int,nSerialNumber bigint) ENGINE=InnoDB; " +
             "CREATE TABLE RENTAL_ITEM (strBorrowerCharID varchar(21),nItemIndex int,nSerialNumber bigint) ENGINE=InnoDB; " +
-            "INSERT INTO USERDATA VALUES ('shop-test',1000,X'010203',X'040506');";
+            "CREATE TABLE ITEM (Num int PRIMARY KEY,BuyPrice int,SellPrice int,SellingGroup tinyint unsigned,Race tinyint unsigned,Countable tinyint unsigned,Weight smallint,Duration smallint); " +
+            "INSERT INTO ITEM VALUES (889001000,120,0,253,0,1,5,1); " +
+            "INSERT INTO USERDATA VALUES ('shop-test',1000,X'010203',X'040506'),('null-test',1000,NULL,NULL);";
         await command.ExecuteNonQueryAsync();
         var repository = new MariaDbCharacterRepository(settings);
+        test("DB authoritative shop metadata", await repository.LoadShopItemAsync(889001000) == new ShopItem(889001000, 120, 0, 253, 0, 1, 5, 1));
+        test("DB missing shop item rejected", await repository.LoadShopItemAsync(999999) is null);
+        test("DB null legacy blobs normalized", await repository.TrySaveInventoryAsync("null-test",
+            new InventorySnapshot(Array.Empty<byte>(), Array.Empty<byte>(), 1000),
+            new InventorySnapshot(new byte[] { 1 }, new byte[] { 2 }, 900)));
         var before = new InventorySnapshot(new byte[] { 1, 2, 3 }, new byte[] { 4, 5, 6 }, 1000);
         var after = new InventorySnapshot(new byte[] { 7, 8 }, new byte[] { 9, 10 }, 400);
         test("DB atomic commit succeeds", await repository.TrySaveInventoryAsync("shop-test", before, after));
@@ -102,6 +109,9 @@ internal static class ShopVerification
         await command.ExecuteNonQueryAsync();
         test("DB sealed sale/merge rejected", !await repository.TrySaveInventoryAsync("shop-test", after, next, 111, 123));
         test("DB rental sale/merge rejected", !await repository.TrySaveInventoryAsync("shop-test", after, next, 222, 456) && !await repository.TrySaveInventoryAsync("shop-test", after, next, 333, 789));
+        command.CommandText = "INSERT INTO SEALED_ITEMS VALUES ('other-character',444,999)";
+        await command.ExecuteNonQueryAsync();
+        test("DB serial protection follows items across characters", !await repository.TrySaveInventoryAsync("shop-test", after, next, 444, 999));
         test("DB zero serial conservative protection", !await repository.TrySaveInventoryAsync("shop-test", after, next, 111, 0));
         command.CommandText = "SELECT Gold,strItem,strSerial FROM USERDATA WHERE strUserID='shop-test'";
         await using (var row = await command.ExecuteReaderAsync())
