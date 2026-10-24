@@ -180,8 +180,8 @@ public sealed partial class MariaDbCharacterRepository
                         "INSERT INTO WAREHOUSE (strAccountID, nMoney, dwTime, WarehouseData, strSerial) " +
                         "VALUES (@account, 0, 0, @data, @serial)";
                     command.Parameters.AddWithValue("@account", account);
-                    command.Parameters.AddWithValue("@data", new byte[] { 0x00 });
-                    command.Parameters.AddWithValue("@serial", new byte[] { 0x00 });
+                    command.Parameters.AddWithValue("@data", new byte[InventorySlots.WarehouseTotal * ItemBlobs.ItemEntrySize]);
+                    command.Parameters.AddWithValue("@serial", new byte[InventorySlots.WarehouseTotal * ItemBlobs.SerialEntrySize]);
                     await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
             }

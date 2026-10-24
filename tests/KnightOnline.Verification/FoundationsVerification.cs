@@ -13,6 +13,9 @@ internal static class FoundationsVerification
         test("player info matches original C++ clanless wire layout and ten-slot order",Convert.ToHexString(info)=="01410200000000000000000000FFFF500CCE00D2042E16E2FF010201010000000101000000A6FF0000FFFFEC030000680000F20300006E0000E9030000650000F4030000700000F5030000710000ED030000690000EE0300006A0000F00300006C000016040000920000130400008F000015");
         var filtered=PlayerPackets.Info(new("A",2,80,12,206,1234,5678,-30,1,2,1,1,-90,0,21,items),id=>id<1040);
         test("remote appearance suppresses unknown costume models without changing saved items",filtered.AsSpan(filtered.Length-15,14).ToArray().All(b=>b==0)&&items[46].ItemId==1046);
+        var gmAppearance=new PlayerAppearance("A",2,80,12,206,1234,5678,-30,1,2,1,0,-90,0,21,items);
+        test("GM remote model uses visible public authority while real authority remains GM",PlayerPackets.Info(gmAppearance).SequenceEqual(info)&&gmAppearance.Authority==0);
+        test("limited GM public appearance is visible without remapping ordinary status",PlayerPackets.PublicAuthority(250)==1&&PlayerPackets.PublicAuthority(11)==11&&PlayerPackets.PublicAuthority(1)==1);
         var hub=new PlayerHub();var a=new List<Packet>();var b=new List<Packet>();var c=new List<Packet>();
         PlayerPresence P(ushort id,ushort zone,float x,List<Packet> sink,int version=0)=>new(id,zone,x,0,info,version,p=>sink.Add(p));
         hub.Publish(P(1,21,0,a));hub.Publish(P(2,21,10,b));hub.Publish(P(3,1,10,c));
@@ -78,8 +81,17 @@ internal static class FoundationsVerification
         await using var c=new MySqlConnection(settings.BuildConnectionString());await c.OpenAsync();await using var cmd=c.CreateCommand();
         var inv=Enumerable.Repeat(ItemSlotData.Empty,75).ToArray();inv[14]=new(389014000,1,10,12345,0);inv[74]=new(65537,-8687,5044,0,0);
         var blobs=ItemBlobs.Serialize(inv);var snapshot=new InventorySnapshot(blobs.Items,blobs.Serials,1000);
-        cmd.CommandText="INSERT INTO USERDATA(strUserID,Gold,strItem,strSerial,Hp,Mp,Level,Exp) VALUES('foundation-test',1000,@i,@s,77,33,80,123); INSERT INTO ACCOUNT_CHAR VALUES('foundation-account','foundation-test','',''); DROP TABLE IF EXISTS WAREHOUSE; CREATE TABLE WAREHOUSE(strAccountID varchar(21),nMoney int,dwTime int,WarehouseData blob,strSerial blob) ENGINE=InnoDB; INSERT INTO WAREHOUSE VALUES('foundation-account',1000,0,X'',X'')";
+        cmd.CommandText="INSERT INTO USERDATA(strUserID,Gold,strItem,strSerial,Hp,Mp,Level,Exp) VALUES('foundation-test',1000,@i,@s,77,33,80,123); INSERT INTO ACCOUNT_CHAR VALUES('foundation-account','foundation-test','',''); DROP TABLE IF EXISTS WAREHOUSE; CREATE TABLE WAREHOUSE(strAccountID varchar(21),nMoney int,dwTime int,WarehouseData blob,strSerial blob) ENGINE=InnoDB; INSERT INTO WAREHOUSE VALUES('foundation-account',1000,0,X'00',X'00')";
         cmd.Parameters.AddWithValue("@i",snapshot.Items);cmd.Parameters.AddWithValue("@s",snapshot.Serials);await cmd.ExecuteNonQueryAsync();cmd.Parameters.Clear();
+        var legacyBank=await repo.LoadWarehouseAsync("foundation-account");
+        test("legacy one-byte empty bank opens as 192 empty slots without rewriting raw CAS snapshot",legacyBank.Items.SequenceEqual(new byte[]{0})&&legacyBank.Serials.SequenceEqual(new byte[]{0})&&ItemBlobs.Parse(legacyBank.Items,legacyBank.Serials,legacyBank.Times,192).All(slot=>slot.IsEmpty));
+        cmd.CommandText="SELECT HEX(WarehouseData) FROM WAREHOUSE WHERE strAccountID='foundation-account'";
+        test("opening legacy bank does not modify stored blob",Convert.ToString(await cmd.ExecuteScalarAsync())=="00");
+        cmd.CommandText="UPDATE WAREHOUSE SET WarehouseData=X'01' WHERE strAccountID='foundation-account'";await cmd.ExecuteNonQueryAsync();
+        var partialRefused=false;try{await repo.LoadWarehouseAsync("foundation-account");}catch(InvalidDataException){partialRefused=true;}
+        cmd.CommandText="SELECT HEX(WarehouseData) FROM WAREHOUSE WHERE strAccountID='foundation-account'";
+        test("nonzero partial bank record is refused without deleting it",partialRefused&&Convert.ToString(await cmd.ExecuteScalarAsync())=="01");
+        cmd.CommandText="UPDATE WAREHOUSE SET WarehouseData=X'00' WHERE strAccountID='foundation-account'";await cmd.ExecuteNonQueryAsync();
         await repo.SaveSkillBarAsync("foundation-test",[490014,1490020,uint.MaxValue]);
         test("skill bar reconnect round trip",(await new MariaDbCharacterRepository(settings).LoadSkillBarAsync("foundation-test")).SequenceEqual(new uint[]{490014,1490020,uint.MaxValue}));
         await repo.SaveSkillBarAsync("foundation-test",[]);test("empty skill bar persists",(await repo.LoadSkillBarAsync("foundation-test")).Length==0);
@@ -107,7 +119,7 @@ internal static class FoundationsVerification
         test("bank ownership mismatch refused",await repo.SaveWarehouseAsync("foundation-test","preview-account",snapshot,snapshot,bank,bank,[])!=InventorySaveResult.Saved);
         cmd.CommandText="INSERT INTO SEALED_ITEMS(nItemID,nItemSerial,strUserID) VALUES(389014000,12345,'foundation-test')";await cmd.ExecuteNonQueryAsync();
         test("protected warehouse source refused transactionally",await repo.SaveWarehouseAsync("foundation-test","foundation-account",snapshot,snapshot,bank,bank,[(389014000,12345)])!=InventorySaveResult.Saved);
-        cmd.CommandText="DELETE FROM SEALED_ITEMS WHERE strUserID='foundation-test'; ALTER TABLE WAREHOUSE ADD WarehouseDataTime blob NULL; ALTER TABLE USERDATA ADD strItemTime blob NULL";await cmd.ExecuteNonQueryAsync();
+        cmd.CommandText="DELETE FROM SEALED_ITEMS WHERE strUserID='foundation-test'; ALTER TABLE WAREHOUSE ADD WarehouseDataTime blob NULL; UPDATE WAREHOUSE SET WarehouseDataTime=X'00'; ALTER TABLE USERDATA ADD strItemTime blob NULL";await cmd.ExecuteNonQueryAsync();
         var timed=new byte[75*4];System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(timed.AsSpan(14*4),123);
         cmd.CommandText="UPDATE USERDATA SET strItemTime=@time WHERE strUserID='foundation-test'";cmd.Parameters.AddWithValue("@time",timed);await cmd.ExecuteNonQueryAsync();cmd.Parameters.Clear();
         bank=await repo.LoadWarehouseAsync("foundation-account");var moved=inv.ToArray();moved[14]=ItemSlotData.Empty;var movedBlobs=ItemBlobs.Serialize(moved);
@@ -127,5 +139,10 @@ internal static class FoundationsVerification
         var duplicate=false;try{await repo.LoadWarehouseAsync("foundation-account");}catch(InvalidDataException){duplicate=true;}
         test("duplicate warehouse identity refused without choosing arbitrary row",duplicate);
         test("duplicate warehouse also refused by transfer transaction",await repo.SaveWarehouseAsync("foundation-test","foundation-account",new(tb.Items,tb.Serials,transfer.Gold),new(tb.Items,tb.Serials,transfer.Gold),reloaded,reloaded,[])!=InventorySaveResult.Saved);
+        cmd.CommandText="DELETE FROM WAREHOUSE WHERE strAccountID='foundation-account'";await cmd.ExecuteNonQueryAsync();
+        test("nation selection creates a new warehouse",await repo.NationSelectAsync("foundation-account",2)==2);
+        var freshBank=await repo.LoadWarehouseAsync("foundation-account");
+        test("new warehouses use canonical zeroed 192-slot blobs",freshBank.Gold==0&&freshBank.Items.Length==1536&&freshBank.Serials.Length==1536&&freshBank.Items.All(value=>value==0)&&freshBank.Serials.All(value=>value==0));
+
     }
 }

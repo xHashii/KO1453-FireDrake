@@ -12,10 +12,26 @@ internal sealed partial class GameSession
     private void OpenWarehouse()
     {
         if (!WarehouseNpcAvailable(_warehouseNpc)) { Send(WarehouseRules.Result(1,false)); return; }
+        _warehouse=null;
+        WarehouseSnapshot loaded;
+        Packet reply;
+        // Read/validation failures cannot have committed a transfer. Refuse the
+        // dialog without dropping the game connection. Only the write stage below
+        // uses uncertain-commit disconnect/reconciliation.
         try
         {
-            _warehouse=null;
-            var loaded=_characters.LoadWarehouseAsync(_accountId).GetAwaiter().GetResult();
+            loaded=_characters.LoadWarehouseAsync(_accountId).GetAwaiter().GetResult();
+            reply=WarehouseRules.Open(loaded.Gold,ItemBlobs.Parse(loaded.Items,loaded.Serials,loaded.Times,192));
+        }
+        catch(Exception ex)
+        {
+            KoLog.Error($"[ WAREHOUSE OPEN ] {_charId}: refused before any writes; session retained",ex);
+            Send(WarehouseRules.Result(1,false));
+            TravelMessage("Warehouse could not be opened. No items or coins changed; see server log.");
+            return;
+        }
+        try
+        {
             var fee=WarehouseRules.OpenFee(_user!.Zone);
             if(_user.Gold<fee) {Send(WarehouseRules.Result(1,false));return;}
             if(fee>0)
@@ -27,7 +43,7 @@ internal sealed partial class GameSession
                 Send(new Packet(WizOpcode.GoldChange).WriteByte(2).WriteUInt32((uint)fee).WriteUInt32((uint)_user.Gold));
             }
             _warehouse=loaded;
-            Send(WarehouseRules.Open(_warehouse.Gold,ItemBlobs.Parse(_warehouse.Items,_warehouse.Serials,_warehouse.Times,192)));
+            Send(reply);
         }
         catch(Exception ex) { InventoryUnavailable(ex); }
     }

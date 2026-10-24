@@ -5,6 +5,10 @@ public sealed record WarehouseSnapshot(byte[] Items,byte[] Serials,byte[] Times,
 internal sealed record WarehouseMutation(string Account,WarehouseSnapshot Expected,WarehouseSnapshot Proposed,(uint Item,ulong Serial)[] Protected);
 public sealed partial class MariaDbCharacterRepository
 {
+    // The original account-creation path used X'00' for an empty warehouse.
+    // Retain that exact raw snapshot for CAS; parse it as zero slots without
+    // rewriting it on open. Arbitrary nonzero partial records remain invalid.
+    private static bool ValidWarehouseBlob(byte[] data,int width) => data.Length%width==0 || (data.Length==1 && data[0]==0);
     private static async Task<bool> WarehouseHasTimes(MySqlCommand cmd)
     {
         cmd.CommandText="SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='WAREHOUSE' AND COLUMN_NAME='WarehouseDataTime'";
@@ -18,7 +22,7 @@ public sealed partial class MariaDbCharacterRepository
         await using var r=await cmd.ExecuteReaderAsync(); if(!await r.ReadAsync()) throw new InvalidDataException("Warehouse is missing.");
         var result=new WarehouseSnapshot(r.IsDBNull(0)?[]:(byte[])r[0],r.IsDBNull(1)?[]:(byte[])r[1],times&&!r.IsDBNull(3)?(byte[])r[3]:[],Convert.ToInt32(r[2]),times);
         if(await r.ReadAsync()) throw new InvalidDataException("Duplicate warehouse identity.");
-        if(result.Gold is <0 or >ShopRules.CoinMax || result.Items.Length%8!=0 || result.Serials.Length%8!=0 || result.Times.Length%4!=0) throw new InvalidDataException("Misaligned warehouse blobs; refusing lossy normalization.");
+        if(result.Gold is <0 or >ShopRules.CoinMax || !ValidWarehouseBlob(result.Items,8) || !ValidWarehouseBlob(result.Serials,8) || !ValidWarehouseBlob(result.Times,4)) throw new InvalidDataException("Misaligned warehouse blobs; refusing lossy normalization.");
         return result;
     }
     public Task<InventorySaveResult> SaveWarehouseAsync(string character,string account,InventorySnapshot expected,InventorySnapshot proposed,WarehouseSnapshot oldBank,WarehouseSnapshot newBank,(uint Item,ulong Serial)[] protections) =>

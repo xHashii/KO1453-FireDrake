@@ -98,3 +98,26 @@ After backing up the database, rebuilding and restarting GameServer:
 CI does not render the Windows client. These visual/native-UI checks still need
 real-client confirmation. Trade, player merchants, repairs/upgrades, full magic,
 clans/parties, and chasing/pathfinding AI remain separate milestones.
+
+## Compatibility corrections after the two-client test
+
+- GM authority is retained in the database, private MYINFO and server permissions.
+  Remote appearance packets advertise authority 1 for full/limited GMs so clients
+  that hide remote GM models display them to ordinary players. This is a public
+  rendering compatibility field, not a promotion/demotion or an authorization
+  source. Explicit GM invisibility is not implemented; GMs are visible by default.
+- Earlier account creation used a single zero byte for both empty warehouse
+  blobs. The loader accepts this precise empty sentinel (also for optional time
+  data), keeps the raw bytes as the CAS snapshot, and does not rewrite on open.
+  The first successful transaction writes the canonical slot layout. New account
+  creation now writes 192 zeroed slots from the start. Nonzero partial records
+  and duplicate identities are still refused rather than normalized/destructively
+  repaired.
+- A warehouse read/validation failure now reports a failed open and keeps the
+  game connection alive, with no fee or transfer written. Unknown outcomes during
+  actual writes still disconnect for reconciliation; that safety rule is not
+  relaxed.
+
+Retest with a GM and an ordinary account: the ordinary account should see the GM,
+and opening the Inn should keep the session alive and show existing bank data.
+Verify a deposit/withdrawal and reconnect; no SQL reset or inventory wipe is needed.
