@@ -52,6 +52,10 @@ internal static class LoggingVerification
         var deletion = new Packet(WizOpcode.DelChar).WriteString("test-password");
         check("logging: credential packet contents redacted", PacketTrace.GamePayload(login).Contains("redacted") && !PacketTrace.GamePayload(login).Contains(Convert.ToHexString(login.Payload)) && PacketTrace.GamePayload(deletion).Contains("redacted"));
         check("logging: malformed login payload also redacted", PacketTrace.GamePayload(new Packet(WizOpcode.Login)).Contains("redacted"));
+        var seal=new Packet(WizOpcode.ItemUpgrade).WriteByte(8).WriteByte(1).WriteString("secret-code");
+        var characterSeal=new Packet(WizOpcode.ItemUpgrade).WriteByte(9).WriteString("secret-code");
+        check("logging: item and character seal credentials never enter logs",PacketTrace.GamePayload(seal).Contains("redacted")&&PacketTrace.GamePayload(characterSeal).Contains("redacted"));
+        check("logging: malformed seal request is still redacted",PacketTrace.GamePayload(new Packet(WizOpcode.ItemUpgrade).WriteByte(8)).Contains("redacted"));
         check("logging: ordinary packet payload remains traceable", PacketTrace.GamePayload(new Packet(WizOpcode.ItemTrade).WriteByte(3)) == "03");
     }
 }

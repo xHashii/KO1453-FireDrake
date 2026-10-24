@@ -4,6 +4,9 @@ public sealed record WarehouseRequest(byte Action, ushort Npc, uint Item, byte P
 public sealed record WarehouseChange(ItemSlotData[] Inventory,ItemSlotData[] Warehouse,int Gold,int Bank);
 public static class WarehouseRules
 {
+    /// <summary>NPC_WAREHOUSE sends WAREHOUSE_REQ, not WAREHOUSE_OPEN.
+    /// The installed client supplies the InnHostess services menu text/options.</summary>
+    public static Packet Menu() => new Packet(WizOpcode.Warehouse).WriteByte(0x10);
     public static int OpenFee(ushort zone) => zone is 71 or 72 or 73 ? 10000 : 0;
     public static bool TryRead(Packet p,out WarehouseRequest r)
     {

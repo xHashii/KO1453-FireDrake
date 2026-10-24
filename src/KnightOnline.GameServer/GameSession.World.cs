@@ -142,7 +142,7 @@ internal sealed partial class GameSession
         switch (npc.Prototype.Type)
         {
             case 31:
-                _warehouseNpc = id; OpenWarehouse(); break;
+                ShowInnMenu(id); break;
             case 21:
                 _shopNpcId = id;
                 Send(new Packet(WizOpcode.TradeNpc).WriteInt32(npc.Prototype.SellingGroup));

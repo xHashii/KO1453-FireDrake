@@ -9,6 +9,15 @@ internal sealed partial class GameSession
     private bool WarehouseNpcAvailable(ushort id) => CanTravel() && CurrentWorld?.Npcs.FirstOrDefault(n => n.Id==id) is { } npc &&
         !npc.Prototype.IsMonster && npc.Health>0 && npc.Prototype.Type==31 && Near(npc.X,npc.Z,11) &&
         (npc.InteractionNation(_user!.Zone,_user.Nation)==0 || npc.InteractionNation(_user.Zone,_user.Nation)==_user.Nation);
+    private void ShowInnMenu(ushort npcId)
+    {
+        _warehouse=null;
+        _warehouseNpc=npcId;
+        if (!WarehouseNpcAvailable(npcId)) { Send(WarehouseRules.Result(1,false)); return; }
+        // Retail NpcEvent -> WAREHOUSE_REQ -> client service selection -> OPEN.
+        // Merely talking to the Inn must not read/write storage or charge a fee.
+        Send(WarehouseRules.Menu());
+    }
     private void OpenWarehouse()
     {
         if (!WarehouseNpcAvailable(_warehouseNpc)) { Send(WarehouseRules.Result(1,false)); return; }

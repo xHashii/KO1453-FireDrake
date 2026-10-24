@@ -87,6 +87,7 @@ internal static class FoundationsVerification
         inv[14]=inv[14] with {ExpirationUnixTime=123};test("warehouse timed items refused without dropping expiration",Propose(request) is null);inv[14]=inv[14] with {ExpirationUnixTime=0};
         test("warehouse coin transfer conserves total",Propose(request with {Item=900000000,Count=50}) is {Gold:50,Bank:150});
         test("warehouse coin underflow/overflow rejected",Propose(request with {Item=900000000,Count=101}) is null&&WarehouseRules.Propose(request with {Item=900000000,Count=1},null,inv,bank,100,ShopRules.CoinMax,0,1000) is null);
+        test("Inn NPC opens native services menu before storage",WarehouseRules.Menu().Opcode==WizOpcode.Warehouse&&Convert.ToHexString(WarehouseRules.Menu().Payload)=="10");
         test("warehouse open has exact 192 native item records",WarehouseRules.Open(100,bank).Length==6+192*17);
         test("warehouse source PK-zone opening fee",WarehouseRules.OpenFee(71)==10000&&WarehouseRules.OpenFee(72)==10000&&WarehouseRules.OpenFee(73)==10000&&WarehouseRules.OpenFee(21)==0);
         test("warehouse native transfer success vector",Convert.ToHexString(WarehouseRules.Result(2,true).Payload)=="0201");
