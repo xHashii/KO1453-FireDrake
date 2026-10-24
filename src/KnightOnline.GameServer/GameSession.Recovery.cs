@@ -41,6 +41,7 @@ internal sealed partial class GameSession
     {
         lock (_gameGate)
         {
+            _chat.Remove(_socketId);
             _recoveryTimer?.Dispose();
             _recoveryTimer = null;
             if (_inGame && _user is not null)

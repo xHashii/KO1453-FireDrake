@@ -453,3 +453,44 @@ reason (`missing ITEM definition`, invalid count, or negative weight). The shop
 chat gives the first offending item; the run log lists every offending slot.
 `[ INVENTORY ]` reports recognized legacy records retained unchanged. Send the
 latest **GameServer** run file if a transaction is still rejected.
+
+
+### Player chat
+
+Normal chat (`WIZ_CHAT` type 1) now reaches the sender and other connected,
+in-game players **in the same zone within 32 world units** (strictly less than
+32, matching the original near-region distance filter). The sender receives a
+server echo, so their own message is visible even when playing alone. The
+server supplies sender ID, name and nation; these are never taken from chat text.
+
+Private chat (`WIZ_CHAT_TARGET` selection + `WIZ_CHAT` type 2) supports online
+player lookup, recipient PM blocking and delivery across zones. A successful
+send also produces a `Server: To <name>: ...` confirmation for the sender.
+Offline, self, ambiguous duplicate-name and blocked targets are rejected.
+Target presence is removed on disconnect and during zone loading. This adds
+chat delivery only, not remote-player models, parties or other multiplayer systems.
+
+Existing `/town`, `/zone`, `/moradon`, `/help` and GM `+` commands continue to
+run separately and are not broadcast. Chat accepts 1–128 legacy single-byte
+characters, rejects malformed/trailing payloads and control characters, and
+limits ordinary sends to one per 500ms. Party, clan, shout, announcement and
+other channels are **not implemented**; they display an explanatory server
+message instead of being silently dropped or broadcast as privileged messages.
+Shout coin/MP costs have not been bypassed by pretending shout is normal chat.
+
+Immutable presence snapshots and queued sends avoid taking two session locks
+when routing between players. Verification covers self echo, near/far and
+cross-zone isolation, private routing/blocking, disconnect removal, packet
+vectors, malformed input and concurrent presence updates.
+
+Client checks: send `hello` on normal chat while alone; with a second client
+nearby, confirm one message each; move it beyond 32 units or into another zone
+and confirm normal chat does not leak. Then select that player's private chat,
+send a message and verify delivery/confirmation, blocking and disconnect cases.
+
+The 2026-10-24 supplied run log also identified missing server `ITEM` definitions
+for potion IDs `389020000` and `389014000`. These are separate from chat and
+from the resolved starter-tail rejection. Neither definition is present among
+the shipped ITEM inserts; prices/stats must not be guessed or silently mapped to
+another potion. Those purchases remain safely rejected pending authoritative
+matching item definitions.

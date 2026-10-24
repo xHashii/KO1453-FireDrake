@@ -80,7 +80,8 @@ catch (Exception ex)
     KoLog.Error("World NPC/map loading failed. Fix the reported asset or data reference before starting.", ex);
     return 1;
 }
-var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment));
+var chat = new ChatHub();
+var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat));
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -181,10 +182,11 @@ internal sealed partial class GameSession : KoSession
     private readonly byte[] _stats = new byte[5];
     private short _points;
 
-    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment)
+    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment, ChatHub chat)
         : base(client, maxPayloadSize: 8192)
     {
         _characters = characters;
+        _chat = chat;
         _characterPreviewEquipment = characterPreviewEquipment;
         _world = world;
         _socketId = unchecked((ushort)Interlocked.Increment(ref _lastSocketId));
@@ -192,7 +194,11 @@ internal sealed partial class GameSession : KoSession
 
     protected override bool HandlePacket(Packet packet)
     {
-        lock (_gameGate) return HandleGamePacket(packet);
+        lock (_gameGate)
+        {
+            try { return HandleGamePacket(packet); }
+            finally { UpdateChatPresence(); }
+        }
     }
 
     private bool HandleGamePacket(Packet packet)
@@ -272,6 +278,9 @@ internal sealed partial class GameSession : KoSession
                     break;
                 case WizOpcode.Chat:
                     TravelChat(packet);
+                    break;
+                case WizOpcode.ChatTarget:
+                    ChatTargetSelect(packet);
                     break;
                 case WizOpcode.WarpList:
                     SelectTravel(packet);

@@ -23,27 +23,19 @@ internal sealed partial class GameSession
 
     private void TravelMessage(string message)
     {
-        // ChatPacket::Construct: type, nation, sender ID, byte-length name, ushort-length text.
-        var reply = new Packet(WizOpcode.Chat);
-        reply.WriteByte(1).WriteByte(_user!.Nation).WriteInt16(-1);
-        reply.SByte();
-        reply.WriteString("Server");
-        reply.DByte();
-        reply.WriteString(message);
-        Send(reply);
+        Send(ChatPackets.Message(1, _user!.Nation, ushort.MaxValue, "Server", message));
     }
 
     private void TravelChat(Packet packet)
     {
-        if (!_inGame || packet.RemainingToRead < 3)
-            return;
-        var type = packet.ReadByte();
-        var message = packet.ReadString();
-        if (message.Length > 128 || type is not (1 or 2))
+        if (!_inGame || _travelStage != 0 || !ChatPackets.TryRead(packet, out var type, out var message))
             return;
         var words = message.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (words.Length == 0 || (words[0][0] != '/' && words[0][0] != '+'))
-            return; // general multiplayer chat is a separate milestone
+        if (type is not (1 or 2) || words.Length == 0 || (words[0][0] != '/' && words[0][0] != '+'))
+        {
+            PlayerChat(type, message);
+            return;
+        }
         var gmCommand = words[0][0] == '+';
         if (gmCommand && _user!.Authority != 0)
         {
