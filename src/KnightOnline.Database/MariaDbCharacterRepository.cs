@@ -27,7 +27,10 @@ public sealed partial class MariaDbCharacterRepository
     /// HEAD, BREAST, SHOULDER, LEG, GLOVE, FOOT, RIGHTHAND, LEFTHAND
     /// (shared/globals.h).
     /// </summary>
-    private static readonly int[] VisibleSlots = { 1, 4, 5, 10, 12, 13, 6, 8 };
+    // CDBAgent::LoadCharInfo scans slots 0..SLOT_MAX, emitting visible slots
+    // in numeric order (shared/globals.h), NOT armor-first then weapons.
+    // Reordering these makes the client interpret armor as a weapon and vice versa.
+    private static readonly int[] VisibleSlots = { 1, 4, 5, 6, 8, 10, 12, 13 };
 
     /// <summary>Bytes per inventory slot in strItem: uint32 id + uint16 durability + uint16 count.</summary>
     private const int InventorySlotSize = 8;

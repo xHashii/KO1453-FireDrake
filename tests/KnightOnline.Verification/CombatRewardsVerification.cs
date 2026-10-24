@@ -161,14 +161,27 @@ internal static class CombatRewardsVerification
         test("position SQL failure rolls back and can retry", positionFailed && await repository.TrySavePositionAsync("combat-test",saved,saved with { X=29000 }));
         command.CommandText="ALTER TABLE USERDATA ADD Race tinyint unsigned DEFAULT 12,ADD HairRGB tinyint unsigned DEFAULT 2,ADD Face tinyint unsigned DEFAULT 1; INSERT INTO ACCOUNT_CHAR VALUES('preview-account','combat-test','','')";
         await command.ExecuteNonQueryAsync();
-        var previewSlots = new[] {1,4,5,10,12,13,6,8};
+        // Seed physical inventory positions, independently of the preview mapping.
+        // Reproduce the crashing log's distinct armor/weapon IDs and durabilities.
         var geared = slots.ToArray();
-        for (var i=0;i<8;i++) geared[previewSlots[i]]=new((uint)(120810001+i),(short)(100+i),1,(ulong)(1000+i),0);
+        geared[1]=new(216003011,23625,1,1001,0); // HEAD
+        geared[4]=new(216001011,23625,1,1004,0); // BREAST
+        geared[5]=ItemSlotData.Empty;            // SHOULDER
+        geared[6]=new(146211041,18000,1,1006,0); // RIGHTHAND
+        geared[8]=ItemSlotData.Empty;            // LEFTHAND
+        geared[10]=new(216002011,23625,1,1010,0); // LEG
+        geared[12]=new(216004011,23625,1,1012,0); // GLOVE
+        geared[13]=new(216005011,23625,1,1013,0); // FOOT
         var equippedBlobs = ItemBlobs.Serialize(geared);
         var equipped = new InventorySnapshot(equippedBlobs.Items,equippedBlobs.Serials,107);
         test("equipped state persists before character list refresh", await repository.TrySaveInventoryAsync("combat-test",after,equipped));
         var preview = (await repository.LoadCharacterSelectInfoAsync("preview-account"))[0];
-        test("character select loads all eight latest saved equipment IDs and durability", preview.VisibleEquipment.Select((e,i) => e.ItemId == 120810001u+i && e.Durability == 100+i).All(ok => ok));
+        var expectedPreview = new EquippedItem[] { new(216003011,23625),new(216001011,23625),new(0,0),new(146211041,18000),new(0,0),new(216002011,23625),new(216004011,23625),new(216005011,23625) };
+        test("character select follows original ascending-slot wire order, weapons before legs", preview.VisibleEquipment.SequenceEqual(expectedPreview));
+        var previewPacket = CharacterListPackets.Build([preview]);
+        // Literal vector from CDBAgent::LoadCharInfo's ascending inventory loop;
+        // unlike the old test, the expected order is not copied into blob seeding.
+        test("crash-log equipment serializes to original C++ character-preview vector", Convert.ToHexString(previewPacket.Payload.Slice(21,48)) == "C3F1DF0C495CF3E9DF0C495C000000000000E100B7085046000000000000DBEDDF0C495CABF5DF0C495C93F9DF0C495C");
         geared[1]=ItemSlotData.Empty;
         var unequippedBlobs=ItemBlobs.Serialize(geared);
         test("unequip persists without retaining cached preview gear", await repository.TrySaveInventoryAsync("combat-test",equipped,new(unequippedBlobs.Items,unequippedBlobs.Serials,107)) && (await repository.LoadCharacterSelectInfoAsync("preview-account"))[0].VisibleEquipment[0].ItemId == 0);

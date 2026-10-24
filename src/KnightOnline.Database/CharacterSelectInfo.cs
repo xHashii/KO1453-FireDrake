@@ -21,7 +21,7 @@ public sealed record CharacterSelectInfo(
     public static CharacterSelectInfo Empty { get; } =
         new(string.Empty, 0, 0, 0, 0, 0, 0, new EquippedItem[VisibleEquipmentCount]);
 
-    /// <summary>HEAD, BREAST, SHOULDER, LEG, GLOVE, FOOT, RIGHTHAND, LEFTHAND.</summary>
+    /// <summary>HEAD, BREAST, SHOULDER, RIGHTHAND, LEFTHAND, LEG, GLOVE, FOOT.</summary>
     public const int VisibleEquipmentCount = 8;
 
     /// <summary>Every account has exactly three character slots in 1453.</summary>

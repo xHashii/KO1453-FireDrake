@@ -22,6 +22,21 @@
   the monster's per-life token; movement/travel/death/disconnect cancel them.
   This is bounded server timing, not a measured client animation-frame schedule.
 
+## Character-select equipment crash correction
+
+The preview loader previously ordered models as HEAD/BREAST/SHOULDER/LEG/
+GLOVE/FOOT/RIGHTHAND/LEFTHAND. That does not match `CDBAgent::LoadCharInfo`
+(`GameServer/DBAgent.cpp`), which scans the physical slots in ascending order.
+The corrected order is HEAD/BREAST/SHOULDER/RIGHTHAND/LEFTHAND/LEG/GLOVE/FOOT
+(slot indices 1,4,5,6,8,10,12,13 from `shared/globals.h`). The old mapping put
+armor into weapon fields and the weapon into a glove field. Enabling equipment
+previews exposed this mismatch; suppressing all equipment merely masked it.
+
+The loader now preserves the original order, with a MariaDB-to-wire regression
+using the reported armor/weapon IDs and a literal expected equipment byte vector.
+No saved inventory, item IDs, durability or client assets are changed. The actual
+Windows client's rendering must still be checked after deploying the correction.
+
 ## Reconnect state
 
 - Character selection displays the latest saved equipped IDs/durability by
