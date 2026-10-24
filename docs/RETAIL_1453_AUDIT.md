@@ -78,3 +78,10 @@ No invented zero-cost or password-bypass fallback is acceptable.
 See CSHARP_REWRITE_PLAN.md and the subsystem docs for the existing supported
 scope. Subsequent increments need a reference behavior, packet vectors,
 transactional tests and real-client acceptance before being marked retail-verified.
+
+## Additional reference review
+
+[RE-KO comparison](REKO_REFERENCE_REVIEW.md) reviews the Rust implementation at
+pinned commit `217183d1771ac54a0e09de0e00a859f8af7c5538`. It confirms the Inn
+menu opcode but explicitly lacks sealing. It also identifies protocol differences
+requiring native-client verification rather than an unreviewed wholesale port.
