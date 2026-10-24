@@ -1,8 +1,8 @@
 using KnightOnline.Shared.Protocol;
 namespace KnightOnline.Database.Items;
 
-/// <summary>Only the request layout established by SealHandler.cpp is modeled.
-/// A parsed request is NOT permission to charge coins or change protection.</summary>
+/// <summary>Source request layout. Parsing does not authorize a mutation; the
+/// repository validates the authenticated owner, code, serial and snapshot.</summary>
 public sealed class ItemSealRequest(byte action,uint item,byte position,string password)
 {
     public byte Action { get; }=action;
@@ -27,7 +27,6 @@ public static class ItemSealPackets
     // ReqSealItem includes item and position on database replies; success is 1.
     public static Packet Result(ItemSealRequest request, byte code) => new Packet(WizOpcode.ItemUpgrade)
         .WriteByte(8).WriteByte(request.Action).WriteByte(code).WriteUInt32(request.Item).WriteByte(request.Position);
-    // SealErrorFailed=2 in SealHandler.cpp. No success is fabricated for an
-    // unverified premium/password/serial ownership/commit path.
+    // Preflight refusal shape from SealHandler.cpp; no mutation authorized.
     public static Packet Refused(byte action)=>new Packet(WizOpcode.ItemUpgrade).WriteByte(8).WriteByte(action).WriteByte(2);
 }

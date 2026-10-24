@@ -26,7 +26,7 @@ still requires a client test.
   Operator-mediated provisioning/reset is the current administrative workflow,
   not a new self-service account portal. Authenticate the account owner out of
   band before resetting; local DB access is privileged.
-- Codes use random 16-byte salt + PBKDF2-SHA256 (210000 iterations), constant-time
+- Codes use random 16-byte salt + PBKDF2-SHA256 (600000 iterations), constant-time
   verification, and no plaintext storage. Five wrong-code attempts lock the
   account's seal service for five minutes; reconnect cannot reset that timer.
 - Sealing locks the security/account/character/serial identities, rejects ambiguous
