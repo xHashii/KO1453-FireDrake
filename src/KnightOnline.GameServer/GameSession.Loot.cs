@@ -7,18 +7,25 @@ using KnightOnline.Shared.Protocol;
 
 internal sealed partial class GameSession
 {
-    private readonly HashSet<uint> _announcedLoot = new();
+    private readonly Dictionary<uint,ushort> _announcedLoot = new();
     private long _nextLootRefresh;
     private void RefreshLoot()
     {
         if (_user is null) return;
-        foreach (var bundle in _characters.LoadLootAsync(_charId,_user.Zone).GetAwaiter().GetResult())
+        var bundles = _characters.LoadLootAsync(_charId,_user.Zone).GetAwaiter().GetResult();
+        var active = bundles.Select(b => b.Id).ToHashSet();
+        foreach (var id in _announcedLoot.Keys.Where(id => !active.Contains(id)).ToArray()) _announcedLoot.Remove(id);
+        foreach (var bundle in bundles)
         {
             var npc = CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == bundle.Npc);
             if (!Near(bundle.X,bundle.Z,120) || !_visibleNpcs.Contains(bundle.Npc) || npc?.Combat.DeathToken != bundle.KillToken) continue;
-            if (_announcedLoot.Add(bundle.Id))
+            if (_announcedLoot.TryAdd(bundle.Id,bundle.Npc))
                 Send(LootPackets.Spawn(bundle.Npc,bundle.Id));
         }
+    }
+    private void ForgetLootForNpc(ushort npc)
+    {
+        foreach (var id in _announcedLoot.Where(pair => pair.Value == npc).Select(pair => pair.Key).ToArray()) _announcedLoot.Remove(id);
     }
     private LootBundle? FindLoot(uint id) => _characters.LoadLootAsync(_charId,_user!.Zone).GetAwaiter().GetResult()
         .FirstOrDefault(b => b.Id == id && Near(b.X,b.Z,10));

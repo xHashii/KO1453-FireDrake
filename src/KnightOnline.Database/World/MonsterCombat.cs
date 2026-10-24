@@ -41,7 +41,13 @@ public sealed class MonsterCombat(int maxHp, int respawnSeconds)
         {
             Respawn(now);
             if (_hp <= 0 || damage <= 0) return null;
-            if (attacker != 0) { _target = attacker; _engagedAt = now; if (_nextRetaliation < now) _nextRetaliation = now + 1000; }
+            if (attacker != 0)
+            {
+                // Hits renew aggro, not the attack timer. Repeated R hits must
+                // never indefinitely postpone the monster's pending retaliation.
+                if (_target == 0 || now-_engagedAt > 30000 || _nextRetaliation == 0) _nextRetaliation = now+1000;
+                _target = attacker; _engagedAt = now;
+            }
             var applied = Math.Min(_hp, damage);
             _hp -= applied;
             if (_hp == 0) { _diedAt = now; _respawnAt = now + Math.Max(6, respawnSeconds) * 1000L; }

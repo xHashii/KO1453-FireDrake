@@ -65,12 +65,12 @@ internal sealed partial class GameSession
         // A respawn reuses its runtime ID, but requires a fresh IN packet.
         foreach (var id in _deadNpcs.ToArray())
             if (CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == id)?.Health > 0)
-            { Send(new Packet(WizOpcode.NpcInout, (byte)2).WriteUInt16(id)); _visibleNpcs.Remove(id); _deadNpcs.Remove(id); }
+            { Send(new Packet(WizOpcode.NpcInout, (byte)2).WriteUInt16(id)); _visibleNpcs.Remove(id); _deadNpcs.Remove(id); ForgetLootForNpc(id); }
         var nearby = NearbyNpcs().ToDictionary(n => n.Id);
         foreach (var id in _visibleNpcs.Where(id => !nearby.ContainsKey(id)).ToArray())
         {
             Send(new Packet(WizOpcode.NpcInout, (byte)2).WriteUInt16(id));
-            _visibleNpcs.Remove(id); _deadNpcs.Remove(id);
+            _visibleNpcs.Remove(id); _deadNpcs.Remove(id); ForgetLootForNpc(id);
         }
         foreach (var npc in nearby.Values.Where(n => !_visibleNpcs.Contains(n.Id)))
         {

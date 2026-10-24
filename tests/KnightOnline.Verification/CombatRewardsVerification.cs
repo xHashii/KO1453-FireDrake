@@ -15,6 +15,9 @@ internal static class CombatRewardsVerification
         var aggro = new MonsterCombat(100,20);
         aggro.Hit(1,1000,1001);
         test("retaliation waits for attack delay and only targets attacker", !aggro.Retaliate(1002,3000,1000) && !aggro.Retaliate(1001,1500,1000) && aggro.Retaliate(1001,2000,1000) && !aggro.Retaliate(1001,2001,1000));
+        var continuous = new MonsterCombat(100,20);
+        continuous.Hit(1,1000,1001); continuous.Hit(1,2100,1001);
+        test("continuous player hits cannot postpone retaliation", continuous.Retaliate(1001,2200,1500));
         aggro.Hit(999,3000,1001);
         test("dead monster cannot retaliate", !aggro.Retaliate(1001,5000,1000));
         test("respawn clears aggro", aggro.Health(23000) == 100 && !aggro.Retaliate(1001,23000,1000));
