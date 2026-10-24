@@ -6,6 +6,19 @@ using KnightOnline.Shared.Protocol;
 internal sealed partial class GameSession
 {
     private readonly WorldCatalog _world;
+    private SavedPosition? _savedPosition;
+    private long _nextPositionSave;
+
+    private void SaveCurrentPosition()
+    {
+        if (_user is null || _savedPosition is null || CurrentWorld is not { } zone || !zone.Map.Contains(PlayerX,PlayerZ)) return;
+        var position = new SavedPosition(_user.Zone,_user.Px,_user.Pz,_user.Py);
+        if (!_characters.TrySavePositionAsync(_charId,_savedPosition,position).GetAwaiter().GetResult())
+            throw new InvalidOperationException("Position changed outside this session; refusing stale movement save.");
+        _savedPosition = position;
+        KoLog.Info($"[ POSITION SAVE ] {_charId} zone={position.Zone} position={position.X},{position.Z},{position.Y}");
+    }
+
     private readonly HashSet<ushort> _visibleNpcs = new();
     private readonly HashSet<ushort> _deadNpcs = new();
     private readonly Dictionary<ushort, MapWarp> _gateWarps = new();
@@ -54,7 +67,7 @@ internal sealed partial class GameSession
         var speed = packet.ReadInt16();
         packet.ReadByte();
         if (!zone.Map.Contains(x, z)) return;
-        if (speed != 0) { _sitting = false; _casting = null; }
+        if (speed != 0) { _sitting = false; _casting = null; _pendingMelee = null; }
         _user = _user! with { Px = wireX * 10, Pz = wireZ * 10, Py = wireY * 10 };
         SyncWorldNpcs();
         if (_activeGate is not null && !Near(_activeGate.X, _activeGate.Z, 10)) ClearGate();

@@ -6,7 +6,7 @@ namespace KnightOnline.Database;
 /// no saved equipment is changed. Used to recover from client equipment-asset failures.</summary>
 public static class CharacterListPackets
 {
-    public static Packet Build(IReadOnlyList<CharacterSelectInfo> characters, bool showEquipment)
+    public static Packet Build(IReadOnlyList<CharacterSelectInfo> characters, bool showEquipment = true)
     {
         if (characters.Count > CharacterSelectInfo.SlotCount)
             throw new ArgumentException("1453 accepts exactly three character slots.", nameof(characters));

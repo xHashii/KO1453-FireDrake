@@ -15,6 +15,10 @@ internal static class MeleeVerification
         test("melee server weapon cadence/range bounded", MeleeRules.DelayMs(139) == 1490 && MeleeRules.DelayMs(-1) == 1000 && MeleeRules.Range(14) == 29f && MeleeRules.Range(1000) == 115f);
         test("melee armed/long attack type accepted", MeleeRules.TryRead(Packet.FromReceived(WizOpcode.Attack, Convert.FromHexString("02014A3495000E00")), out var armed) && armed.Type == 2);
         test("melee damage uses hit/armor and cannot overflow", MeleeRules.Damage(100,200) == 50 && MeleeRules.Damage(int.MaxValue,0) == ushort.MaxValue && MeleeRules.Damage(0,int.MaxValue) == 1);
+        test("melee impact has bounded nonzero windup", MeleeRules.ImpactDelayMs(1590) == 530 && MeleeRules.ImpactDelayMs(1) == 250 && MeleeRules.ImpactDelayMs(int.MaxValue) == 600);
+        var generation = new MonsterCombat(20,6); var originalLife = generation.LifeToken;
+        generation.Hit(20,1000,1001,originalLife);
+        test("queued swing cannot damage a respawned life", generation.Hit(20,7000,1001,originalLife) is null && generation.Health(7000) == 20);
         var life = new MonsterCombat(100, 10);
         test("melee shared health decreases", life.Hit(30,1000) is { Hp:70, Damage:30, Killed:false } && life.Health(1001) == 70);
         test("melee killing blow clamps overkill", life.Hit(500,2000) is { Hp:0, Damage:70, Killed:true });

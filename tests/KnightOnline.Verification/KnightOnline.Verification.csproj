@@ -17,6 +17,7 @@
     Migrate/extend with xUnit later if wanted.
   -->
   <ItemGroup>
+    <Compile Include="../../src/KnightOnline.GameServer/GameServerSettings.cs" Link="GameServerSettings.cs" />
     <ProjectReference Include="..\..\src\KnightOnline.Shared\KnightOnline.Shared.csproj" />
     <ProjectReference Include="..\..\src\KnightOnline.Database\KnightOnline.Database.csproj" />
   </ItemGroup>

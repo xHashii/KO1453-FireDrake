@@ -508,7 +508,19 @@ CheckUIntHex("crc32 rand256", KoCrc32.Compute(Fill(256, 42), 0), GoldenVectors.C
     Check("char preview: suppress only model references", blank);
     Check("char preview: saved equipment untouched", character.VisibleEquipment.All(item => item.ItemId == 123456789 && item.Durability == 14000));
     Check("char preview: null-filled empty equipment safe", KnightOnline.Database.CharacterListPackets.Build(Array.Empty<KnightOnline.Database.CharacterSelectInfo>(), true).Length == 172);
-    Check("char preview: opt-in restores equipment", !normal.Payload.SequenceEqual(safe.Payload));
+    Check("char preview: normal serializer defaults to saved equipment", KnightOnline.Database.CharacterListPackets.Build(slots).Payload.SequenceEqual(normal.Payload));
+    Check("char preview: recovery is explicit", !normal.Payload.SequenceEqual(safe.Payload));
+    var iniPath = Path.GetTempFileName();
+    try
+    {
+        File.WriteAllText(iniPath,"[SETTINGS]\n");
+        Check("char preview: settings default to normal models", KnightOnline.GameServer.GameServerSettings.Load(iniPath).CharacterPreviewEquipment);
+        File.WriteAllText(iniPath,"[SETTINGS]\nCHARACTER_PREVIEW_EQUIPMENT=0\n");
+        Check("char preview: obsolete recovery flag does not keep characters naked", KnightOnline.GameServer.GameServerSettings.Load(iniPath).CharacterPreviewEquipment);
+        File.WriteAllText(iniPath,"[SETTINGS]\nCHARACTER_PREVIEW_RECOVERY=1\n");
+        Check("char preview: new recovery switch is opt-in", !KnightOnline.GameServer.GameServerSettings.Load(iniPath).CharacterPreviewEquipment);
+    }
+    finally { File.Delete(iniPath); }
 }
 
 PotionVerification.Rules((name, ok) => Check(name, ok));

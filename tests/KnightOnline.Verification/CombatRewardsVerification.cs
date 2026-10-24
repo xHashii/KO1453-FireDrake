@@ -137,6 +137,42 @@ internal static class CombatRewardsVerification
         var data = await repository.LoadWorldDataAsync();
         var world = new WorldCatalog(data,WorldCatalog.FindMapDirectory());
         test("actual world/drop catalogs load with full shipped source", data.Monsters!.Count == 790 && world.Drops.Drops.Count == 756 && world.Drops.Groups.Count == 69 && world.Zones[21].Npcs.Count(n => n.Prototype.IsMonster) == 474);
+        await repository.EnsureTravelSchemaAsync();
+        var oldPosition = new SavedPosition(21,30000,35000,0);
+        var walked = new SavedPosition(21,25080,29100,-650);
+        test("walking position persists independently of rewards", await repository.TrySavePositionAsync("combat-test",oldPosition,walked));
+        test("stale logout cannot undo newer position", !await repository.TrySavePositionAsync("combat-test",oldPosition,new(21,1000,1000,0)));
+        var nextWalk = walked with { X=26000 };
+        var writes = await Task.WhenAll(repository.TrySavePositionAsync("combat-test",walked,nextWalk),repository.TrySavePositionAsync("combat-test",walked,walked with { X=27000 }));
+        test("concurrent position snapshots allow only one writer", writes.Count(ok => ok) == 1);
+        command.CommandText="SELECT Zone,PX,PZ,PY,Gold,Exp,strItem,strSerial,Hp,Mp FROM USERDATA WHERE strUserID='combat-test'";
+        SavedPosition saved;
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            await reader.ReadAsync(); saved=new(Convert.ToUInt16(reader[0]),Convert.ToInt32(reader[1]),Convert.ToInt32(reader[2]),Convert.ToInt32(reader[3]));
+            test("reconnect location is saved movement with unchanged inventory/resources", saved.X is 26000 or 27000 && saved.Z == 29100 && saved.Y == -650 && Convert.ToInt32(reader[4]) == 107 && ((byte[])reader[6]).SequenceEqual(after.Items) && ((byte[])reader[7]).SequenceEqual(after.Serials) && Convert.ToInt32(reader[8]) == 100 && Convert.ToInt32(reader[9]) == 50);
+        }
+        command.CommandText="SELECT COUNT(*) FROM KO_WORLD_TRAVEL WHERE strUserID='combat-test'";
+        test("movement saves opt out of legacy spawn relocation", Convert.ToInt32(await command.ExecuteScalarAsync()) == 1);
+        command.CommandText="ALTER TABLE USERDATA ADD CONSTRAINT fail_position CHECK (PX<>28000)"; await command.ExecuteNonQueryAsync();
+        var positionFailed=false;
+        try { await repository.TrySavePositionAsync("combat-test",saved,saved with { X=28000 }); } catch (MySqlException) { positionFailed=true; }
+        command.CommandText="ALTER TABLE USERDATA DROP CONSTRAINT fail_position"; await command.ExecuteNonQueryAsync();
+        test("position SQL failure rolls back and can retry", positionFailed && await repository.TrySavePositionAsync("combat-test",saved,saved with { X=29000 }));
+        command.CommandText="ALTER TABLE USERDATA ADD Race tinyint unsigned DEFAULT 12,ADD HairRGB tinyint unsigned DEFAULT 2,ADD Face tinyint unsigned DEFAULT 1; INSERT INTO ACCOUNT_CHAR VALUES('preview-account','combat-test','','')";
+        await command.ExecuteNonQueryAsync();
+        var previewSlots = new[] {1,4,5,10,12,13,6,8};
+        var geared = slots.ToArray();
+        for (var i=0;i<8;i++) geared[previewSlots[i]]=new((uint)(120810001+i),(short)(100+i),1,(ulong)(1000+i),0);
+        var equippedBlobs = ItemBlobs.Serialize(geared);
+        var equipped = new InventorySnapshot(equippedBlobs.Items,equippedBlobs.Serials,107);
+        test("equipped state persists before character list refresh", await repository.TrySaveInventoryAsync("combat-test",after,equipped));
+        var preview = (await repository.LoadCharacterSelectInfoAsync("preview-account"))[0];
+        test("character select loads all eight latest saved equipment IDs and durability", preview.VisibleEquipment.Select((e,i) => e.ItemId == 120810001u+i && e.Durability == 100+i).All(ok => ok));
+        geared[1]=ItemSlotData.Empty;
+        var unequippedBlobs=ItemBlobs.Serialize(geared);
+        test("unequip persists without retaining cached preview gear", await repository.TrySaveInventoryAsync("combat-test",equipped,new(unequippedBlobs.Items,unequippedBlobs.Serials,107)) && (await repository.LoadCharacterSelectInfoAsync("preview-account"))[0].VisibleEquipment[0].ItemId == 0);
+
 
 
     }

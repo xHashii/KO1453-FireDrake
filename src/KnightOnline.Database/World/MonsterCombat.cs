@@ -14,6 +14,7 @@ public sealed class MonsterCombat(int maxHp, int respawnSeconds)
     private ushort _target;
     private long _nextRetaliation, _engagedAt;
     private string _life = Guid.NewGuid().ToString("N");
+    public string LifeToken { get { lock (_gate) return _life; } }
     public string? DeathToken { get { lock (_gate) return _hp == 0 ? _life : null; } }
     public bool CorpseVisible(long now)
     { lock (_gate) { Respawn(now); return _hp == 0 && now < Math.Min(_respawnAt, _diedAt + 30000); } }
@@ -35,12 +36,12 @@ public sealed class MonsterCombat(int maxHp, int respawnSeconds)
     {
         lock (_gate) { Respawn(now); return _hp; }
     }
-    public MonsterHealth? Hit(int damage, long now, ushort attacker = 0)
+    public MonsterHealth? Hit(int damage, long now, ushort attacker = 0, string? expectedLife = null)
     {
         lock (_gate)
         {
             Respawn(now);
-            if (_hp <= 0 || damage <= 0) return null;
+            if (_hp <= 0 || damage <= 0 || expectedLife is not null && expectedLife != _life) return null;
             if (attacker != 0)
             {
                 // Hits renew aggro, not the attack timer. Repeated R hits must
@@ -69,6 +70,7 @@ public static class MeleeRules
         if (type is not (1 or 2)) return false;
         request = new(type, target); return true;
     }
+    public static int ImpactDelayMs(int cadenceMs) => Math.Clamp(cadenceMs/3,250,600);
     public static int DelayMs(int weaponDelay) => Math.Clamp(weaponDelay + 10, 100, 500) * 10;
     public static float Range(int weaponRange) => 15f + Math.Clamp(weaponRange, 0, 100);
     // Initial deterministic PvE formula, not the full C++ damage/critical/buff port.

@@ -594,6 +594,7 @@ internal sealed partial class GameSession : KoSession
         }
 
         _user = user;
+        _savedPosition = new(user.Zone,user.Px,user.Pz,user.Py);
         _charId = charId;
 
         var serialBlob = user.Serials ?? Array.Empty<byte>();

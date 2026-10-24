@@ -7,6 +7,9 @@ using KnightOnline.Shared.Protocol;
 internal sealed partial class GameSession
 {
     private long _nextMeleeAt;
+    private sealed record PendingMelee(ushort Target, ushort Zone, string Life, long Impact, int Damage, float Range, ItemSlotData Right, ItemSlotData Left);
+    private PendingMelee? _pendingMelee;
+    private Timer? _meleeTimer;
     private (uint Skill, ushort Target, long Ready)? _casting;
 
     private void MeleeAttack(Packet packet)
@@ -23,12 +26,33 @@ internal sealed partial class GameSession
             KoLog.Info($"[ MELEE REJECT ] {_charId} target={npc.Id}: range, player={PlayerX:F1},{PlayerZ:F1} monster={npc.X:F1},{npc.Z:F1} allowed={range:F1}");
             Send(MeleeRules.Reply(request,_socketId,0)); return;
         }
-        _nextMeleeAt = now + MeleeRules.DelayMs(weapon?.Delay ?? 90);
-        var hit = npc.Combat.Hit(MeleeRules.Damage(_totalHit,npc.Prototype.Armor),now,_socketId);
-        if (hit is null) { Send(MeleeRules.Reply(request,_socketId,0)); return; }
+        var cadence = MeleeRules.DelayMs(weapon?.Delay ?? 90);
+        _nextMeleeAt = now + cadence;
+        _pendingMelee = new(npc.Id,_user.Zone,npc.Combat.LifeToken,now+MeleeRules.ImpactDelayMs(cadence),
+            MeleeRules.Damage(_totalHit,npc.Prototype.Armor),range,Slot(RightHand),Slot(LeftHand));
         UpdateChatPresence();
-        _chat.Region(_user.Zone,npc.X,npc.Z,120,MeleeRules.Reply(request,_socketId,hit.Killed ? (byte)2 : (byte)1));
-        CompleteMonsterHit(npc,hit);
+        // Start the swing now. Do not replace it with a kill result at frame zero.
+        _chat.Region(_user.Zone,npc.X,npc.Z,120,MeleeRules.Reply(request,_socketId,1));
+        _meleeTimer ??= new Timer(_ =>
+        {
+            lock (_gameGate)
+            {
+                try { ResolveMeleeImpact(); }
+                catch (Exception ex) { InventoryUnavailable(ex); }
+            }
+        },null,TimeSpan.FromMilliseconds(50),TimeSpan.FromMilliseconds(50));
+    }
+    private void ResolveMeleeImpact()
+    {
+        var now = Environment.TickCount64;
+        if (_pendingMelee is not { } swing || now < swing.Impact) return;
+        _pendingMelee = null;
+        if (!IsConnected || _inventoryFaulted || !CanTravel() || _sitting || _user!.Zone != swing.Zone || now > swing.Impact+1000 ||
+            Slot(RightHand) != swing.Right || Slot(LeftHand) != swing.Left) return;
+        var npc = CombatTarget(swing.Target);
+        if (npc is null || !Near(npc.X,npc.Z,swing.Range)) return;
+        var hit = npc.Combat.Hit(swing.Damage,now,_socketId,swing.Life);
+        if (hit is not null) CompleteMonsterHit(npc,hit);
     }
     private ItemProto? EquippedWeapon()
     {
@@ -95,6 +119,7 @@ internal sealed partial class GameSession
             var now = Environment.TickCount64;
             if (request.Stage == 1)
             {
+                _pendingMelee = null;
                 if (_casting is { } pending && now < pending.Ready) { Reject("already casting"); return true; }
                 _casting = (skill.Id,target.Id,now+skill.CastMs);
                 Send(CombatSkillRules.Reply(skill.Id,_socketId,target.Id,1,true)); return true;
@@ -166,7 +191,7 @@ internal sealed partial class GameSession
                 if (_currentHp == 0)
                 {
                     _chat.Region(_user.Zone,PlayerX,PlayerZ,120,new Packet(WizOpcode.Dead).WriteUInt16(_socketId));
-                    _casting = null; break;
+                    _casting = null; _pendingMelee = null; break;
                 }
             }
         }
@@ -184,6 +209,8 @@ internal sealed partial class GameSession
             if (!_characters.TrySaveCombatVitalsAsync(_charId,_user.Hp,_user.Mp,_maxHp,_maxMp,destination).GetAwaiter().GetResult())
                 throw new InvalidOperationException("Stale revival snapshot.");
             _user = _user with { Hp=_maxHp, Mp=_maxMp, Zone=destination.Zone, Px=destination.Px, Pz=destination.Pz, Py=destination.Py };
+            _savedPosition = new(destination.Zone,destination.Px,destination.Pz,destination.Py);
+            _pendingMelee = null;
             _sitting=false;
             Send(new Packet(WizOpcode.Regene).WriteUInt16((ushort)(destination.Px/10)).WriteUInt16((ushort)(destination.Pz/10)).WriteUInt16(unchecked((ushort)(short)(destination.Py/10))));
             RestoreVitals(_maxHp-_currentHp,_maxMp-_currentMp);

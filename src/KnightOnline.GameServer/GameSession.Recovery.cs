@@ -21,6 +21,11 @@ internal sealed partial class GameSession
                 {
                     SyncWorldNpcs();
                     MonsterRetaliation();
+                    if (!_inventoryFaulted && Environment.TickCount64 >= _nextPositionSave)
+                    {
+                        _nextPositionSave = Environment.TickCount64+10000;
+                        try { SaveCurrentPosition(); } catch (Exception ex) { InventoryUnavailable(ex); }
+                    }
                     if (Environment.TickCount64 >= _nextLootRefresh)
                     { _nextLootRefresh = Environment.TickCount64+5000; RefreshLoot(); }
                 }
@@ -58,9 +63,15 @@ internal sealed partial class GameSession
         lock (_gameGate)
         {
             _chat.Remove(_socketId);
+            _pendingMelee = null; _meleeTimer?.Dispose(); _meleeTimer = null;
             _worldTimer?.Dispose(); _worldTimer = null;
             _recoveryTimer?.Dispose();
             _recoveryTimer = null;
+            if (_inGame && _user is not null)
+            {
+                try { SaveCurrentPosition(); }
+                catch (Exception ex) { KoLog.Error($"Could not save logout position for {_charId}.",ex); }
+            }
             if (_inGame && _user is not null && !_inventoryFaulted)
             {
                 try { _characters.SaveVitalsAsync(_charId, _currentHp, _currentMp, _user.Hp, _user.Mp).GetAwaiter().GetResult(); }

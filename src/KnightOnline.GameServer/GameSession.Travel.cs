@@ -164,6 +164,8 @@ internal sealed partial class GameSession
             throw new InvalidOperationException("Destination is outside the loaded world.");
         target = target with { Py = (int)(destination.Map.Height(target.Px / 100f, target.Pz / 100f) * 100) };
         var gold = _characters.SaveTravelPositionAsync(_charId, target, fee).GetAwaiter().GetResult();
+        _savedPosition = new(target.Zone,target.Px,target.Pz,target.Py);
+        _pendingMelee = null; _casting = null;
         var sameZone = target.Zone == _user!.Zone;
         _user = _user with { Zone = target.Zone, Px = target.Px, Pz = target.Pz, Py = target.Py, Gold = gold };
         _offeredTravel.Clear();

@@ -14,6 +14,7 @@ public sealed class KoTcpServer<TSession> where TSession : KoSession
 {
     private readonly Func<TcpClient, TSession> _sessionFactory;
     private readonly ConcurrentDictionary<ushort, TSession> _sessions = new();
+    private readonly ConcurrentDictionary<ushort, Task> _sessionTasks = new();
     private readonly CancellationTokenSource _shutdown = new();
     private TcpListener? _listener;
     private int _nextSessionId;
@@ -30,6 +31,7 @@ public sealed class KoTcpServer<TSession> where TSession : KoSession
 
     public TimeSpan? IdleTimeout { get; }
 
+    public int ListeningPort => (_listener?.LocalEndpoint as IPEndPoint)?.Port ?? 0;
     public int SessionCount => _sessions.Count;
 
     public IEnumerable<TSession> Sessions => _sessions.Values;
@@ -50,14 +52,21 @@ public sealed class KoTcpServer<TSession> where TSession : KoSession
                 var session = _sessionFactory(client);
                 session.SessionId = AllocateSessionId();
                 _sessions[session.SessionId] = session;
-                _ = RunSessionAsync(session);
+                var task = RunSessionAsync(session);
+                _sessionTasks[session.SessionId] = task;
+                _ = task.ContinueWith(completed => { _sessionTasks.TryRemove(session.SessionId,out var ignored); },
+                    CancellationToken.None,TaskContinuationOptions.ExecuteSynchronously,TaskScheduler.Default);
             }
         }
         catch (OperationCanceledException) { /* Stop() called */ }
+        catch (SocketException) when (_shutdown.IsCancellationRequested) { /* listener stopped */ }
         finally
         {
             foreach (var session in _sessions.Values)
                 session.Disconnect();
+            // Logout persistence runs in OnDisconnected. Do not exit the process
+            // while disconnected sessions are still saving their final position.
+            await Task.WhenAll(_sessionTasks.Values).ConfigureAwait(false);
             if (sweeper is not null)
                 await sweeper.ConfigureAwait(false);
         }
@@ -83,6 +92,7 @@ public sealed class KoTcpServer<TSession> where TSession : KoSession
 
     private async Task RunSessionAsync(TSession session)
     {
+        await Task.Yield(); // Register the lifetime task before callbacks can finish synchronously.
         try
         {
             await session.RunAsync(_shutdown.Token).ConfigureAwait(false);
