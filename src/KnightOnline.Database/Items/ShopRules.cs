@@ -99,8 +99,30 @@ public static class ShopRules
         return new(proposed, gold, (uint)price, item.SellingGroup);
     }
 
+    /// <summary>Read-only audit; unknown weights must not silently become zero.
+    /// Bag container slots add capacity rather than carried weight, matching SetUserAbility.</summary>
+    public static (long Weight, IReadOnlyList<InventoryIssue> Issues) MeasureInventory(
+        IReadOnlyList<ItemSlotData> slots, IReadOnlyDictionary<uint, ItemProto> protos)
+    {
+        long weight = 0;
+        var issues = new List<InventoryIssue>();
+        for (var i = 0; i < slots.Count; i++)
+        {
+            var slot = slots[i];
+            if (slot.ItemId == 0 || i is 47 or 48) continue;
+            if (!protos.ContainsKey(slot.ItemId) && LegacyStarterTail.IsKnownUnusedSlot(i, slot)) continue;
+            if (slot.Count <= 0) issues.Add(new(i, slot.ItemId, slot.Count, "non-positive saved count"));
+            else if (!protos.TryGetValue(slot.ItemId, out var proto)) issues.Add(new(i, slot.ItemId, slot.Count, "missing ITEM definition"));
+            else if (proto.Weight < 0) issues.Add(new(i, slot.ItemId, slot.Count, "negative ITEM.Weight"));
+            else weight += (long)proto.Weight * slot.Count;
+        }
+        return (weight, issues);
+    }
+
     public static Packet Failure(byte error) => new Packet(WizOpcode.ItemTrade).WriteByte(0).WriteByte(error);
     public static Packet Success(ShopChange change, byte type) => type == 3
         ? new Packet(WizOpcode.ItemTrade).WriteByte(3)
         : new Packet(WizOpcode.ItemTrade).WriteByte(1).WriteUInt32((uint)change.Gold).WriteUInt32(change.Price).WriteByte(change.SellingGroup);
 }
+
+public sealed record InventoryIssue(int Slot, uint ItemId, short Count, string Reason);

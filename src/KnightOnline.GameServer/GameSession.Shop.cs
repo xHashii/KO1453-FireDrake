@@ -38,18 +38,14 @@ internal sealed partial class GameSession
             // Do not trust the signed legacy weight accumulator. Sum in 64 bits,
             // and refuse to transact an inventory containing unknown prototypes.
             var protos = _characters.LoadItemPrototypesAsync(_slots.Select(s => s.ItemId).Append(request.ItemId)).GetAwaiter().GetResult();
-            long weight = 0;
-            for (var i = 0; i < _slots.Length; i++)
+            var (weight, issues) = ShopRules.MeasureInventory(_slots, protos);
+            if (issues.Count != 0)
             {
-                var slot = _slots[i];
-                if (slot.ItemId == 0 || i is 47 or 48) continue;
-                if (slot.Count <= 0 || !protos.TryGetValue(slot.ItemId, out var proto) || proto.Weight < 0)
-                {
-                    Send(ShopRules.Failure(2));
-                    TravelMessage("Inventory contains an invalid item; shop transaction rejected without changes.");
-                    return;
-                }
-                weight += (long)proto.Weight * slot.Count;
+                LogInventoryIssues(issues, $"SHOP REJECT type={request.Type} requestedItem={request.ItemId} NPC={npcId}");
+                Send(ShopRules.Failure(2));
+                var first = issues[0];
+                TravelMessage($"Shop rejected: {InventorySlots.Describe(first.Slot)}, item {first.ItemId}: {first.Reason}. No items or coins changed; see run log.");
+                return;
             }
             var serial = (ulong)RandomNumberGenerator.GetInt32(1, int.MaxValue) << 32 |
                          (uint)RandomNumberGenerator.GetInt32(1, int.MaxValue);
@@ -57,7 +53,7 @@ internal sealed partial class GameSession
             if (change is null)
             {
                 Send(ShopRules.Failure(error));
-                KoLog.Info($"[ SHOP REJECT ] {_charId} type={request.Type} item={request.ItemId} slot={request.Position} count={request.Count} error={error}");
+                KoLog.Info($"[ SHOP REJECT ] {_charId} type={request.Type} item={request.ItemId} slot={request.Position} count={request.Count} error={error} gold={_user.Gold} weight={weight}/{_maxWeight} itemDefinition={(item is null ? "missing" : "present")}");
                 return;
             }
             var existing = _slots[InventorySlots.InventoryStart + request.Position];
@@ -75,6 +71,12 @@ internal sealed partial class GameSession
         {
             InventoryUnavailable(ex);
         }
+    }
+
+    private void LogInventoryIssues(IReadOnlyList<InventoryIssue> issues, string context)
+    {
+        foreach (var issue in issues)
+            KoLog.Warn($"[ INVENTORY INVALID ] {_charId} context={context} slot={issue.Slot} ({InventorySlots.Describe(issue.Slot)}) item={issue.ItemId} count={issue.Count} reason={issue.Reason}; saved inventory unchanged");
     }
 
     private bool CommitInventory(ItemSlotData[] slots, int gold, uint protectedItem = 0, ulong protectedSerial = 0, bool shopReply = true)

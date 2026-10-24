@@ -403,3 +403,53 @@ Manual acceptance test (real-client confirmation still required):
 
 Repair, anvil upgrades, item exchanges, warehouse, quests and monster AI/combat
 remain separate milestones. This feature makes no change to tooltip rendering.
+
+### Per-run console logs
+
+Both C# servers automatically create a **new UTF-8 text file for each launch**:
+
+```text
+Logs/GameServer_2026-10-24_16-03-33-123_<pid>_<unique-id>.txt
+Logs/LoginServer_2026-10-24_16-03-33-123_<pid>_<unique-id>.txt
+```
+
+`Logs` is relative to the directory from which you launch the server (normally
+this repository). The first console line prints the absolute file path. All
+application console messages use the same logger and are mirrored to this file,
+including packet traces, warnings and exception details. Entries are flushed
+immediately, so you can read/copy the file while the server is running. Separate
+runs/processes never overwrite or mix their files. Old `GameServer.log` /
+`LoginServer.log` files are left untouched. Runtime logs are ignored by Git.
+
+If the folder cannot be created or a disk write fails, a warning is printed and
+console logging continues. Files are not automatically expired or size-rotated;
+archive/delete old runs as needed. Hard process/OS failures are not guaranteed
+to be captured. The LoginServer's separate account-audit logs remain unchanged.
+
+GameServer login and character-deletion **payloads are redacted** in both console
+and file traces. Earlier logs may contain credential-bearing login hex; treat
+those files as private. New logs still contain account/character names, IPs and
+chat/command diagnostics, so review before sharing.
+
+### Shop rejection caused by legacy starter-tail records
+
+The supplied `BEGINNER_ITEM.strItem` blobs contain non-item residue after the
+42 ordinary equipment/inventory slots, e.g. Rogue slot 44 has ID `65537`,
+durability `-8687`, count `5044`, with no corresponding `ITEM` row. The original
+`DBAgent::LoadUserData` skipped unknown prototypes; the first strict shop audit
+instead rejected the whole inventory. This reproduces a shop failure even with
+all ordinary item definitions present.
+
+The audit now recognizes **only exact shipped tail tuples**, with zero serial
+and expiration, and only when no real `ITEM` definition exists. These records
+are not counted as active items, but their saved bytes remain unchanged through
+purchases/sales. No inventory wipe, guessed item definitions, or broad
+"ignore unknown items" workaround is used. A data regression test verifies the
+signatures directly against the shipped SQL.
+
+Other invalid inventory entries still fail closed. On character load and shop
+rejection, `[ INVENTORY INVALID ]` now records the exact slot, item ID, count and
+reason (`missing ITEM definition`, invalid count, or negative weight). The shop
+chat gives the first offending item; the run log lists every offending slot.
+`[ INVENTORY ]` reports recognized legacy records retained unchanged. Send the
+latest **GameServer** run file if a transaction is still rejected.

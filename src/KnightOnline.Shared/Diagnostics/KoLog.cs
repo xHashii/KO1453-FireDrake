@@ -1,39 +1,75 @@
 namespace KnightOnline.Shared.Diagnostics;
 
-/// <summary>
-/// Minimal thread-safe console+file logger standing in for the original
-/// TRACE()/printf() output and the servers' hand-rolled log files.
-/// (Can be swapped for Serilog/Microsoft.Extensions.Logging later without
-/// touching call sites much - keep messages going through here.)
-/// </summary>
+/// <summary>Thread-safe console + UTF-8 file logger. Server console messages all
+/// go through this class; each server process opens its own per-run transcript.</summary>
 public static class KoLog
 {
     private static readonly object Gate = new();
     private static StreamWriter? _file;
+    public static string? CurrentFilePath { get; private set; }
 
-    /// <summary>Starts appending to the given log file (directory created if needed).</summary>
+    static KoLog() => AppDomain.CurrentDomain.ProcessExit += (_, _) => CloseFile();
+
+    /// <summary>Appends to an explicit file, mainly for callers needing a fixed path.</summary>
     public static void ConfigureFile(string filePath)
+    {
+        lock (Gate) OpenFile(filePath, FileMode.Append);
+    }
+
+    /// <summary>Creates a new file relative to the launch working directory.
+    /// PID + random suffix prevent collisions between simultaneous starts.
+    /// A filesystem error leaves console logging available instead of killing the server.</summary>
+    public static string? StartRun(string service, string directory = "Logs")
+    {
+        if (string.IsNullOrWhiteSpace(service) || service.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('-' or '_')))
+            throw new ArgumentException("Use a simple service name, not a path.", nameof(service));
+        lock (Gate)
+        {
+            try
+            {
+                var filename = $"{service}_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}_{Environment.ProcessId}_{Guid.NewGuid():N}.txt";
+                OpenFile(Path.Combine(directory, filename), FileMode.CreateNew);
+                Info($"Run log: {CurrentFilePath} (local time; UTF-8; flushed after every entry)");
+                return CurrentFilePath;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                CloseFile();
+                Warn($"Could not create run log in '{directory}': {ex.Message}. Continuing with console logging only.");
+                return null;
+            }
+        }
+    }
+
+    private static void OpenFile(string path, FileMode mode)
+    {
+        var fullPath = Path.GetFullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        var writer = new StreamWriter(new FileStream(fullPath, mode, FileAccess.Write, FileShare.Read)) { AutoFlush = true };
+        CloseFile();
+        _file = writer;
+        CurrentFilePath = fullPath;
+    }
+
+    public static void CloseFile()
     {
         lock (Gate)
         {
-            var dir = Path.GetDirectoryName(Path.GetFullPath(filePath));
-            if (!string.IsNullOrEmpty(dir))
-                Directory.CreateDirectory(dir);
-
-            _file?.Dispose();
-            _file = new StreamWriter(new FileStream(filePath, FileMode.Append, FileAccess.Write, FileShare.Read))
+            var file = _file;
+            _file = null;
+            CurrentFilePath = null;
+            try { file?.Dispose(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                AutoFlush = true,
-            };
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [WARN ] Closing run log failed: {ex.Message}");
+            }
         }
     }
 
     public static void Info(string message) => Write("INFO ", message);
     public static void Warn(string message) => Write("WARN ", message);
     public static void Error(string message) => Write("ERROR", message);
-
-    public static void Error(string message, Exception ex) =>
-        Write("ERROR", $"{message}\n{ex}");
+    public static void Error(string message, Exception ex) => Write("ERROR", $"{message}\n{ex}");
 
     private static void Write(string level, string message)
     {
@@ -41,7 +77,12 @@ public static class KoLog
         lock (Gate)
         {
             Console.WriteLine(line);
-            _file?.WriteLine(line);
+            try { _file?.WriteLine(line); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                CloseFile();
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [WARN ] Run log write failed: {ex.Message}. Continuing with console logging only.");
+            }
         }
     }
 }

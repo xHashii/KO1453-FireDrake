@@ -71,6 +71,25 @@ internal static class ShopVerification
         Test("success reply golden payload", Convert.ToHexString(ShopRules.Success(new ShopChange(slots, 9400, 600, 253), 1).Payload) == "01B824000058020000FD");
         Test("failure and move golden payloads", Convert.ToHexString(ShopRules.Failure(3).Payload) == "0003" && Convert.ToHexString(ShopRules.Success(moved, 3).Payload) == "03");
 
+        var legacy = Enumerable.Repeat(ItemSlotData.Empty, InventorySlots.Total).ToArray();
+        legacy[44] = new ItemSlotData(65537, -8687, 5044, 0, 0); // exact Rogue starter residue
+        var noProtos = new Dictionary<uint, ItemProto>();
+        Test("known starter residue does not block weight validation", ShopRules.MeasureInventory(legacy, noProtos).Issues.Count == 0);
+        var preserved = ItemBlobs.Serialize(legacy).Items;
+        var legacyBuy = ShopRules.Propose(buy, potion, legacy, 10000, 0, 1000, 123, out _)!;
+        Test("buy keeps starter residue bytes intact", ItemBlobs.Serialize(legacyBuy.Slots).Items.AsSpan(44 * 8, 8).SequenceEqual(preserved.AsSpan(44 * 8, 8)) && legacyBuy.Gold == 9400);
+        legacy[44] = legacy[44] with { Serial = 123 };
+        Test("serialized items cannot use starter-residue exemption", ShopRules.MeasureInventory(legacy, noProtos).Issues.Single().Slot == 44);
+        legacy[44] = legacy[44] with { Serial = 0, Count = 5045 };
+        Test("unknown tail outside exact source signature rejected", ShopRules.MeasureInventory(legacy, noProtos).Issues.Single().ItemId == 65537);
+        legacy[44] = ItemSlotData.Empty;
+        legacy[14] = new ItemSlotData(65537, -8687, 5044, 0, 0);
+        Test("normal inventory cannot use tail exemption", ShopRules.MeasureInventory(legacy, noProtos).Issues.Single().Slot == 14);
+        legacy[14] = new ItemSlotData(potion.Id, 1, 0, 0, 0);
+        Test("diagnostic identifies invalid count", ShopRules.MeasureInventory(legacy, noProtos).Issues.Single().Reason == "non-positive saved count");
+        legacy[14] = legacy[14] with { Count = 1 };
+        Test("diagnostic identifies missing prototype", ShopRules.MeasureInventory(legacy, noProtos).Issues.Single().Reason == "missing ITEM definition");
+
         if (Environment.GetEnvironmentVariable("KO_SHOP_TEST_PORT") is { } port)
             await DatabaseChecksAsync(uint.Parse(port), Test);
     }

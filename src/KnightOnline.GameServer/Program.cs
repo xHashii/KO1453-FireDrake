@@ -31,7 +31,7 @@ using KnightOnline.Shared.Protocol;
 // once you create a character) is the spec for the next increment.
 
 Console.Title = $"Game Server for Knight Online v{GameVersion.Version} (.NET)";
-KoLog.ConfigureFile("Logs/GameServer.log");
+KoLog.StartRun("GameServer");
 
 var settings = GameServerSettings.Load();
 if (!File.Exists(GameServerSettings.ConfigFileName))
@@ -91,9 +91,9 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 KoLog.Warn($"GameServer prototype on port {port}: version check, game login, nation select, the " +
-           "character list, creation/selection, static NPCs, shop browsing, anvil windows and native warp gates are implemented; " +
-           "shop/upgrade transactions, quests and combat/AI remain unported (docs/CSHARP_REWRITE_PLAN.md, M4/M5).");
-KoLog.Info("Milestone order: wire core -> LoginServer (done) -> data layer (done) -> login/char-select vertical slice.");
+           "character list, creation/selection, static NPCs, NPC shop buying/selling, anvil windows and native warp gates are implemented; " +
+           "repairs/upgrades, warehouse, quests and combat/AI remain unported (docs/CSHARP_REWRITE_PLAN.md, M4/M5).");
+KoLog.Info($"Build: {Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion}; NPC shop transactions enabled.");
 
 try
 {
@@ -198,7 +198,7 @@ internal sealed partial class GameSession : KoSession
     private bool HandleGamePacket(Packet packet)
     {
         if (_inventoryFaulted) return false;
-        KoLog.Info($"<- {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s)): {Hexdump(packet.Payload)}");
+        KoLog.Info($"<- {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s)): {PacketTrace.GamePayload(packet)}");
 
         if (!IsCryptoEnabled)
         {
@@ -555,6 +555,12 @@ internal sealed partial class GameSession : KoSession
         _stats[3] = user.Int; _stats[4] = user.Cha;
         _points = user.Points;
         RecomputeStats(refillWhenEmpty: true);
+        var inventoryAudit = ShopRules.MeasureInventory(_slots, _protos);
+        LogInventoryIssues(inventoryAudit.Issues, "character load");
+        var retainedTail = _slots.Select((slot, index) => (slot, index))
+            .Count(entry => !_protos.ContainsKey(entry.slot.ItemId) && LegacyStarterTail.IsKnownUnusedSlot(entry.index, entry.slot));
+        if (retainedTail != 0)
+            KoLog.Info($"[ INVENTORY ] {_charId}: {retainedTail} recognized legacy starter-tail records retained unchanged; not counted as active items");
         KoLog.Info($"[ SEL CHAR - {DateTime.Now:HH:mm:ss} ] ID={_accountId} char={charId} " +
                    $"zone={user.Zone} spawn={user.Px},{user.Pz},{user.Py} level={user.Level} items={_protos.Count}");
 
