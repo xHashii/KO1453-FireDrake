@@ -14,8 +14,8 @@ public sealed class PlayerHub
     private readonly Dictionary<ushort,HashSet<ushort>> _visible = new();
     private static bool Near(PlayerPresence a, PlayerPresence b) => a.Id != b.Id && a.Zone == b.Zone &&
         (a.X-b.X)*(a.X-b.X)+(a.Z-b.Z)*(a.Z-b.Z) <= 120*120;
-    private static Packet In(PlayerPresence p) => new Packet(WizOpcode.UserInout).WriteUInt16(1).WriteUInt16(p.Id).WriteBytes(p.Info);
-    private static Packet Out(ushort id) => new Packet(WizOpcode.UserInout).WriteUInt16(2).WriteUInt16(id);
+    private static Packet In(PlayerPresence p) => new Packet(WizOpcode.UserInout).WriteByte(1).WriteUInt16(p.Id).WriteBytes(p.Info);
+    private static Packet Out(ushort id) => new Packet(WizOpcode.UserInout).WriteByte(2).WriteUInt16(id);
     public void Publish(PlayerPresence player)
     {
         lock (_gate)
@@ -62,6 +62,17 @@ public sealed class PlayerHub
                 if ((includeSelf && viewer.Id == sender) || _visible[viewer.Id].Contains(sender)) viewer.Deliver(packet);
         }
     }
+    public Packet RegionList(ushort viewer)
+    {
+        lock (_gate)
+        {
+            var ids=_visible.TryGetValue(viewer,out var seen)
+                ? seen.Append(viewer).Order().ToArray() : [];
+            var result=new Packet(WizOpcode.Regionchange).WriteUInt16((ushort)ids.Length);
+            foreach(var id in ids) result.WriteUInt16(id);
+            return result;
+        }
+    }
     public IReadOnlyList<Packet> Requested(ushort viewer, IEnumerable<ushort> ids)
     {
         lock (_gate)
@@ -73,7 +84,7 @@ public sealed class PlayerHub
             foreach(var batch in members.Chunk(30))
             {
                 var result=new Packet(WizOpcode.ReqUserin).WriteUInt16((ushort)batch.Length);
-                foreach(var member in batch) result.WriteByte(0).WriteUInt16(member.Id).WriteBytes(member.Info);
+                foreach(var member in batch) result.WriteUInt16(member.Id).WriteBytes(member.Info);
                 replies.Add(result);
             }
             if(replies.Count==0) replies.Add(new Packet(WizOpcode.ReqUserin).WriteUInt16(0));

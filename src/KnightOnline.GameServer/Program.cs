@@ -657,6 +657,8 @@ internal sealed partial class GameSession : KoSession
             _inGame = true;
             StartRecovery();
             RecomputeStats(refillWhenEmpty: false); // CUser::SetUserAbility()
+            UpdatePlayerPresence();
+            Send(_players.RegionList(_socketId));
         }
     }
 

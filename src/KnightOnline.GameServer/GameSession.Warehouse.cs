@@ -61,7 +61,7 @@ internal sealed partial class GameSession
         if(!WarehouseRules.TryRead(packet,out var r)) { Send(WarehouseRules.Result(0,false)); return; }
         if(_inventoryFaulted || !WarehouseNpcAvailable(_warehouseNpc)) { Send(WarehouseRules.Result(r.Action,false)); return; }
         if(r.Action==1) { OpenWarehouse(); return; }
-        if(_warehouse is null || r.Npc!=_warehouseNpc) { Send(WarehouseRules.Result(r.Action,false)); return; }
+        if(_warehouse is null || !WarehouseRules.MatchesSelectedNpc(r,_warehouseNpc)) { Send(WarehouseRules.Result(r.Action,false)); return; }
         try
         {
             var stored=ItemBlobs.Parse(_warehouse.Items,_warehouse.Serials,_warehouse.Times,192);

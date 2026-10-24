@@ -1,19 +1,27 @@
 using KnightOnline.Shared.Protocol;
 namespace KnightOnline.Database.Items;
-public sealed record WarehouseRequest(byte Action, ushort Npc, uint Item, byte Page, byte Source, byte Destination, uint Count);
+public sealed record WarehouseRequest(byte Action, ushort Npc, uint Item, byte Page, byte Source, byte Destination, uint Count, bool HasNpc = true);
 public sealed record WarehouseChange(ItemSlotData[] Inventory,ItemSlotData[] Warehouse,int Gold,int Bank);
 public static class WarehouseRules
 {
     /// <summary>NPC_WAREHOUSE sends WAREHOUSE_REQ, not WAREHOUSE_OPEN.
     /// The installed client supplies the InnHostess services menu text/options.</summary>
     public static Packet Menu() => new Packet(WizOpcode.Warehouse).WriteByte(0x10);
+    // An omitted NPC is never a remote-banking authorization: the handler must
+    // also revalidate the existing selected NPC, open snapshot, zone and range.
+    public static bool MatchesSelectedNpc(WarehouseRequest request,ushort selected) =>
+        selected!=0 && (!request.HasNpc || request.Npc==selected);
     public static int OpenFee(ushort zone) => zone is 71 or 72 or 73 ? 10000 : 0;
     public static bool TryRead(Packet p,out WarehouseRequest r)
     {
         r=new(0,0,0,0,0,0,0); if(p.RemainingToRead<1) return false;
         var a=p.ReadByte(); if(a==1 && p.RemainingToRead==0) {r=r with {Action=1}; return true;}
-        if(a is <2 or >5 || p.RemainingToRead != (a is 2 or 3 ? 13:9)) return false;
-        r=new(a,p.ReadUInt16(),p.ReadUInt32(),p.ReadByte(),p.ReadByte(),p.ReadByte(),a is 2 or 3?p.ReadUInt32():0); return true;
+        if(a is <2 or >5) return false;
+        var explicitLength=a is 2 or 3 ? 13 : 9;
+        var hasNpc=p.RemainingToRead==explicitLength;
+        if(!hasNpc && p.RemainingToRead!=explicitLength-2) return false;
+        var npc=hasNpc?p.ReadUInt16():(ushort)0;
+        r=new(a,npc,p.ReadUInt32(),p.ReadByte(),p.ReadByte(),p.ReadByte(),a is 2 or 3?p.ReadUInt32():0,hasNpc); return true;
     }
     public static WarehouseChange? Propose(WarehouseRequest r,ShopItem? item,IReadOnlyList<ItemSlotData> inventory,IReadOnlyList<ItemSlotData> warehouse,int gold,int bank,long weight,int maxWeight)
     {

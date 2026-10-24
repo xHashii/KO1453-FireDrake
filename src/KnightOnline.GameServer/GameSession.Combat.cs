@@ -88,7 +88,7 @@ internal sealed partial class GameSession
                     .WriteInt16(_maxHp).WriteInt16((short)_currentHp).WriteInt16(_maxMp).WriteInt16((short)_currentMp)
                     .WriteUInt16(_maxWeight).WriteUInt16((ushort)Math.Clamp(_itemWeight,0,ushort.MaxValue)));
             }
-            Send(new Packet(WizOpcode.ExpChange).WriteByte(0).WriteInt64(_user.Exp));
+            Send(PlayerPackets.Experience(checked((uint)_user.Exp)));
             RefreshLoot();
             KoLog.Info($"[ REWARD ] {_charId} kill={hit.KillToken} exp={_user.Exp} level={_user.Level} bundle={reward.Bundle}");
         }

@@ -10,7 +10,18 @@ internal static class FoundationsVerification
     {
         var items=Enumerable.Range(0,73).Select(i=>new ItemSlotData((uint)(1000+i),(short)(100+i),1,(ulong)i,0)).ToArray();
         var info=PlayerPackets.Info(new("A",2,80,12,206,1234,5678,-30,1,2,1,1,-90,0,21,items));
-        test("player info matches original C++ clanless wire layout and ten-slot order",Convert.ToHexString(info)=="01410200000000000000000000FFFF500CCE00D2042E16E2FF010201010000000101000000A6FF0000FFFFEC030000680000F20300006E0000E9030000650000F4030000700000F5030000710000ED030000690000EE0300006A0000F00300006C000016040000920000130400008F000015");
+        test("player info matches native clanless byte vector and physical inventory slot mapping",Convert.ToHexString(info)=="01410200000000000000000000FFFF500CCE00D2042E16E2FF010201010000000101000000A6FF0000FFFFEC030000680000F20300006E0000E9030000650000F4030000700000F5030000710000ED030000690000EE0300006A0000F00300006C000016040000920000130400008F000015");
+        test("native XP packet uses subcode and four-byte little endian XP",Convert.ToHexString(PlayerPackets.Experience(0x12345678).Payload)=="0078563412");
+        test("native XP zero and uint32 maximum retain five-byte payload",PlayerPackets.Experience(0).Length==5&&Convert.ToHexString(PlayerPackets.Experience(uint.MaxValue).Payload)=="00FFFFFFFF");
+        var envelopeHub=new PlayerHub();var envelopes=new List<Packet>();
+        envelopeHub.Publish(new(0x2345,21,0,0,info,0,p=>envelopes.Add(p)));
+        envelopeHub.Publish(new(0x1234,21,0,0,info,0,p=>{}));
+        test("native IN has byte subtype then full little-endian actor ID",envelopes.Single().Opcode==WizOpcode.UserInout&&Convert.ToHexString(envelopes.Single().Payload[..3])=="013412");
+        var nativeDetails=envelopeHub.Requested(0x2345,[0x1234]).Single();
+        test("native requested details start count then actor ID then byte-length name",Convert.ToHexString(nativeDetails.Payload[..6])=="010034120141"&&nativeDetails.Length==4+info.Length);
+        test("native region list contains viewer plus visible actor IDs",Convert.ToHexString(envelopeHub.RegionList(0x2345).Payload)=="020034124523");
+        envelopes.Clear();envelopeHub.Remove(0x1234);
+        test("native OUT is exactly byte subtype and actor ID",Convert.ToHexString(envelopes.Single().Payload)=="023412");
         var filtered=PlayerPackets.Info(new("A",2,80,12,206,1234,5678,-30,1,2,1,1,-90,0,21,items),id=>id<1040);
         test("remote appearance suppresses unknown costume models without changing saved items",filtered.AsSpan(filtered.Length-15,14).ToArray().All(b=>b==0)&&items[46].ItemId==1046);
         var gmAppearance=new PlayerAppearance("A",2,80,12,206,1234,5678,-30,1,2,1,0,-90,0,21,items);
@@ -29,6 +40,7 @@ internal static class FoundationsVerification
         visibilityHub.Broadcast(90,new Packet(WizOpcode.Move),true);
         test("hidden GM movement and rotation do not reach peers",ordinaryPackets.Count==0);
         test("hidden GM cannot be discovered by requested user info",visibilityHub.Requested(91,[90]).Single().Payload.SequenceEqual(new byte[]{0,0}));
+        test("region list never leaks hidden GM ID to ordinary viewers",Convert.ToHexString(visibilityHub.RegionList(91).Payload)=="01005B00");
         gmPackets.Clear();visibilityHub.Publish(gm with {Hidden=false});
         test("showing GM sends IN without resetting GM's own visible peers",ordinaryPackets.Count==1&&ordinaryPackets[0].Payload[0]==1&&gmPackets.Count==0);
         ordinaryPackets.Clear();visibilityHub.Publish(gm with {Hidden=true});visibilityHub.Publish(gm with {Hidden=true});
@@ -38,7 +50,7 @@ internal static class FoundationsVerification
         var hub=new PlayerHub();var a=new List<Packet>();var b=new List<Packet>();var c=new List<Packet>();
         PlayerPresence P(ushort id,ushort zone,float x,List<Packet> sink,int version=0)=>new(id,zone,x,0,info,version,p=>sink.Add(p));
         hub.Publish(P(1,21,0,a));hub.Publish(P(2,21,10,b));hub.Publish(P(3,1,10,c));
-        test("nearby players receive mutual IN without self or cross-zone ghosts",a.Count==1&&b.Count==1&&c.Count==0&&a[0].Payload[0]==1&&a[0].Payload[1]==0);
+        test("nearby players receive mutual IN without self or cross-zone ghosts",a.Count==1&&b.Count==1&&c.Count==0&&a[0].Payload[0]==1&&a[0].Payload[1]==2&&a[0].Payload.Length==3+info.Length);
         a.Clear();b.Clear();hub.Publish(P(2,21,10,b));
         test("unchanged presence does not duplicate IN",a.Count==0&&b.Count==0);
         hub.Broadcast(1,new Packet(WizOpcode.Rotate).WriteUInt16(1).WriteInt16(-90));
@@ -49,7 +61,7 @@ internal static class FoundationsVerification
         a.Clear();b.Clear();hub.Publish(P(2,21,10,b));a.Clear();b.Clear();hub.Publish(P(2,21,10,b,1));
         test("equipment revision refreshes peers OUT then IN without resetting self",a.Count==2&&a[0].Payload[0]==2&&a[1].Payload[0]==1&&b.Count==0);
         var requested=hub.Requested(1,[2,2,3]).Single();
-        test("requested user record includes count, zero marker and ushort socket ID",requested.Payload[0]==1&&requested.Payload[2]==0&&requested.Payload[3]==2&&requested.Payload[4]==0);
+        test("requested user record has native count and ushort socket ID with no extra prefix",requested.Payload[0]==1&&requested.Payload[2]==2&&requested.Payload[3]==0&&requested.Payload[4]==info[0]&&requested.Length==4+info.Length);
         a.Clear();b.Clear();hub.Remove(2);hub.Remove(2);
         test("disconnect sends exactly one OUT",a.Count==1&&a[0].Payload[0]==2);
         hub.Publish(P(2,21,10,b));a.Clear();hub.Publish(P(2,1,10,b));
@@ -93,6 +105,13 @@ internal static class FoundationsVerification
         test("warehouse native transfer success vector",Convert.ToHexString(WarehouseRules.Result(2,true).Payload)=="0201");
         var wire=new Packet(WizOpcode.Warehouse).WriteByte(2).WriteUInt16(10001).WriteUInt32(item.Id).WriteByte(0).WriteByte(0).WriteByte(0).WriteUInt32(3);
         test("warehouse native request parses exact fields",WarehouseRules.TryRead(wire,out var decoded)&&decoded==request);
+        var implicitWire=new Packet(WizOpcode.Warehouse).WriteByte(2).WriteUInt32(item.Id).WriteByte(0).WriteByte(0).WriteByte(0).WriteUInt32(3);
+        test("native implicit NPC warehouse transfer parses without shifting item fields",WarehouseRules.TryRead(implicitWire,out var implicitRequest)&&!implicitRequest.HasNpc&&implicitRequest.Npc==0&&implicitRequest.Item==item.Id&&implicitRequest.Count==3);
+        test("implicit NPC request requires selected Inn context",WarehouseRules.MatchesSelectedNpc(implicitRequest,10001)&&!WarehouseRules.MatchesSelectedNpc(implicitRequest,0));
+        test("explicit NPC spoof cannot use selected Inn authorization",!WarehouseRules.MatchesSelectedNpc(request with {Npc=10002},10001)&&!WarehouseRules.MatchesSelectedNpc(request with {Npc=0},10001));
+        var implicitMove=new Packet(WizOpcode.Warehouse).WriteByte(4).WriteUInt32(item.Id).WriteByte(7).WriteByte(23).WriteByte(22);
+        test("native implicit warehouse move parses page and slots",WarehouseRules.TryRead(implicitMove,out var moveRequest)&&!moveRequest.HasNpc&&moveRequest.Page==7&&moveRequest.Source==23&&moveRequest.Destination==22);
+        test("warehouse ambiguous/trailing byte request rejected",!WarehouseRules.TryRead(new Packet(WizOpcode.Warehouse).WriteByte(2).WriteBytes(new byte[12]),out _));
         test("warehouse malformed transfer rejected",!WarehouseRules.TryRead(new Packet(WizOpcode.Warehouse).WriteByte(2),out _));
     }
     public static async Task DatabaseAsync(DatabaseSettings settings,Action<string,bool> test)

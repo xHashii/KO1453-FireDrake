@@ -200,7 +200,7 @@ internal sealed partial class GameSession
         var phase = packet.ReadByte();
         if (phase == 1 && _travelStage == 1)
         {
-            // Player/merchant regions remain empty; NPC records come from the static world.
+            // Clear old actors during loading. Publish destination players after phase 2.
             Send(new Packet(WizOpcode.Regionchange).WriteUInt16(0));
             SendWorldNpcs();
             Send(new Packet(WizOpcode.MerchantInout, (byte)1).WriteUInt16(0));
@@ -210,6 +210,8 @@ internal sealed partial class GameSession
         else if (phase == 2 && _travelStage == 2)
         {
             _travelStage = 0;
+            UpdatePlayerPresence();
+            Send(_players.RegionList(_socketId));
             SendTime();
             SendWeather();
             KoLog.Info($"[ TRAVEL ] {_charId} loaded zone {_user!.Zone}");
