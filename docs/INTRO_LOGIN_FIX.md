@@ -2,13 +2,18 @@
 
 ## Defects addressed
 
-1. The server sent WIZ_QUEST before WIZ_MYINFO. The supplied C++ does this,
+1. `new Packet(WizOpcode.Quest, 1)` selected the `(byte opcode, int capacity)`
+   constructor, **not** `(byte opcode, byte subOpcode)`. The mandatory action-1
+   byte was absent: count/records were shifted for the native decoder. An
+   explicit WriteByte(1) now emits the verified body. A literal regression
+   asserts `01 02 00 33 00 03 F4 01 02` for two quest records.
+2. The server sent WIZ_QUEST before WIZ_MYINFO. The supplied C++ does this,
    but the native-1453 reference sends MYINFO, start acknowledgement, then the
    saved quest snapshot. Client initialization must precede restored quest state.
-2. Repeated GAMESTART stage 1 resent the entire bootstrap, including MYINFO and
+3. Repeated GAMESTART stage 1 resent the entire bootstrap, including MYINFO and
    quest state. It now only resends the start acknowledgement. Stage 2 cannot
    activate the world before stage 1 and only activates once.
-3. The previous flag workaround only applied above level 1, preserved reserved
+4. The previous flag workaround only applied above level 1, preserved reserved
    quest-500 states other than 1, and the sender could silently seed missing
    quest 500 as state 1. That continually offers an unsupported intro path.
 

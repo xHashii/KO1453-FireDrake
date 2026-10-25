@@ -41,7 +41,7 @@ public static class StarterQuestState
         // Never silently reintroduce state 1 from an absent DB flag.
         if (!records.TryGetValue(QuestId, out var state) || state != 2)
             throw new InvalidDataException("Intro suppression must be persisted before world entry.");
-        var p = new Packet(WizOpcode.Quest, 1).WriteUInt16((ushort)records.Count);
+        var p = new Packet(WizOpcode.Quest).WriteByte(1).WriteUInt16((ushort)records.Count);
         foreach (var (id, value) in records) p.WriteUInt16(id).WriteByte(value);
         return p;
     }
