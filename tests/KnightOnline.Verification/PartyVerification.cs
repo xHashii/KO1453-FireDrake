@@ -42,6 +42,8 @@ internal static class PartyVerification
         var start = packets[3].Count;
         hub.Publish(Player(1) with {Hp=60, Mp=30});
         test("party HP/MP update sends native short fields",packets[3].Count==start+1 && Convert.ToHexString(packets[3].Last().Payload)=="06010064003C0032001E00");
+        hub.Publish(Player(1) with {Hp=0});
+        test("party death preserves established membership",hub.Members(1).Length==2);
         hub.Remove(1);
         test("party last member departure disbands remaining solo member",hub.Members(3).Length==0 && hub.Members(1).Length==0);
         hub.Publish(Player(1));
@@ -54,6 +56,10 @@ internal static class PartyVerification
         test("party zone-change acceptance setup",hub.Process(1,Invite("B")));
         hub.Publish(Player(2,zone:1));
         test("party zone change cancels pending invitation",!hub.Process(2,Permit()));
+        hub.Publish(Player(2));
+        test("party death acceptance setup",hub.Process(1,Invite("B")));
+        hub.Publish(Player(2) with {Hp=0});
+        test("party death cancels pending invitation",!hub.Process(2,Permit()));
         hub.Publish(Player(2,level:80));
         test("party source level window enforced",!hub.Process(1,Invite("B")));
         hub.Publish(Player(2,hidden:true));

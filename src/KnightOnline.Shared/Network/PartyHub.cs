@@ -167,7 +167,7 @@ public sealed class PartyHub
         lock (_gate)
         {
             if (!_players.TryGetValue(sender, out var player) || !_groups.TryGetValue(sender, out var group)) return false;
-            if (message.Length is 0 or > 128 || message.Any(char.IsControl)) return false;
+            if (string.IsNullOrWhiteSpace(message) || message.Length > 128 || message.Any(char.IsControl)) return false;
             Broadcast(group, ChatPackets.Message(3, player.Nation, sender, player.Name, message)); return true;
         }
     }
