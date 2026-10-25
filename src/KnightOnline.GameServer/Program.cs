@@ -85,7 +85,8 @@ catch (Exception ex)
 }
 var chat = new ChatHub();
 var players = new PlayerHub();
-var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat, players),maxSessionId:9999);
+var parties = new PartyHub();
+var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat, players, parties),maxSessionId:9999);
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -184,12 +185,13 @@ internal sealed partial class GameSession : KoSession
     private readonly byte[] _stats = new byte[5];
     private short _points;
 
-    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment, ChatHub chat, PlayerHub players)
+    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment, ChatHub chat, PlayerHub players, PartyHub parties)
         : base(client, maxPayloadSize: 8192)
     {
         _characters = characters;
         _chat = chat;
         _players = players;
+        _parties = parties;
         _characterPreviewEquipment = characterPreviewEquipment;
         _world = world;
     }
@@ -309,6 +311,9 @@ internal sealed partial class GameSession : KoSession
                     break;
                 case WizOpcode.Chat:
                     TravelChat(packet);
+                    break;
+                case WizOpcode.Party:
+                    ProcessParty(packet);
                     break;
                 case WizOpcode.ChatTarget:
                     ChatTargetSelect(packet);

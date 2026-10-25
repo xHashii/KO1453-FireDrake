@@ -32,7 +32,8 @@ internal sealed partial class GameSession
     private void UpdatePlayerPresence()
     {
         if (!IsConnected || !_inGame || _travelStage != 0 || _inventoryFaulted || _user is null)
-        { _players.Remove(_socketId); return; }
+        { _players.Remove(_socketId); _parties.Remove(_socketId); return; }
+        UpdatePartyPresence();
         var u = _user;
         var info=PlayerPackets.Info(new(_charId,u.Nation,u.Level,u.Race,u.Class,
             (ushort)(u.Px/10),(ushort)(u.Pz/10),(short)(u.Py/10),u.Face,u.Hair,

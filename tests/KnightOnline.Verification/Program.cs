@@ -561,6 +561,7 @@ LoggingVerification.Run((name, ok) => Check(name, ok));
 
 MeleeVerification.Run((name, ok) => Check(name, ok));
 FoundationsVerification.Rules((name,ok) => Check(name,ok));
+PartyVerification.Rules((name,ok) => Check(name,ok));
 CombatRewardsVerification.Rules((name, ok) => Check(name, ok));
 try
 {

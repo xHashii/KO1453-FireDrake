@@ -345,3 +345,12 @@ acceptance tests listed above do not exist yet because those systems are absent.
   and the owner has not used it. Maintain that distinction in bug reports.
 - There is no full retail certification, production load benchmark or completed
   Windows two-client acceptance record in this audit.
+
+## Follow-up: first party membership slice
+
+See [PARTY_MEMBERSHIP.md](PARTY_MEMBERSHIP.md). Native invitation/acceptance,
+leader controls, eight-member roster, HP/MP updates and party chat now have an
+initial implementation with authority/lifecycle tests. This supersedes the
+"not ported" membership status above, not the broader party backlog. Native
+client acceptance is pending; shared XP/loot, party-target skills, cross-zone
+retention and party-wanted remain unimplemented. No database reset/migration.

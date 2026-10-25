@@ -43,6 +43,11 @@ internal sealed partial class GameSession
                 KoLog.Info($"[ CHAT ] {_charId} private to={targetName}: {message}");
             }
         }
+        else if (type == 3)
+        {
+            UpdatePartyPresence();
+            if (!_parties.Chat(_socketId, message)) TravelMessage("Join a party before using party chat.");
+        }
         else
             TravelMessage("That chat channel is not implemented yet. Use normal chat or select a player for private chat.");
     }

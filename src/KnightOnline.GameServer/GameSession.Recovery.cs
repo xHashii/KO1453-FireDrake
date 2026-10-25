@@ -58,6 +58,7 @@ internal sealed partial class GameSession
                 .WriteUInt16((ushort)_currentHp).WriteUInt16(ushort.MaxValue));
         if (oldMp != _currentMp)
             Send(new Packet(WizOpcode.MspChange).WriteUInt16((ushort)_maxMp).WriteUInt16((ushort)_currentMp));
+        UpdatePartyPresence();
     }
 
     protected override void OnDisconnected()
@@ -67,6 +68,7 @@ internal sealed partial class GameSession
             _speedEffect.Clear();
             _chat.Remove(_socketId);
             _players.Remove(_socketId);
+            _parties.Remove(_socketId);
             _pendingMelee = null; _meleeTimer?.Dispose(); _meleeTimer = null;
             _worldTimer?.Dispose(); _worldTimer = null;
             _recoveryTimer?.Dispose();

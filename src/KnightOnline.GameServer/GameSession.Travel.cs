@@ -175,6 +175,7 @@ internal sealed partial class GameSession
         ClearSpeedEffect();
         _pendingMelee = null; _casting = null;
         _players.Remove(_socketId);
+        _parties.Remove(_socketId);
         _warehouse = null; _warehouseNpc = 0;
         var sameZone = target.Zone == _user!.Zone;
         _user = _user with { Zone = target.Zone, Px = target.Px, Pz = target.Pz, Py = target.Py, Gold = gold };
