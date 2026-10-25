@@ -99,6 +99,8 @@ internal sealed partial class GameSession
     {
         var speed = _characters.LoadSelfSpeedSkillAsync(request.Skill).GetAwaiter().GetResult();
         if (speed is not null) { UseSpeedSkill(request, speed); return; }
+        var heal = _characters.LoadSelfHealingSkillAsync(request.Skill).GetAwaiter().GetResult();
+        if (heal is not null) { UseSelfHealingSkill(request, heal); return; }
         void Reject(string reason)
         {
             Send(CombatSkillRules.Reply(request.Skill,_socketId,request.Target,4,false));

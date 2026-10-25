@@ -21,6 +21,9 @@ internal static class CombatRewardsVerification
         test("speed effect expires at authored duration and resets movement percent",effect.Active(10999)&&effect.Percent==150&&effect.Expire(11000)&&effect.Percent==100&&!effect.Expire(11001));
         effect.Apply(sprint,12000);test("speed death/travel/disconnect clear is idempotent",effect.Clear()&&!effect.Clear()&&!effect.Active(12000)&&effect.Percent==100);
         test("Sprint remains class and level restricted",CombatSkillRules.Learned(sprint.Skill,206,1,[])&&!CombatSkillRules.Learned(sprint.Skill,106,80,[])&&!CombatSkillRules.Learned(sprint.Skill,206,0,[]));
+        var heal=new SelfHealingSkill(new(112001,1120,1,5,1900,500,0,3,0,0,0,0),15);
+        test("self healing caps HP and refuses full/dead players",HealingRules.SelfHp(heal,90,100)==100&&HealingRules.SelfHp(heal,50,100)==65&&HealingRules.SelfHp(heal,100,100) is null&&HealingRules.SelfHp(heal,0,100) is null);
+        test("priest healing enforces class and learned level",CombatSkillRules.Learned(heal.Skill,112,1,[])&&!CombatSkillRules.Learned(heal.Skill,206,80,[]));
         var aggro = new MonsterCombat(100,20);
         aggro.Hit(1,1000,1001);
         test("retaliation waits for attack delay and only targets attacker", !aggro.Retaliate(1002,3000,1000) && !aggro.Retaliate(1001,1500,1000) && aggro.Retaliate(1001,2000,1000) && !aggro.Retaliate(1001,2001,1000));
@@ -135,6 +138,17 @@ internal static class CombatRewardsVerification
         test("unsupported mixed buff never silently applies speed alone",await repository.LoadSelfSpeedSkillAsync(206001) is null);
         command.CommandText="UPDATE MAGIC_TYPE4 SET AC=0 WHERE iNum=206001";await command.ExecuteNonQueryAsync();
 
+        foreach(var table in new[]{"MAGIC","MAGIC_TYPE3"})
+        {
+            command.CommandText=File.ReadLines("sql/mysql/kn_online/0003_data.sql").First(l=>l.StartsWith($"INSERT `{table}` ")&&l.Contains("VALUES (112001,")).Replace("INSERT `","INSERT INTO `");await command.ExecuteNonQueryAsync();
+        }
+        var healing=(await repository.LoadSelfHealingSkillAsync(112001))!;
+        test("source Tiny healing resolves as a skill not potion",healing is {Amount:15,Skill.Mp:5,Skill.CastMs:1900}&&await repository.LoadPotionAsync(112001) is null);
+        command.CommandText="INSERT INTO USERDATA(strUserID,Hp,Mp,Gold,strItem,strSerial) VALUES('heal-test',50,50,123,X'010203',X'040506')";await command.ExecuteNonQueryAsync();
+        var healedHp=HealingRules.SelfHp(healing,50,100)!.Value;
+        test("heal HP and MP cost commit in one transaction",await repository.SpendCombatSkillAsync("heal-test",healing.Skill,50,50,healedHp,50)==InventorySaveResult.Saved);
+        command.CommandText="SELECT Hp,Mp,Gold,HEX(strItem) FROM USERDATA WHERE strUserID='heal-test'";
+        await using(var r=await command.ExecuteReaderAsync()){await r.ReadAsync();test("healing persists HP/MP without consuming items or coins",Convert.ToInt32(r[0])==65&&Convert.ToInt32(r[1])==45&&Convert.ToInt32(r[2])==123&&Convert.ToString(r[3])=="010203");}
         var newToken = Guid.NewGuid().ToString("N");
         var repeated = await Task.WhenAll(repository.AwardKillAsync("combat-test",newToken,npc,21,reward.Progress,[new(900000000,1)]),repository.AwardKillAsync("combat-test",newToken,npc,21,reward.Progress,[new(900000000,1)]));
         test("concurrent duplicate kill rewards commit exactly once", repeated.Count(r => r is not null) == 1);

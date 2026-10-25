@@ -59,19 +59,29 @@ internal sealed partial class GameSession
     }
     private void Warehouse(Packet packet)
     {
-        if(!WarehouseRules.TryRead(packet,out var r)) { Send(WarehouseRules.Result(0,false)); return; }
-        if(_inventoryFaulted || !WarehouseNpcAvailable(_warehouseNpc)) { Send(WarehouseRules.Result(r.Action,false)); return; }
-        if(r.Action==1) { if(!WarehouseRules.MatchesSelectedNpc(r,_warehouseNpc)) { Send(WarehouseRules.Result(1,false)); return; } OpenWarehouse(); return; }
-        if(_warehouse is null || !WarehouseRules.MatchesSelectedNpc(r,_warehouseNpc)) { Send(WarehouseRules.Result(r.Action,false)); return; }
+        void Reject(byte action,string reason)
+        {
+            Send(WarehouseRules.Result(action,false));
+            KoLog.Info($"[ WAREHOUSE REJECT ] {_charId}: action={action} reason={reason}; no transfer applied");
+            TravelMessage("Warehouse: "+reason+" No transfer applied.");
+        }
+        if(!WarehouseRules.TryRead(packet,out var r)) { Reject(0,"Malformed request."); return; }
+        if(_inventoryFaulted || !WarehouseNpcAvailable(_warehouseNpc)) { Reject(r.Action,"Selected Inn unavailable, hostile or out of range."); return; }
+        if(r.Action==1) { if(!WarehouseRules.MatchesSelectedNpc(r,_warehouseNpc)) { Reject(1,"Inn ID does not match the selected Inn."); return; } OpenWarehouse(); return; }
+        if(_warehouse is null || !WarehouseRules.MatchesSelectedNpc(r,_warehouseNpc)) { Reject(r.Action,"Open storage at the selected Inn first."); return; }
+        if(r.Action==2 && r.Item!=900000000 && !WarehouseRules.CanDeposit(r.Item))
+        { Reject(r.Action,$"Item {r.Item} is a no-storage item (personal/quest item restriction)."); return; }
         try
         {
             var stored=ItemBlobs.Parse(_warehouse.Items,_warehouse.Serials,_warehouse.Times,192);
             var item=r.Item==900000000?null:_characters.LoadShopItemAsync(r.Item).GetAwaiter().GetResult();
             var protos=_characters.LoadItemPrototypesAsync(_slots.Select(s=>s.ItemId).Append(r.Item)).GetAwaiter().GetResult();
             var measured=ShopRules.MeasureInventory(_slots,protos);
-            if(measured.Issues.Count!=0) { Send(WarehouseRules.Result(r.Action,false)); return; }
+            if(measured.Issues.Count!=0)
+            { LogInventoryIssues(measured.Issues,"WAREHOUSE REJECT"); Reject(r.Action,"Inventory contains unsupported item metadata; see server log."); return; }
             var change=WarehouseRules.Propose(r,item,_slots,stored,_user!.Gold,_warehouse.Gold,measured.Weight,_maxWeight);
-            if(change is null) {Send(WarehouseRules.Result(r.Action,false));return;}
+            if(change is null)
+            { Reject(r.Action,$"Transfer refused: item={r.Item}, page={r.Page}, from={r.Source}, to={r.Destination}, count={r.Count}. Check item definition, free destination, stack/count, weight and coins."); return; }
             var protections=new List<(uint Item,ulong Serial)>();
             for(var i=0;i<_slots.Length;i++) if(_slots[i]!=change.Inventory[i] && _slots[i].ItemId!=0) protections.Add((_slots[i].ItemId,_slots[i].Serial));
             for(var i=0;i<192;i++) if(stored[i]!=change.Warehouse[i] && stored[i].ItemId!=0) protections.Add((stored[i].ItemId,stored[i].Serial));

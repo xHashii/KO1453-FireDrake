@@ -118,6 +118,16 @@ internal static class FoundationsVerification
         test("native implicit warehouse move parses page and slots",WarehouseRules.TryRead(implicitMove,out var moveRequest)&&!moveRequest.HasNpc&&moveRequest.Page==7&&moveRequest.Source==23&&moveRequest.Destination==22);
         test("warehouse ambiguous/trailing byte request rejected",!WarehouseRules.TryRead(new Packet(WizOpcode.Warehouse).WriteByte(2).WriteBytes(new byte[12]),out _));
         test("warehouse malformed transfer rejected",!WarehouseRules.TryRead(new Packet(WizOpcode.Warehouse).WriteByte(2),out _));
+        var personalWire=Packet.FromReceived(WizOpcode.Warehouse,Convert.FromHexString("0219352FB63F3605061601000000"));
+        test("captured personal sword deposit fields are not a parsing failure",WarehouseRules.TryRead(personalWire,out var personal)&&personal==new WarehouseRequest(2,13593,910145071,5,6,22,1));
+        var sword=new ShopItem(910145071,746934,0,0,0,0,100,13000);
+        var personalBag=Enumerable.Repeat(ItemSlotData.Empty,73).ToArray();personalBag[20]=new(sword.Id,13000,1,987654,0);
+        var emptyBank=Enumerable.Repeat(ItemSlotData.Empty,192).ToArray();
+        test("captured personal sword deliberately cannot be deposited",!WarehouseRules.CanDeposit(personal.Item)&&WarehouseRules.Propose(personal,sword,personalBag,emptyBank,1000,0,100,1000) is null);
+        test("no-storage sword may still be rearranged in warehouse bag UI",WarehouseRules.Propose(personal with {Action=5,Destination=7,Count=0},sword,personalBag,emptyBank,1000,0,100,1000) is { } movedPersonal&&movedPersonal.Inventory[21]==personalBag[20]&&movedPersonal.Inventory[20].IsEmpty);
+        var legacyPersonal=emptyBank.ToArray();legacyPersonal[142]=personalBag[20];
+        test("legacy stored personal item may be recovered without bypassing deposit rules",WarehouseRules.Propose(personal with {Action=3,Source=22,Destination=7},sword,Enumerable.Repeat(ItemSlotData.Empty,73).ToArray(),legacyPersonal,1000,0,0,1000) is { } recoveredPersonal&&recoveredPersonal.Inventory[21]==personalBag[20]&&recoveredPersonal.Warehouse[142].IsEmpty);
+
     }
     public static async Task DatabaseAsync(DatabaseSettings settings,Action<string,bool> test)
     {
@@ -178,6 +188,25 @@ internal static class FoundationsVerification
         var reverseBlobs=ItemBlobs.Serialize(reverse.Inventory);
         var restoredBank=MariaDbCharacterRepository.WarehouseProposal(reloaded,reverse.Warehouse,reverse.Bank);
         test("withdrawal after reconnect restores inventory and removes stored quantity atomically",await repo.SaveWarehouseAsync("foundation-test","foundation-account",new(tb.Items,tb.Serials,transfer.Gold),new(reverseBlobs.Items,reverseBlobs.Serials,reverse.Gold),reloaded,restoredBank,[(item.Id,12345)])==InventorySaveResult.Saved&&reverseBlobs.Items.SequenceEqual(blobs.Items));
+        // Full captured-shaped ordinary-item path: packet -> metadata -> rules ->
+        // transaction -> reconnect -> withdrawal. Not merely an "open" vector.
+        {
+            var ordinary=new Packet(WizOpcode.Warehouse).WriteByte(2).WriteUInt16(13593).WriteUInt32(item.Id).WriteByte(5).WriteByte(0).WriteByte(22).WriteUInt32(1);
+            if(!WarehouseRules.TryRead(ordinary,out var deposit))throw new Exception("Deposit fixture malformed.");
+            var metadata=await repo.LoadShopItemAsync(item.Id);
+            var beforeBank=await repo.LoadWarehouseAsync("foundation-account");
+            var beforeBankSlots=ItemBlobs.Parse(beforeBank.Items,beforeBank.Serials,beforeBank.Times,192);
+            var proposal=WarehouseRules.Propose(deposit,metadata,reverse.Inventory,beforeBankSlots,reverse.Gold,beforeBank.Gold,50,1000)!;
+            var serialized=ItemBlobs.Serialize(proposal.Inventory);
+            var afterBank=MariaDbCharacterRepository.WarehouseProposal(beforeBank,proposal.Warehouse,proposal.Bank);
+            test("captured-shaped ordinary deposit persists without lost serial",await repo.SaveWarehouseAsync("foundation-test","foundation-account",new(reverseBlobs.Items,reverseBlobs.Serials,reverse.Gold),new(serialized.Items,serialized.Serials,proposal.Gold),beforeBank,afterBank,[(item.Id,12345)])==InventorySaveResult.Saved);
+            var fresh=await new MariaDbCharacterRepository(settings).LoadWarehouseAsync("foundation-account");
+            var freshSlots=ItemBlobs.Parse(fresh.Items,fresh.Serials,fresh.Times,192);
+            test("ordinary deposit reconnect retains page six slot 22 count and serial",freshSlots[142]==new ItemSlotData(item.Id,1,1,12345,0));
+            var withdrawal=WarehouseRules.Propose(deposit with {Action=3,Source=22,Destination=0},metadata,proposal.Inventory,freshSlots,proposal.Gold,fresh.Gold,45,1000)!;
+            var withdrawn=ItemBlobs.Serialize(withdrawal.Inventory);
+            test("ordinary withdrawal restores original inventory and bank atomically",await repo.SaveWarehouseAsync("foundation-test","foundation-account",new(serialized.Items,serialized.Serials,proposal.Gold),new(withdrawn.Items,withdrawn.Serials,withdrawal.Gold),fresh,MariaDbCharacterRepository.WarehouseProposal(fresh,withdrawal.Warehouse,withdrawal.Bank),[(item.Id,12345)])==InventorySaveResult.Saved&&withdrawn.Items.SequenceEqual(reverseBlobs.Items)&&withdrawn.Serials.SequenceEqual(reverseBlobs.Serials));
+        }
         tb=reverseBlobs;reloaded=await repo.LoadWarehouseAsync("foundation-account");
         cmd.CommandText="INSERT INTO WAREHOUSE SELECT * FROM WAREHOUSE WHERE strAccountID='foundation-account'";await cmd.ExecuteNonQueryAsync();
         var duplicate=false;try{await repo.LoadWarehouseAsync("foundation-account");}catch(InvalidDataException){duplicate=true;}

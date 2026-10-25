@@ -11,6 +11,9 @@ public static class WarehouseRules
     // also revalidate the existing selected NPC, open snapshot, zone and range.
     public static bool MatchesSelectedNpc(WarehouseRequest request,ushort selected) =>
         selected!=0 && (!request.HasNpc || request.Npc==selected);
+    // GameDefine.h ITEM_NO_TRADE: deposit restriction, not a ban on
+    // rearranging the bag or recovering an already-stored legacy item.
+    public static bool CanDeposit(uint item) => item>0 && item<900000001;
     public static int OpenFee(ushort zone) => zone is 71 or 72 or 73 ? 10000 : 0;
     public static bool TryRead(Packet p,out WarehouseRequest r)
     {
@@ -40,7 +43,7 @@ public static class WarehouseRules
             if(gold-delta is <0 or >ShopRules.CoinMax || bank+delta is <0 or >ShopRules.CoinMax) return null;
             return new(inv,wh,(int)(gold-delta),(int)(bank+delta));
         }
-        if(item is null || item.Id!=r.Item || r.Item==0 || r.Item>=900000001) return null;
+        if(item is null || item.Id!=r.Item || r.Item==0 || (r.Action==2 && !CanDeposit(r.Item))) return null;
         var srcArray=r.Action is 2 or 5?inv:wh; var dstArray=r.Action is 3 or 5?inv:wh;
         if(r.Source>=(r.Action is 2 or 5?28:24) || r.Destination>=(r.Action is 3 or 5?28:24)) return null;
         var src=r.Action is 2 or 5?14+r.Source:24*r.Page+r.Source;
