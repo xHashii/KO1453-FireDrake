@@ -19,6 +19,7 @@ internal sealed partial class GameSession
                 if (!_inGame || !IsConnected || _user is null || _travelStage != 0) return;
                 try
                 {
+                    TickSpeedEffect();
                     SyncWorldNpcs();
                     MonsterRetaliation();
                     UpdatePlayerPresence();
@@ -63,6 +64,7 @@ internal sealed partial class GameSession
     {
         lock (_gameGate)
         {
+            _speedEffect.Clear();
             _chat.Remove(_socketId);
             _players.Remove(_socketId);
             _pendingMelee = null; _meleeTimer?.Dispose(); _meleeTimer = null;

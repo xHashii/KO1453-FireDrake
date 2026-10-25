@@ -23,9 +23,9 @@ internal static class PotionVerification
         var mp = hp with { Resource = 2, Amount = 1920 };
         test("MP potion affects only MP", PotionRules.Propose(mp, slots, 100, 0, 5000, 5000, 80) is { Hp: 100, Mp: 1920 });
         var bytes = Convert.FromHexString("03247A0700E903E903000000000000000000000000");
-        test("observed 21-byte use request parses", PotionRules.TryRead(Packet.FromReceived(WizOpcode.MagicProcess, bytes), out var request) && request.Skill == 490020 && request.Caster == 1001);
-        test("truncated request rejected", !PotionRules.TryRead(Packet.FromReceived(WizOpcode.MagicProcess, bytes[..20]), out _));
-        test("original 23-byte request accepted", PotionRules.TryRead(Packet.FromReceived(WizOpcode.MagicProcess, bytes.Concat(new byte[2]).ToArray()), out _));
+        test("observed 21-byte use request parses", MagicPackets.TryRead(Packet.FromReceived(WizOpcode.MagicProcess, bytes), out var request) && request.Skill == 490020 && request.Caster == 1001);
+        test("truncated request rejected", !MagicPackets.TryRead(Packet.FromReceived(WizOpcode.MagicProcess, bytes[..20]), out _));
+        test("original 23-byte request accepted", MagicPackets.TryRead(Packet.FromReceived(WizOpcode.MagicProcess, bytes.Concat(new byte[2]).ToArray()), out _));
         test("magic success packet original 7-short layout", PotionRules.Magic(request, 1001, true).Length == 23 && PotionRules.Magic(request, 1001, true).Payload[11] == 1);
         test("stack change golden", Convert.ToHexString(PotionRules.Stack(389014000, 0, slots[14]).Payload) == "01000100F0E12F1701000000000100");
         test("target HP original layout including 32-bit NPC HP", Convert.ToHexString(TargetHealthPackets.Reply(10259, 1, 1000000, 1000000).Payload) == "13280140420F0040420F000000");

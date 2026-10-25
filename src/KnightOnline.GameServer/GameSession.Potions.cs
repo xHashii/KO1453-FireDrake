@@ -5,9 +5,8 @@ using KnightOnline.Shared.Protocol;
 
 internal sealed partial class GameSession
 {
-    private void UsePotion(Packet packet)
+    private void UsePotion(MagicRequest request, PotionDefinition definition)
     {
-        if (!PotionRules.TryRead(packet, out var request)) return;
         void Reject(string reason)
         {
             Send(PotionRules.Magic(request, _socketId, false));
@@ -20,8 +19,6 @@ internal sealed partial class GameSession
         }
         try
         {
-            var definition = _characters.LoadPotionAsync(request.Skill).GetAwaiter().GetResult();
-            if (definition is null) { Reject("not a supported instant self HP/MP consumable"); return; }
             var change = PotionRules.Propose(definition, _slots, _currentHp, _currentMp, _maxHp, _maxMp, _user!.Level);
             if (change is null) { Reject("no usable inventory stack, level restriction, dead, or resource already full"); return; }
             if (request.Stage == 1)

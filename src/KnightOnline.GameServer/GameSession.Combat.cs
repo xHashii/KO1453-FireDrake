@@ -95,61 +95,59 @@ internal sealed partial class GameSession
         catch (Exception ex) { InventoryUnavailable(ex); }
     }
 
-    private bool UseCombatSkill(Packet packet)
+    private void UseCombatSkill(MagicRequest request)
     {
-        var position = packet.ReadPosition;
-        if (!PotionRules.TryRead(packet,out var request)) return false;
-        packet.ReadPosition = position;
-        if (request.Target == _socketId || request.Target == ushort.MaxValue) return false;
+        var speed = _characters.LoadSelfSpeedSkillAsync(request.Skill).GetAwaiter().GetResult();
+        if (speed is not null) { UseSpeedSkill(request, speed); return; }
         void Reject(string reason)
         {
             Send(CombatSkillRules.Reply(request.Skill,_socketId,request.Target,4,false));
             KoLog.Info($"[ SKILL REJECT ] {_charId} skill={request.Skill}: {reason}");
         }
         if (!CanTravel() || _user is null || _sitting || request.Caster != _socketId || request.Stage is not (1 or 2 or 3))
-        { Reject("state/caster/stage"); return true; }
+        { Reject("state/caster/stage"); return; }
         try
         {
             var skill = _characters.LoadCombatSkillAsync(request.Skill).GetAwaiter().GetResult();
             var target = CombatTarget(request.Target);
             if (skill is null || !CombatSkillRules.Learned(skill,_user.Class,_user.Level,_user.Skill) || target is null)
-            { Reject("unsupported/unlearned skill or target"); return true; }
+            { Reject("unsupported/unlearned skill or target"); return; }
             var weapon = EquippedWeapon();
             if (skill.WeaponGroup != 0 && skill.WeaponGroup != weapon?.Group)
-            { Reject("required weapon group"); return true; }
+            { Reject("required weapon group"); return; }
             var range = skill.Type == 1 ? Math.Max(MeleeRules.Range(weapon?.Range ?? 0),skill.Range) : Math.Max(15,skill.Range);
-            if (!Near(target.X,target.Z,range) || _currentMp < skill.Mp) { Reject("range or MP"); return true; }
+            if (!Near(target.X,target.Z,range) || _currentMp < skill.Mp) { Reject("range or MP"); return; }
             var now = Environment.TickCount64;
             if (request.Stage == 1)
             {
                 _pendingMelee = null;
-                if (_casting is { } pending && now < pending.Ready) { Reject("already casting"); return true; }
+                if (_casting is { } pending && now < pending.Ready) { Reject("already casting"); return; }
                 _casting = (skill.Id,target.Id,now+skill.CastMs);
-                Send(CombatSkillRules.Reply(skill.Id,_socketId,target.Id,1,true)); return true;
+                Send(CombatSkillRules.Reply(skill.Id,_socketId,target.Id,1,true)); return;
             }
             if (request.Stage == 2)
             {
                 if (skill.CastMs > 0 && (_casting is not { } flying || flying.Skill != skill.Id || flying.Target != target.Id || now < flying.Ready))
-                { Reject("flying before cast completion"); return true; }
-                Send(CombatSkillRules.Reply(skill.Id,_socketId,target.Id,2,true)); return true;
+                { Reject("flying before cast completion"); return; }
+                Send(CombatSkillRules.Reply(skill.Id,_socketId,target.Id,2,true)); return;
             }
             if (skill.CastMs > 0 && (_casting is not { } cast || cast.Skill != skill.Id || cast.Target != target.Id || now < cast.Ready || now > cast.Ready+5000))
-            { Reject("cast timing"); return true; }
+            { Reject("cast timing"); return; }
             _casting = null;
             var result = _characters.SpendCombatSkillAsync(_charId,skill,_user.Hp,_user.Mp,_currentHp,_currentMp).GetAwaiter().GetResult();
-            if (result == InventorySaveResult.Cooldown) { Reject("cooldown"); return true; }
+            if (result == InventorySaveResult.Cooldown) { Reject("cooldown"); return; }
             if (result != InventorySaveResult.Saved) throw new InvalidOperationException("Stale skill vitals snapshot.");
             var mp = _currentMp-skill.Mp;
             _user = _user with { Hp=(short)_currentHp, Mp=(short)mp }; RestoreVitals(0,mp-_currentMp);
             var damage = skill.Type == 1 ? (int)Math.Clamp((long)MeleeRules.Damage(_totalHit,target.Prototype.Armor)*skill.HitPercent/100+skill.AddDamage,1,ushort.MaxValue) : Math.Clamp(skill.DirectDamage,1,ushort.MaxValue);
             var hit = target.Combat.Hit(damage,now,_socketId);
-            if (hit is null) { Reject("target already dead"); return true; }
+            if (hit is null) { Reject("target already dead"); return; }
             UpdateChatPresence();
             _chat.Region(_user.Zone,target.X,target.Z,120,CombatSkillRules.Reply(skill.Id,_socketId,target.Id,3,true));
             CompleteMonsterHit(target,hit);
         }
         catch (Exception ex) { InventoryUnavailable(ex); }
-        return true;
+        return;
     }
 
     private void AllocateSkillPoint(Packet packet)
@@ -194,6 +192,7 @@ internal sealed partial class GameSession
                 if (_currentHp == 0)
                 {
                     _chat.Region(_user.Zone,PlayerX,PlayerZ,120,new Packet(WizOpcode.Dead).WriteUInt16(_socketId));
+                    ClearSpeedEffect();
                     _casting = null; _pendingMelee = null; break;
                 }
             }

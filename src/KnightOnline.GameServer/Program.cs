@@ -271,7 +271,7 @@ internal sealed partial class GameSession : KoSession
                     WorldNpcRequest(packet);
                     break;
                 case WizOpcode.MagicProcess:
-                    if (!UseCombatSkill(packet)) UsePotion(packet);
+                    ProcessMagic(packet);
                     break;
                 case WizOpcode.BundleOpenReq:
                     OpenLoot(packet);

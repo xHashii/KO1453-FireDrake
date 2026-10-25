@@ -139,7 +139,7 @@ internal sealed partial class GameSession
             return;
         }
         if (npc.Prototype.IsMonster) { TravelMessage("Use R or a supported attack skill. Loot belongs to the killer; chasing AI and party rewards are not implemented."); return; }
-        KoLog.Info($"[ NPC ] {_charId} opened {npc.Prototype.Name} id={id} type={npc.Prototype.Type} shop={npc.Prototype.SellingGroup}");
+        KoLog.Info($"[ NPC ] {_charId} selected {npc.Prototype.Name} id={id} type={npc.Prototype.Type} shop={npc.Prototype.SellingGroup}");
         switch (npc.Prototype.Type)
         {
             case 31:

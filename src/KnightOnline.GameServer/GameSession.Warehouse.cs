@@ -53,6 +53,7 @@ internal sealed partial class GameSession
             }
             _warehouse=loaded;
             Send(reply);
+            KoLog.Info($"[ WAREHOUSE OPEN ] {_charId}: storage snapshot sent, NPC={_warehouseNpc}, slots=192 bytes={reply.Length} bank={loaded.Gold}");
         }
         catch(Exception ex) { InventoryUnavailable(ex); }
     }
@@ -60,7 +61,7 @@ internal sealed partial class GameSession
     {
         if(!WarehouseRules.TryRead(packet,out var r)) { Send(WarehouseRules.Result(0,false)); return; }
         if(_inventoryFaulted || !WarehouseNpcAvailable(_warehouseNpc)) { Send(WarehouseRules.Result(r.Action,false)); return; }
-        if(r.Action==1) { OpenWarehouse(); return; }
+        if(r.Action==1) { if(!WarehouseRules.MatchesSelectedNpc(r,_warehouseNpc)) { Send(WarehouseRules.Result(1,false)); return; } OpenWarehouse(); return; }
         if(_warehouse is null || !WarehouseRules.MatchesSelectedNpc(r,_warehouseNpc)) { Send(WarehouseRules.Result(r.Action,false)); return; }
         try
         {

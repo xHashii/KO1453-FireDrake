@@ -4,20 +4,9 @@ namespace KnightOnline.Database.Items;
 
 public sealed record PotionDefinition(uint Skill, uint Item, byte Resource, int Amount, int CooldownMs, byte MinLevel, byte MaxLevel, int Weight);
 public sealed record PotionUse(ItemSlotData[] Slots, int Index, int Hp, int Mp);
-public sealed record MagicRequest(byte Stage, uint Skill, ushort Caster, ushort Target);
 
 public static class PotionRules
 {
-    public static bool TryRead(Packet packet, out MagicRequest request)
-    {
-        request = new(0, 0, 0, 0);
-        // Observed 1453 client sends six data shorts; original C++ also accepts
-        // a seventh via its soft over-read. Do not accept arbitrary truncation.
-        if (packet.RemainingToRead is not (21 or 23)) return false;
-        request = new(packet.ReadByte(), packet.ReadUInt32(), packet.ReadUInt16(), packet.ReadUInt16());
-        return true;
-    }
-
     public static PotionUse? Propose(PotionDefinition definition, IReadOnlyList<ItemSlotData> slots,
         int hp, int mp, int maxHp, int maxMp, byte level)
     {

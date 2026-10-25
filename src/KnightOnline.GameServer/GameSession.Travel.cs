@@ -172,6 +172,7 @@ internal sealed partial class GameSession
         target = target with { Py = (int)(destination.Map.Height(target.Px / 100f, target.Pz / 100f) * 100) };
         var gold = _characters.SaveTravelPositionAsync(_charId, target, fee).GetAwaiter().GetResult();
         _savedPosition = new(target.Zone,target.Px,target.Pz,target.Py);
+        ClearSpeedEffect();
         _pendingMelee = null; _casting = null;
         _players.Remove(_socketId);
         _warehouse = null; _warehouseNpc = 0;

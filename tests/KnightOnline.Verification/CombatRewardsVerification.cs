@@ -12,6 +12,15 @@ internal static class CombatRewardsVerification
 {
     public static void Rules(Action<string,bool> test)
     {
+        var sprint=new SelfSpeedSkill(new(206001,2060,1,5,0,6000,0,4,0,0,0,0),10,150);
+        var capturedMagic=Packet.FromReceived(WizOpcode.MagicProcess,Convert.FromHexString("03B124030001000100000000000000000000000000"));
+        test("captured self-target skill parses as Sprint, not a target-based potion inference",MagicPackets.TryRead(capturedMagic,out var capturedSkill)&&capturedSkill.Skill==206001&&capturedSkill.Caster==1&&capturedSkill.Target==1);
+        test("Sprint native type4 duration and speed fields",Convert.ToHexString(SelfSpeedPackets.Applied(sprint,1).Payload)=="03B1240300010001000000010000000A00000096000000");
+        test("speed removal uses native category six",Convert.ToHexString(SelfSpeedPackets.Removed().Payload)=="0506");
+        var effect=new SpeedEffect();effect.Apply(sprint,1000);
+        test("speed effect expires at authored duration and resets movement percent",effect.Active(10999)&&effect.Percent==150&&effect.Expire(11000)&&effect.Percent==100&&!effect.Expire(11001));
+        effect.Apply(sprint,12000);test("speed death/travel/disconnect clear is idempotent",effect.Clear()&&!effect.Clear()&&!effect.Active(12000)&&effect.Percent==100);
+        test("Sprint remains class and level restricted",CombatSkillRules.Learned(sprint.Skill,206,1,[])&&!CombatSkillRules.Learned(sprint.Skill,106,80,[])&&!CombatSkillRules.Learned(sprint.Skill,206,0,[]));
         var aggro = new MonsterCombat(100,20);
         aggro.Hit(1,1000,1001);
         test("retaliation waits for attack delay and only targets attacker", !aggro.Retaliate(1002,3000,1000) && !aggro.Retaliate(1001,1500,1000) && aggro.Retaliate(1001,2000,1000) && !aggro.Retaliate(1001,2001,1000));
@@ -109,6 +118,23 @@ internal static class CombatRewardsVerification
         }
         test("actual source Slash skill definition resolves", (await repository.LoadCombatSkillAsync(101003)) is { HitPercent:120, Mp:4, SkillClass:1010 });
         test("unsupported skill never resolves as combat", await repository.LoadCombatSkillAsync(101001) is null);
+        command.CommandText=Regex.Match(schema,@"CREATE TABLE `MAGIC_TYPE4`\([\s\S]*?\) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;").Value;await command.ExecuteNonQueryAsync();
+        foreach(var table in new[]{"MAGIC","MAGIC_TYPE4"})
+        {
+            command.CommandText=File.ReadLines("sql/mysql/kn_online/0003_data.sql").First(l=>l.StartsWith($"INSERT `{table}` ")&&l.Contains("VALUES (206001,")).Replace("INSERT `","INSERT INTO `");await command.ExecuteNonQueryAsync();
+        }
+        var sprint=(await repository.LoadSelfSpeedSkillAsync(206001))!;
+        test("captured Sprint resolves from actual MAGIC/TYPE4, never potion",sprint is {Duration:10,Speed:150,Skill.Mp:5}&&await repository.LoadPotionAsync(206001) is null);
+        test("attack and potion do not resolve as self-speed",await repository.LoadSelfSpeedSkillAsync(101003) is null&&await repository.LoadSelfSpeedSkillAsync(490014) is null);
+        command.CommandText="INSERT INTO USERDATA(strUserID,Hp,Mp,Gold,strItem,strSerial) VALUES('speed-test',100,50,123,X'010203',X'040506')";await command.ExecuteNonQueryAsync();
+        test("Sprint spends MP transactionally",await repository.SpendCombatSkillAsync("speed-test",sprint.Skill,100,50,100,50)==InventorySaveResult.Saved);
+        test("Sprint cooldown persists across reconnect",await new MariaDbCharacterRepository(settings).SpendCombatSkillAsync("speed-test",sprint.Skill,100,45,100,45)==InventorySaveResult.Cooldown);
+        command.CommandText="SELECT Mp,Gold,HEX(strItem),HEX(strSerial) FROM USERDATA WHERE strUserID='speed-test'";
+        await using(var r=await command.ExecuteReaderAsync()){await r.ReadAsync();test("Sprint cannot consume a potion or alter inventory/coins",Convert.ToInt32(r[0])==45&&Convert.ToInt32(r[1])==123&&Convert.ToString(r[2])=="010203"&&Convert.ToString(r[3])=="040506");}
+        command.CommandText="UPDATE MAGIC_TYPE4 SET AC=1 WHERE iNum=206001";await command.ExecuteNonQueryAsync();
+        test("unsupported mixed buff never silently applies speed alone",await repository.LoadSelfSpeedSkillAsync(206001) is null);
+        command.CommandText="UPDATE MAGIC_TYPE4 SET AC=0 WHERE iNum=206001";await command.ExecuteNonQueryAsync();
+
         var newToken = Guid.NewGuid().ToString("N");
         var repeated = await Task.WhenAll(repository.AwardKillAsync("combat-test",newToken,npc,21,reward.Progress,[new(900000000,1)]),repository.AwardKillAsync("combat-test",newToken,npc,21,reward.Progress,[new(900000000,1)]));
         test("concurrent duplicate kill rewards commit exactly once", repeated.Count(r => r is not null) == 1);

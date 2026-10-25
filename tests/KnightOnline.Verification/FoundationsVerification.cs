@@ -103,6 +103,11 @@ internal static class FoundationsVerification
         test("warehouse open has exact 192 native item records",WarehouseRules.Open(100,bank).Length==6+192*17);
         test("warehouse source PK-zone opening fee",WarehouseRules.OpenFee(71)==10000&&WarehouseRules.OpenFee(72)==10000&&WarehouseRules.OpenFee(73)==10000&&WarehouseRules.OpenFee(21)==0);
         test("warehouse native transfer success vector",Convert.ToHexString(WarehouseRules.Result(2,true).Payload)=="0201");
+        test("captured Inn open accepts explicit selected NPC",WarehouseRules.TryRead(Packet.FromReceived(WizOpcode.Warehouse,Convert.FromHexString("011935")),out var capturedOpen)&&capturedOpen.Action==1&&capturedOpen.Npc==13593&&capturedOpen.HasNpc&&WarehouseRules.MatchesSelectedNpc(capturedOpen,13593));
+        test("Inn open explicit spoof and zero refused",!WarehouseRules.MatchesSelectedNpc(capturedOpen,13594)&&!WarehouseRules.MatchesSelectedNpc(capturedOpen with {Npc=0},13593));
+        test("implicit Inn open retains selected NPC requirement",WarehouseRules.TryRead(Packet.FromReceived(WizOpcode.Warehouse,[1]),out var implicitOpen)&&!implicitOpen.HasNpc&&WarehouseRules.MatchesSelectedNpc(implicitOpen,13593)&&!WarehouseRules.MatchesSelectedNpc(implicitOpen,0));
+        test("Inn open truncated and trailing fields refused",!WarehouseRules.TryRead(Packet.FromReceived(WizOpcode.Warehouse,[1,0x19]),out _)&&!WarehouseRules.TryRead(Packet.FromReceived(WizOpcode.Warehouse,[1,0x19,0x35,0]),out _));
+        test("Inn open successful snapshot is full 192-slot body",WarehouseRules.Open(0,Enumerable.Repeat(ItemSlotData.Empty,192)).Length==3270);
         var wire=new Packet(WizOpcode.Warehouse).WriteByte(2).WriteUInt16(10001).WriteUInt32(item.Id).WriteByte(0).WriteByte(0).WriteByte(0).WriteUInt32(3);
         test("warehouse native request parses exact fields",WarehouseRules.TryRead(wire,out var decoded)&&decoded==request);
         var implicitWire=new Packet(WizOpcode.Warehouse).WriteByte(2).WriteUInt32(item.Id).WriteByte(0).WriteByte(0).WriteByte(0).WriteUInt32(3);
