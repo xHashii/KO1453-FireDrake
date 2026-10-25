@@ -72,8 +72,8 @@ public sealed class LoginSession : KoSession
 
     private void HandleVersion(Packet packet)
     {
-        var result = new Packet(packet.Opcode);
-        result.WriteUInt16(_app.LatestVersion);
+        var result = ClientProtocol.VersionReply(packet.Opcode, _app.LatestVersion);
+        KoLog.Info($"[ VERSION WIRE ] profile={_app.Settings.ProtocolVersion} requestLength={packet.Length} request={(packet.Length <= 2 ? Convert.ToHexString(packet.Payload) : "[unexpected length; omitted]")} reply={Convert.ToHexString(result.Payload)}");
         // One line per client: comparing this with what the client itself shows
         // is how you find the number ADVERTISE_VERSION needs.
         KoLog.Info($"Version check from {RemoteIp}: advertising {_app.LatestVersion}");
@@ -204,8 +204,12 @@ public sealed class LoginSession : KoSession
 
     private void HandleServerlist(Packet packet)
     {
-        var result = new Packet(packet.Opcode);
-        // 1453: the 1500+ echo field is not present.
+        if (!ClientProtocol.TryServerListPrefix(packet, _app.Settings.ProtocolVersion, out var result))
+        {
+            KoLog.Warn($"[ SERVERLIST REJECT ] profile={_app.Settings.ProtocolVersion} unexpected request length={packet.Length}");
+            Disconnect();
+            return;
+        }
         _app.AppendServerListTo(result);
         Send(result);
     }

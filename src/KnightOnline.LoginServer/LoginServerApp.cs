@@ -94,6 +94,7 @@ public sealed class LoginServerApp
             KoLog.Warn($"No version list from the database; falling back to the built-in version {tableVersion}.");
 
         ApplyAdvertisedVersion();
+        KoLog.Info($"[ PROTOCOL ] LoginServer profile={_settings.ProtocolVersion} advertised={_latestVersion}; 1534 world entry is experimental.");
 
         if (_settings.AdvertiseVersion != 0)
             KoLog.Info($"Advertising version {_latestVersion} ([SETTINGS] ADVERTISE_VERSION) and offering " +
@@ -164,7 +165,7 @@ public sealed class LoginServerApp
     /// </summary>
     private void ApplyAdvertisedVersion()
     {
-        var cap = _settings.AdvertiseVersion;
+        var cap = _settings.ProtocolVersion == 1534 ? (ushort)1534 : _settings.AdvertiseVersion;
         if (cap == 0)
             return;
 

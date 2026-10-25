@@ -14,6 +14,23 @@ using KnightOnline.Verification;
 var passed = 0;
 var failed = 0;
 
+// Independent vectors from 1534 LoginSession/ LoginHandler; legacy defaults unchanged.
+Check("protocol profile defaults and supported versions", ClientProtocol.Validate(1453)==1453 && ClientProtocol.Validate(1534)==1534);
+var badProfile=false;
+try { ClientProtocol.Validate(1543); } catch (ArgumentOutOfRangeException) { badProfile=true; }
+Check("unknown profile fails closed",badProfile);
+CheckHex("1534 version reply uint16",ClientProtocol.VersionReply(LsOpcode.VersionReq,1534).Payload,"FE05");
+CheckHex("1453 version reply unchanged",ClientProtocol.VersionReply(LsOpcode.VersionReq,1453).Payload,"AD05");
+CheckHex("1534 game version and deterministic key",ClientProtocol.VersionReply(WizOpcode.VersionCheck,1534,0x0102030405060708UL).Payload,"FE050807060504030201");
+Check("1534 server list echo accepted",ClientProtocol.TryServerListPrefix(Packet.FromReceived(LsOpcode.ServerList,[0x34,0x12]),1534,out var list1534));
+CheckHex("1534 list echo precedes body",list1534.WriteByte(1).Payload,"341201");
+Check("1534 list missing echo rejected",!ClientProtocol.TryServerListPrefix(Packet.FromReceived(LsOpcode.ServerList,[]),1534,out _));
+Check("1534 list truncated echo rejected",!ClientProtocol.TryServerListPrefix(Packet.FromReceived(LsOpcode.ServerList,[1]),1534,out _));
+Check("1534 list trailing data rejected",!ClientProtocol.TryServerListPrefix(Packet.FromReceived(LsOpcode.ServerList,[1,2,3]),1534,out _));
+Check("1453 list retains no echo",ClientProtocol.TryServerListPrefix(Packet.FromReceived(LsOpcode.ServerList,[]),1453,out var list1453)&&list1453.Length==0);
+Check("1453 list still ignores legacy request data",ClientProtocol.TryServerListPrefix(Packet.FromReceived(LsOpcode.ServerList,[1,2]),1453,out var legacyList)&&legacyList.Length==0);
+
+
 void Check(string name, bool condition, string? detail = null)
 {
     if (condition)

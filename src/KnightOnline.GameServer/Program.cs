@@ -34,6 +34,7 @@ Console.Title = $"Game Server for Knight Online v{GameVersion.Version} (.NET)";
 KoLog.StartRun("GameServer");
 
 var settings = GameServerSettings.Load();
+KoLog.Info($"[ PROTOCOL ] GameServer profile={settings.ProtocolVersion}");
 if (!File.Exists(GameServerSettings.ConfigFileName))
     KoLog.Warn($"{GameServerSettings.ConfigFileName} not found - running on defaults; " +
                "copy GameServer.sample.ini and set [DATABASE] to your LogInServer.ini credentials.");
@@ -85,7 +86,7 @@ catch (Exception ex)
 }
 var chat = new ChatHub();
 var players = new PlayerHub();
-var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat, players),maxSessionId:9999);
+var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat, players, settings.ProtocolVersion),maxSessionId:9999);
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -184,9 +185,12 @@ internal sealed partial class GameSession : KoSession
     private readonly byte[] _stats = new byte[5];
     private short _points;
 
-    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment, ChatHub chat, PlayerHub players)
+    private readonly ushort _protocolVersion;
+
+    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment, ChatHub chat, PlayerHub players, ushort protocolVersion = 1453)
         : base(client, maxPayloadSize: 8192)
     {
+        _protocolVersion = ClientProtocol.Validate(protocolVersion);
         _characters = characters;
         _chat = chat;
         _players = players;
@@ -366,9 +370,8 @@ internal sealed partial class GameSession : KoSession
     /// <summary>Port of CUser::VersionCheck (GameServer/LoginHandler.cpp).</summary>
     private void VersionCheck(Packet packet)
     {
-        var result = new Packet(WizOpcode.VersionCheck);
-        result.WriteUInt16((ushort)GameVersion.Version);
-        result.WriteUInt64(Crypto.GenerateKey());
+        var result = ClientProtocol.VersionReply(WizOpcode.VersionCheck, _protocolVersion, Crypto.GenerateKey());
+        KoLog.Info($"[ PROTOCOL ] GameSession profile={_protocolVersion} version handshake; 1534 world entry is experimental.");
         Send(result);
 
         EnableCrypto();
