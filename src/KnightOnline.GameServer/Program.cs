@@ -133,8 +133,7 @@ internal sealed partial class GameSession : KoSession
     private const byte NewcharDbError = 4;
     private const byte NewcharStatTooLow = 11;
 
-    // STARTER_SEED_QUEST (Define.h:224) and MAX_PLAYER_HP (Define.h:22).
-    private const ushort StarterSeedQuest = 500;
+    // MAX_PLAYER_HP (Define.h:22).
     private const int MaxPlayerHp = 14000;
 
     // Inventory geometry, shared/globals.h:226-251: 14 equipped slots, 28
@@ -628,7 +627,7 @@ internal sealed partial class GameSession : KoSession
 
     /// <summary>
     /// Port of CUser::GameStart (CharacterSelectionHandler.cpp). Opcode 1 is
-    /// the loading-screen pull: quest data, the full self-info dump, notices,
+    /// the loading-screen pull: full self-info, start ACK, quest data, notices,
     /// time, weather, static nearby NPC records and an empty WIZ_GAMESTART ack.
     /// Nearby player visibility is synchronized after loading; merchants and full AI remain unported.
     /// Opcode 2 flips the
@@ -636,60 +635,37 @@ internal sealed partial class GameSession : KoSession
     /// with combat). The character name after the opcode is single-byte
     /// length; the original does not read it, and neither does the port.
     /// </summary>
+    private readonly WorldEntryFlow _entryFlow = new();
     private void GameStart(Packet packet)
     {
-        if (_inGame || _user is null)
-            return; // CUser::GameStart: if (isInGame()) return;
-
-        var opcode = packet.ReadByte();
-        if (opcode == 1)
+        if (_user is null || packet.RemainingToRead < 1) return;
+        switch (_entryFlow.Accept(packet.ReadByte()))
         {
-            SendQuestData();
-            SendMyInfo(); // calls QuestDataRequest first in the original; hoisted for clarity
-            SendNotice();
-            SendTime();
-            SendWeather();
-            SendWorldNpcs();
-            Send(new Packet(WizOpcode.Gamestart));
-        }
-        else if (opcode == 2)
-        {
-            _inGame = true;
-            StartRecovery();
-            RecomputeStats(refillWhenEmpty: false); // CUser::SetUserAbility()
-            UpdatePlayerPresence();
-            Send(_players.RegionList(_socketId));
+            case WorldEntryAction.AcknowledgeOnly:
+                Send(new Packet(WizOpcode.Gamestart));
+                break;
+            case WorldEntryAction.Bootstrap:
+                // Native reference: MYINFO first, start ACK, then quest snapshot.
+                // Pre-MYINFO quest state can be discarded by client initialization.
+                SendMyInfo();
+                Send(new Packet(WizOpcode.Gamestart));
+                SendQuestData();
+                SendNotice(); SendTime(); SendWeather(); SendWorldNpcs();
+                break;
+            case WorldEntryAction.Enter:
+                _inGame = true;
+                StartRecovery();
+                RecomputeStats(refillWhenEmpty: false);
+                UpdatePlayerPresence();
+                Send(_players.RegionList(_socketId));
+                break;
         }
     }
 
-    /// <summary>
-    /// Port of CUser::QuestDataRequest: WIZ_QUEST sub-opcode 1, uint16 entry
-    /// count, then (uint16 quest id, uint8 state) per entry - std::map order,
-    /// so sorted by id. Entries come from USERDATA.strQuest as 3-byte records
-    /// (DBAgent::LoadUserData); the original also seeds STARTER_SEED_QUEST at
-    /// state 1 when it is missing. The repository persists state 2 instead for
-    /// level-boosted characters while the level-one tutorial is unsupported,
-    /// so their initial tutorial/intro trigger is not offered on every login.
-    /// </summary>
     private void SendQuestData()
     {
-        var user = _user!;
-        var quests = new SortedDictionary<ushort, byte>();
-        var count = Math.Min(user.QuestCount, (short)(user.Quests.Length / 3)); // QUEST_LIMIT guard
-        for (var i = 0; i < count; i++)
-        {
-            var id = (ushort)(user.Quests[i * 3] | (user.Quests[i * 3 + 1] << 8));
-            quests[id] = user.Quests[i * 3 + 2];
-        }
-
-        if (!quests.ContainsKey(StarterSeedQuest))
-            quests[StarterSeedQuest] = 1;
-
-        var result = new Packet(WizOpcode.Quest, 1);
-        result.WriteUInt16((ushort)quests.Count);
-        foreach (var (id, state) in quests)
-            result.WriteUInt16(id).WriteByte(state);
-        Send(result);
+        Send(StarterQuestState.Snapshot(_user!.Quests, _user.QuestCount));
+        KoLog.Info($"[ INTRO SNAPSHOT ] {_charId}: quest 500=2 sent after MYINFO/start ACK; repeated stage 1 will ACK only.");
     }
 
     /// <summary>

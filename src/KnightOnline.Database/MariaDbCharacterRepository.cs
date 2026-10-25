@@ -549,7 +549,7 @@ public sealed partial class MariaDbCharacterRepository
         }
 
         await RepairLegacySpawnAsync(connection, charId, cancellationToken).ConfigureAwait(false);
-        await SkipBoostedStarterQuestAsync(connection, charId, cancellationToken).ConfigureAwait(false);
+        await SuppressStarterIntroAsync(connection, charId, cancellationToken).ConfigureAwait(false);
 
         // Distinct names on purpose: C# forbids reusing 'command'/'reader' at
         // method scope when enclosed blocks already used them (CS0136).
@@ -605,32 +605,34 @@ public sealed partial class MariaDbCharacterRepository
 
     // Called only after ownership/warehouse validation, before loading the session.
     // Lock the row so this narrow repair cannot overwrite concurrent quest edits.
-    private static async Task SkipBoostedStarterQuestAsync(
+    private static async Task SuppressStarterIntroAsync(
         MySqlConnection connection, string charId, CancellationToken cancellationToken)
     {
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = "SELECT Level, strQuest, sQuestCount FROM USERDATA WHERE strUserID = @charId FOR UPDATE";
+        command.CommandText = "SELECT strQuest, sQuestCount FROM USERDATA WHERE strUserID = @charId FOR UPDATE";
         command.Parameters.AddWithValue("@charId", charId);
         (byte[] Blob, short Count, bool Changed) repair;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
         {
             if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 return;
-            repair = StarterQuestState.SkipForBoostedCharacter(
-                Convert.ToByte(reader.GetValue(0)), GetBlob(reader, 1), Convert.ToInt16(reader.GetValue(2)));
+            repair = StarterQuestState.SuppressUnsupportedIntro(GetBlob(reader, 0), Convert.ToInt16(reader.GetValue(1)));
+            if (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                throw new InvalidDataException("Ambiguous intro owner; no quest progress changed.");
         }
         if (repair.Changed)
         {
             command.CommandText = "UPDATE USERDATA SET strQuest = @quests, sQuestCount = @count WHERE strUserID = @charId";
             command.Parameters.AddWithValue("@quests", repair.Blob);
             command.Parameters.AddWithValue("@count", repair.Count);
-            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            if (await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+                throw new InvalidDataException("Intro update lost unique character identity.");
         }
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         if (repair.Changed)
-            KoLog.Info($"[ STARTER QUEST ] {charId}: saved quest 500 state 2; skipping unsupported level-one tutorial for boosted character.");
+            KoLog.Info($"[ INTRO POLICY ] {charId}: persisted reserved quest 500=2; unsupported tutorial suppressed (all levels). Other quests unchanged.");
     }
 
     private static byte[] GetBlob(MySqlDataReader reader, int ordinal) =>

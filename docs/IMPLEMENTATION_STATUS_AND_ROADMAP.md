@@ -1,6 +1,10 @@
 # Fire Drake 1453: implementation audit and delivery roadmap
 
-**Audit date: 25 October 2026.** Scope: the live C# rewrite in `src/`, its tests,
+**Audit date: 25 October 2026.**
+
+Follow-up: [intro startup correction](INTRO_LOGIN_FIX.md) now implements native
+MYINFO/ACK/quest ordering, one-shot bootstrap and explicit temporary intro
+suppression at all levels. Actual-client repeated-login acceptance is pending. Scope: the live C# rewrite in `src/`, its tests,
 SQL and runtime assets, compared with the legacy C++ reference. This is a code
 and dependency audit, **not a claim of native-client retail certification**.
 
