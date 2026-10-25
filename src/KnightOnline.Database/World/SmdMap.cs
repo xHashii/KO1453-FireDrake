@@ -22,7 +22,12 @@ public sealed class SmdMap
         Spacing = r.ReadSingle();
         if (Size < 2 || !float.IsFinite(Spacing) || Spacing <= 0) throw new InvalidDataException("Invalid terrain dimensions.");
         _heights = new float[checked(Size * Size)];
-        for (var i = 0; i < _heights.Length; i++) _heights[i] = r.ReadSingle();
+        for (var i = 0; i < _heights.Length; i++)
+        {
+            var height = r.ReadSingle();
+            if (!float.IsFinite(height)) throw new InvalidDataException($"Non-finite SMD terrain height at sample {i}.");
+            _heights[i] = height;
+        }
         var width = r.ReadSingle();
         var length = r.ReadSingle();
         if (width != Extent || length != Extent || width > 4096) throw new InvalidDataException("SMD collision dimensions disagree with terrain.");

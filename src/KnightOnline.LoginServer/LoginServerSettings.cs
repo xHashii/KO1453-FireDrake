@@ -1,5 +1,4 @@
 using System.Text;
-using KnightOnline.Shared.Protocol;
 using KnightOnline.Database;
 using KnightOnline.Shared.Configuration;
 
@@ -66,7 +65,6 @@ public sealed class LoginServerSettings
     /// host does not exist.
     /// </summary>
     public ushort AdvertiseVersion { get; private init; }
-    public ushort ProtocolVersion { get; private init; } = 1453;
 
     public DatabaseSettings Database { get; private init; } =
         new("127.0.0.1", 3306, "KN_Online", "username", "password");
@@ -93,7 +91,6 @@ public sealed class LoginServerSettings
         var settings = new LoginServerSettings
         {
             Port = ini.GetInt("SETTINGS", "PORT", 15100),
-            ProtocolVersion = ClientProtocol.Validate(ini.GetInt("SETTINGS", "PROTOCOL_VERSION", 1453)),
             AllowOfflineStart = ini.GetBool("SETTINGS", "ALLOW_OFFLINE_START", false),
             AdvertiseVersion = (ushort)ini.GetInt("SETTINGS", "ADVERTISE_VERSION", 0),
             AutoMigrate = ini.GetBool("DATABASE", "AUTO_MIGRATE", true),
@@ -110,9 +107,6 @@ public sealed class LoginServerSettings
                 ini.GetString("DATABASE", "PWD", "password")),
             NewsContent = BuildNews(ini),
         };
-
-        if (settings.ProtocolVersion == 1534 && settings.AdvertiseVersion is not (0 or 1534))
-            throw new InvalidDataException("1534 protocol requires ADVERTISE_VERSION=1534 (or 0 for automatic 1534). ");
 
         var serverCount = ini.GetInt("SERVER_LIST", "COUNT", 1);
         if (serverCount <= 0)

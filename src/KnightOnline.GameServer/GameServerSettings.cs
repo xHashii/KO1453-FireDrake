@@ -1,5 +1,4 @@
 using KnightOnline.Database;
-using KnightOnline.Shared.Protocol;
 using KnightOnline.Shared.Configuration;
 
 namespace KnightOnline.GameServer;
@@ -11,7 +10,7 @@ namespace KnightOnline.GameServer;
 /// file is not an error: every key falls back to the default below, so the
 /// server still starts and only database access needs real values.
 /// </summary>
-public sealed record GameServerSettings(int Port, DatabaseSettings Database, bool CharacterPreviewEquipment = true, ushort ProtocolVersion = 1453)
+public sealed record GameServerSettings(int Port, DatabaseSettings Database, bool CharacterPreviewEquipment = true)
 {
     public const string ConfigFileName = "GameServer.ini";
 
@@ -26,7 +25,6 @@ public sealed record GameServerSettings(int Port, DatabaseSettings Database, boo
                 ini.GetString("DATABASE", "DATABASE", "KN_Online"),
                 ini.GetString("DATABASE", "UID", "username"),
                 ini.GetString("DATABASE", "PWD", "password")),
-            ini.GetInt("SETTINGS", "CHARACTER_PREVIEW_RECOVERY", 0) == 0,
-            ClientProtocol.Validate(ini.GetInt("SETTINGS", "PROTOCOL_VERSION", 1453)));
+            ini.GetInt("SETTINGS", "CHARACTER_PREVIEW_RECOVERY", 0) == 0);
     }
 }
