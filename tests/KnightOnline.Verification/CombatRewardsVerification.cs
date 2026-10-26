@@ -63,7 +63,7 @@ internal static class CombatRewardsVerification
         await repository.EnsureCombatSchemaAsync(); await repository.EnsureCombatSchemaAsync();
         await using var connection = new MySqlConnection(settings.BuildConnectionString()); await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "DROP TABLE IF EXISTS KO_MORADON_LAYOUT,KO_MORADON_NPCPOS_BACKUP,KO_MORADON_OBJECTPOS_BACKUP,USERDATA,LEVEL_UP; CREATE TABLE USERDATA(strUserID varchar(21),Level tinyint unsigned,Exp int,Points smallint,strSkill varbinary(10),Gold int,strItem blob,strSerial blob,Hp smallint,Mp smallint,Zone smallint,PX int,PZ int,PY int) ENGINE=InnoDB; " +
+        command.CommandText = "DROP TABLE IF EXISTS KO_MORADON_V2_NPCPOS_BACKUP,KO_MORADON_LAYOUT,KO_MORADON_NPCPOS_BACKUP,KO_MORADON_OBJECTPOS_BACKUP,USERDATA,LEVEL_UP; CREATE TABLE USERDATA(strUserID varchar(21),Level tinyint unsigned,Exp int,Points smallint,strSkill varbinary(10),Gold int,strItem blob,strSerial blob,Hp smallint,Mp smallint,Zone smallint,PX int,PZ int,PY int) ENGINE=InnoDB; " +
             "CREATE TABLE LEVEL_UP(level tinyint unsigned,Exp bigint); INSERT INTO LEVEL_UP VALUES(1,100),(2,200),(3,300),(80,1000000);";
         await command.ExecuteNonQueryAsync();
         var slots = Enumerable.Repeat(ItemSlotData.Empty,75).ToArray(); slots[74] = new(65537,-8687,5044,0,0);
@@ -211,6 +211,17 @@ internal static class CombatRewardsVerification
         await repository.EnsureMoradonNpcLayoutAsync();
         command.CommandText="SELECT LeftX FROM K_NPCPOS WHERE ZoneID=21 AND NpcID=16096 AND ActType>=100";
         test("Moradon NPC layout: future operator edits survive restart",Convert.ToInt32(await command.ExecuteScalarAsync())==771);
+        test("Moradon remaining NPCs: Clepio and statues move, guards retain count",movedNpcs.Any(n=>n.Prototype.Id==13003&&n.X==849&&n.Z==570)&&movedNpcs.Any(n=>n.Prototype.Id==16073&&n.X==790&&n.Z==539)&&movedNpcs.Count(n=>n.Prototype.Id==11020)==6);
+        // Simulate an installation with v1 already applied and v2 not yet installed.
+        command.CommandText="DELETE FROM KO_MORADON_LAYOUT WHERE LayoutId=2; DELETE FROM KO_MORADON_V2_NPCPOS_BACKUP; DELETE FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100 AND NpcID IN (521,11020,13003,16073,16074,21020); INSERT INTO K_NPCPOS SELECT * FROM KO_MORADON_NPCPOS_BACKUP WHERE NpcID IN (521,11020,13003,16073,16074,21020)";
+        await command.ExecuteNonQueryAsync();
+        await repository.EnsureMoradonNpcLayoutAsync();
+        command.CommandText="SELECT LeftX FROM K_NPCPOS WHERE ZoneID=21 AND NpcID=13003 AND ActType>=100";
+        test("Moradon v2 upgrades a previously applied v1 installation",Convert.ToInt32(await command.ExecuteScalarAsync())==849);
+        command.CommandText="SELECT LeftX FROM K_NPCPOS WHERE ZoneID=21 AND NpcID=16096 AND ActType>=100";
+        test("Moradon v2 never reapplies v1 or resets its operator edits",Convert.ToInt32(await command.ExecuteScalarAsync())==771);
+        command.CommandText="SELECT SUM(NumNPC) FROM KO_MORADON_NPCPOS_BACKUP";
+        test("Moradon v2 preserves the original v1 rollback snapshot",Convert.ToInt32(await command.ExecuteScalarAsync())==57);
         var nativeTown = (await repository.LoadTravelDestinationsAsync(1,80,21)).Single();
         nativeTown = TravelRules.TownForMap(nativeTown,expandedWorld.Zones[21].Map.Extent);
         test("Moradon: native Town now resolves confirmed plaza with loaded map",nativeTown.Px==81600&&nativeTown.Pz==54300&&expandedWorld.Zones[21].Map.Contains(816,543)&&float.IsFinite(expandedWorld.Zones[21].Map.Height(816,543)));

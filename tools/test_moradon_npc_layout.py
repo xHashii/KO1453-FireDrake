@@ -42,6 +42,26 @@ class MoradonLayoutTests(unittest.TestCase):
             self.assertTrue(0 <= r['x'] < (size-1)*step and 0 <= r['z'] < (size-1)*step)
             self.assertTrue(math.isfinite(heights[int(r['z']/step)*size+int(r['x']/step)]))
 
+    def test_remaining_legacy_npcs_all_move_without_population_changes(self):
+        db = load_tables()
+        db.executescript((ROOT / 'src/KnightOnline.Database/World/MoradonNpcPlacements.sql').read_text())
+        layout = json.loads((ROOT / 'docs/MORADON_REMAINING_PLACEMENTS.json').read_text())
+        sql = (ROOT / 'src/KnightOnline.Database/World/MoradonRemainingPlacements.sql').read_text()
+        before = list(db.execute('SELECT * FROM K_NPCPOS WHERE ZoneID<>21 OR ActType<100'))
+        total = db.execute('SELECT SUM(NumNPC) FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100').fetchone()
+        db.executescript(sql)
+        for r in layout['spawns']:
+            old = db.execute('SELECT COUNT(*) FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100 AND NpcID=? AND LeftX=? AND TopZ=? AND RightX=? AND BottomZ=?', (r['id'],*r['old'])).fetchone()[0]
+            self.assertEqual(old, 0)
+            new = db.execute('SELECT NumNPC FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100 AND NpcID=? AND LeftX=? AND TopZ=?', (r['id'],r['x'],r['z'])).fetchall()
+            self.assertEqual(new, [(1,)])
+        self.assertEqual(len(layout['spawns']),16)
+        self.assertEqual(total,db.execute('SELECT SUM(NumNPC) FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100').fetchone())
+        self.assertEqual(before,list(db.execute('SELECT * FROM K_NPCPOS WHERE ZoneID<>21 OR ActType<100')))
+        snapshot = list(db.execute('SELECT * FROM K_NPCPOS'))
+        db.executescript(sql)
+        self.assertEqual(snapshot,list(db.execute('SELECT * FROM K_NPCPOS')))
+
 
 if __name__ == '__main__':
     unittest.main()

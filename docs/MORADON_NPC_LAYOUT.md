@@ -91,3 +91,27 @@ Use H-menu Town (816,543), check both gates and anvil, then walk to the shops/In
 above. Verify their existing menus and warehouse still open. Check field outposts,
 restart once, and ensure NPCs are not duplicated. Native-client acceptance and
 stair collision remain unverified; moving NPCs does not add new NPC services.
+
+## Layout v2: move the unmatched remainder
+
+The owner subsequently authorized choosing new locations for **all six remaining
+NPC IDs**, superseding the "retained unchanged" decision above. These are new,
+provisional placements, **not recovered donor coordinates**:
+
+- Arendil: 746,479, beside the Coliseum service area.
+- Clepio: 849,570, near Karpis.
+- Karus/Elmorad hero statues: 790,539 and 845,539, beside their nation gates.
+- Guard 11020: six positions, X=838/842/846, Z=502/506.
+- Guard 21020: six positions, X=788/792/796, Z=502/506.
+
+All 16 legacy instances move; no remaining known shipped static NPC row is left
+at its old location. Counts, IDs, nation/service definitions and monsters are
+preserved. Full old/new mapping: MORADON_REMAINING_PLACEMENTS.json. Exact old-row
+predicates preserve manual edits, rather than overriding already customized NPCs.
+Terrain height comes from SMD; visual placement/collision acceptance is pending.
+
+Startup applies v1 then v2, with independent marker rows. Already-installed v1
+is not rerun. V2 has its own transactional snapshot in
+KO_MORADON_V2_NPCPOS_BACKUP and does not overwrite original v1 backups. Restarts
+preserve subsequent edits. Custom maps remain skipped. Deployment is the same
+pull/rebuild/restart; no manual SQL or marker reset is required.
