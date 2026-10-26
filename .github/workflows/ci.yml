@@ -57,6 +57,7 @@ jobs:
         run: |
           python tools/test_world_npcs.py
           python tools/test_world_coordinates.py
+          python tools/test_moradon_npc_layout.py
           python tools/test_starter_item_repair.py
           python tools/build_item_catalog.py --check
 

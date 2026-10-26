@@ -1,0 +1,339 @@
+{
+  "source": "owner-supplied 1534-world-tables.zip / 1534-world-tables.sql from commit 4320e2a",
+  "sourceZipSha256": "1999b02e2076ee1abf5f6b652e1e16c132c679456ba407512ad7bbafffac8bee",
+  "zone": 21,
+  "spawns": [
+    {
+      "id": 18005,
+      "name": "[Manager]Billbor",
+      "x": 822,
+      "z": 657,
+      "right": 822,
+      "bottom": 657,
+      "direction": 90,
+      "count": 1
+    },
+    {
+      "id": 18004,
+      "name": "[Grand Merchant] Kaishan",
+      "x": 816,
+      "z": 690,
+      "right": 816,
+      "bottom": 690,
+      "direction": 90,
+      "count": 1
+    },
+    {
+      "id": 16097,
+      "name": "[InnHostess] Nia",
+      "x": 859,
+      "z": 648,
+      "right": 859,
+      "bottom": 648,
+      "direction": 135,
+      "count": 1
+    },
+    {
+      "id": 16096,
+      "name": "[InnHostess] Neria",
+      "x": 770,
+      "z": 648,
+      "right": 770,
+      "bottom": 648,
+      "direction": 45,
+      "count": 1
+    },
+    {
+      "id": 16085,
+      "name": "[Peddler]Hemes",
+      "x": 907,
+      "z": 553,
+      "right": 907,
+      "bottom": 553,
+      "direction": 155,
+      "count": 1
+    },
+    {
+      "id": 16079,
+      "name": "[Kaishan`s Daughter] Menissiah",
+      "x": 817,
+      "z": 521,
+      "right": 817,
+      "bottom": 521,
+      "direction": 180,
+      "count": 1
+    },
+    {
+      "id": 16047,
+      "name": "[Operator] Moira",
+      "x": 802,
+      "z": 772,
+      "right": 802,
+      "bottom": 772,
+      "direction": 90,
+      "count": 1
+    },
+    {
+      "id": 14301,
+      "name": "[Blacksmith] Heppa",
+      "x": 729,
+      "z": 580,
+      "right": 729,
+      "bottom": 580,
+      "direction": 0,
+      "count": 1
+    },
+    {
+      "id": 13013,
+      "name": "[Sentinel] Patrick",
+      "x": 828,
+      "z": 545,
+      "right": 828,
+      "bottom": 545,
+      "direction": 162,
+      "count": 1
+    },
+    {
+      "id": 13009,
+      "name": "[Mercenary Captain]Kugar",
+      "x": 749,
+      "z": 529,
+      "right": 749,
+      "bottom": 529,
+      "direction": 0,
+      "count": 1
+    },
+    {
+      "id": 13008,
+      "name": "[Weapon Merchant]Gargameth",
+      "x": 786,
+      "z": 587,
+      "right": 786,
+      "bottom": 587,
+      "direction": 45,
+      "count": 1
+    },
+    {
+      "id": 13001,
+      "name": "[Accessory Merchant]Hera",
+      "x": 697,
+      "z": 620,
+      "right": 697,
+      "bottom": 620,
+      "direction": 45,
+      "count": 1
+    },
+    {
+      "id": 22301,
+      "name": "[Scrolls]Charon",
+      "x": 821,
+      "z": 607,
+      "right": 821,
+      "bottom": 607,
+      "direction": 110,
+      "count": 1
+    },
+    {
+      "id": 13005,
+      "name": "[Healing Potion]Karpis",
+      "x": 48,
+      "z": 897,
+      "right": 48,
+      "bottom": 897,
+      "direction": 43,
+      "count": 1
+    },
+    {
+      "id": 13007,
+      "name": "[Sundries]Zarta",
+      "x": 84,
+      "z": 923,
+      "right": 84,
+      "bottom": 923,
+      "direction": 100,
+      "count": 1
+    },
+    {
+      "id": 13007,
+      "name": "[Sundries]Zarta",
+      "x": 419,
+      "z": 545,
+      "right": 419,
+      "bottom": 545,
+      "direction": 135,
+      "count": 1
+    },
+    {
+      "id": 16097,
+      "name": "[InnHostess] Nia",
+      "x": 409,
+      "z": 555,
+      "right": 409,
+      "bottom": 555,
+      "direction": 93,
+      "count": 1
+    },
+    {
+      "id": 13015,
+      "name": "[Priest] Iris",
+      "x": 815,
+      "z": 921,
+      "right": 815,
+      "bottom": 921,
+      "direction": 90,
+      "count": 1
+    },
+    {
+      "id": 13007,
+      "name": "[Sundries]Zarta",
+      "x": 868,
+      "z": 530,
+      "right": 868,
+      "bottom": 530,
+      "direction": 0,
+      "count": 1
+    },
+    {
+      "id": 13006,
+      "name": "[Armor Merchant]Hesta",
+      "x": 786,
+      "z": 595,
+      "right": 786,
+      "bottom": 595,
+      "direction": 45,
+      "count": 1
+    },
+    {
+      "id": 13005,
+      "name": "[Healing Potion]Karpis",
+      "x": 855,
+      "z": 561,
+      "right": 855,
+      "bottom": 561,
+      "direction": 90,
+      "count": 1
+    },
+    {
+      "id": 13005,
+      "name": "[Healing Potion]Karpis",
+      "x": 377,
+      "z": 572,
+      "right": 377,
+      "bottom": 572,
+      "direction": 115,
+      "count": 1
+    },
+    {
+      "id": 603,
+      "name": "Chaotic generator",
+      "x": 700,
+      "z": 525,
+      "right": 700,
+      "bottom": 525,
+      "direction": 0,
+      "count": 1
+    },
+    {
+      "id": 11021,
+      "name": "Guard",
+      "x": 842,
+      "z": 491,
+      "right": 842,
+      "bottom": 491,
+      "direction": 0,
+      "count": 1
+    },
+    {
+      "id": 11021,
+      "name": "Guard",
+      "x": 836,
+      "z": 491,
+      "right": 836,
+      "bottom": 491,
+      "direction": 0,
+      "count": 1
+    },
+    {
+      "id": 21021,
+      "name": "Guard",
+      "x": 795,
+      "z": 491,
+      "right": 795,
+      "bottom": 491,
+      "direction": 0,
+      "count": 1
+    },
+    {
+      "id": 21021,
+      "name": "Guard",
+      "x": 801,
+      "z": 491,
+      "right": 801,
+      "bottom": 491,
+      "direction": 0,
+      "count": 1
+    },
+    {
+      "id": 15002,
+      "name": "[Coliseum] Artes",
+      "x": 757,
+      "z": 479,
+      "right": 757,
+      "bottom": 479,
+      "direction": 90,
+      "count": 1
+    }
+  ],
+  "objects": [
+    {
+      "sIndex": 4014,
+      "Type": 5,
+      "ControlNpcID": 211,
+      "PosX": 797.696167,
+      "PosY": 4.849916,
+      "PosZ": 526.878845
+    },
+    {
+      "sIndex": 4013,
+      "Type": 5,
+      "ControlNpcID": 212,
+      "PosX": 837.3597,
+      "PosY": 4.780322,
+      "PosZ": 526.756958
+    },
+    {
+      "sIndex": 5001,
+      "Type": 8,
+      "ControlNpcID": 0,
+      "PosX": 816.1357,
+      "PosY": 13.647954,
+      "PosZ": 607.1725
+    }
+  ],
+  "unmatched": [
+    {
+      "id": 521,
+      "name": "[CastleSiege Warfare]Arendil"
+    },
+    {
+      "id": 11020,
+      "name": "Guard"
+    },
+    {
+      "id": 13003,
+      "name": "[Potion Merchant]Clepio"
+    },
+    {
+      "id": 16073,
+      "name": "Karus Hero Statue"
+    },
+    {
+      "id": 16074,
+      "name": "Elmorad Hero Statue"
+    },
+    {
+      "id": 21020,
+      "name": "Guard"
+    }
+  ]
+}

@@ -354,3 +354,5 @@ initial implementation with authority/lifecycle tests. This supersedes the
 "not ported" membership status above, not the broader party backlog. Native
 client acceptance is pending; shared XP/loot, party-target skills, cross-zone
 retention and party-wanted remain unimplemented. No database reset/migration.
+
+Expanded-Moradon NPC placement follow-up: see [MORADON_NPC_LAYOUT.md](MORADON_NPC_LAYOUT.md).

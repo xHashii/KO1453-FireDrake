@@ -63,7 +63,7 @@ internal static class CombatRewardsVerification
         await repository.EnsureCombatSchemaAsync(); await repository.EnsureCombatSchemaAsync();
         await using var connection = new MySqlConnection(settings.BuildConnectionString()); await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "DROP TABLE IF EXISTS USERDATA,LEVEL_UP; CREATE TABLE USERDATA(strUserID varchar(21),Level tinyint unsigned,Exp int,Points smallint,strSkill varbinary(10),Gold int,strItem blob,strSerial blob,Hp smallint,Mp smallint,Zone smallint,PX int,PZ int,PY int) ENGINE=InnoDB; " +
+        command.CommandText = "DROP TABLE IF EXISTS KO_MORADON_LAYOUT,KO_MORADON_NPCPOS_BACKUP,KO_MORADON_OBJECTPOS_BACKUP,USERDATA,LEVEL_UP; CREATE TABLE USERDATA(strUserID varchar(21),Level tinyint unsigned,Exp int,Points smallint,strSkill varbinary(10),Gold int,strItem blob,strSerial blob,Hp smallint,Mp smallint,Zone smallint,PX int,PZ int,PY int) ENGINE=InnoDB; " +
             "CREATE TABLE LEVEL_UP(level tinyint unsigned,Exp bigint); INSERT INTO LEVEL_UP VALUES(1,100),(2,200),(3,300),(80,1000000);";
         await command.ExecuteNonQueryAsync();
         var slots = Enumerable.Repeat(ItemSlotData.Empty,75).ToArray(); slots[74] = new(65537,-8687,5044,0,0);
@@ -180,7 +180,37 @@ internal static class CombatRewardsVerification
         await repository.EnsureTravelSchemaAsync();
         command.CommandText="SELECT strZoneName FROM ZONE_INFO WHERE ServerNo=1 AND ZoneNo=21";
         test("Moradon: legacy map reference upgrades to packaged expanded geometry",Convert.ToString(await command.ExecuteScalarAsync())=="moradon_expanded.smd");
+        command.CommandText="UPDATE ZONE_INFO SET strZoneName='custom.smd' WHERE ServerNo=1 AND ZoneNo=21";
+        await command.ExecuteNonQueryAsync();
+        await repository.EnsureMoradonNpcLayoutAsync();
+        command.CommandText="SELECT COUNT(*) FROM KO_MORADON_NPCPOS_BACKUP";
+        test("Moradon NPC layout: custom maps are not modified",Convert.ToInt32(await command.ExecuteScalarAsync())==0);
+        command.CommandText="UPDATE ZONE_INFO SET strZoneName='moradon_expanded.smd' WHERE ServerNo=1 AND ZoneNo=21";
+        await command.ExecuteNonQueryAsync();
+        command.CommandText="CREATE TRIGGER reject_moradon_layout BEFORE INSERT ON K_NPCPOS FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='layout rollback test'";
+        await command.ExecuteNonQueryAsync();
+        var rolledBack=false;
+        try { await repository.EnsureMoradonNpcLayoutAsync(); }
+        catch(MySqlException ex) when(ex.Number==1644) { rolledBack=true; }
+        command.CommandText="SELECT SUM(NumNPC) FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100";
+        test("Moradon NPC layout: failed replacement rolls back deletes",rolledBack&&Convert.ToInt32(await command.ExecuteScalarAsync())==57);
+        command.CommandText="SELECT COUNT(*) FROM KO_MORADON_NPCPOS_BACKUP";
+        test("Moradon NPC layout: failed replacement rolls back backups",Convert.ToInt32(await command.ExecuteScalarAsync())==0);
+        command.CommandText="DROP TRIGGER reject_moradon_layout";
+        await command.ExecuteNonQueryAsync();
+        await Task.WhenAll(repository.EnsureMoradonNpcLayoutAsync(),repository.EnsureMoradonNpcLayoutAsync());
+        command.CommandText="SELECT SUM(NumNPC) FROM KO_MORADON_NPCPOS_BACKUP";
+        test("Moradon NPC layout: concurrent startup backs up original placements once",Convert.ToInt32(await command.ExecuteScalarAsync())==57);
+        command.CommandText="SELECT COUNT(*) FROM KO_MORADON_OBJECTPOS_BACKUP";
+        test("Moradon NPC layout: original gate/anvil coordinates backed up",Convert.ToInt32(await command.ExecuteScalarAsync())==3);
         var expandedWorld = new WorldCatalog(await repository.LoadWorldDataAsync(),WorldCatalog.FindMapDirectory());
+        var movedNpcs = expandedWorld.Zones[21].Npcs;
+        test("Moradon NPC layout: native world has moved Inn and unchanged monsters",movedNpcs.Count(n=>n.Prototype.IsMonster)==474&&movedNpcs.Any(n=>n.Prototype.Id==16096&&n.X==770&&n.Z==648)&&movedNpcs.Count(n=>!n.Prototype.IsMonster)==45);
+        command.CommandText="UPDATE K_NPCPOS SET LeftX=771,RightX=771 WHERE ZoneID=21 AND NpcID=16096 AND ActType>=100";
+        await command.ExecuteNonQueryAsync();
+        await repository.EnsureMoradonNpcLayoutAsync();
+        command.CommandText="SELECT LeftX FROM K_NPCPOS WHERE ZoneID=21 AND NpcID=16096 AND ActType>=100";
+        test("Moradon NPC layout: future operator edits survive restart",Convert.ToInt32(await command.ExecuteScalarAsync())==771);
         var nativeTown = (await repository.LoadTravelDestinationsAsync(1,80,21)).Single();
         nativeTown = TravelRules.TownForMap(nativeTown,expandedWorld.Zones[21].Map.Extent);
         test("Moradon: native Town now resolves confirmed plaza with loaded map",nativeTown.Px==81600&&nativeTown.Pz==54300&&expandedWorld.Zones[21].Map.Contains(816,543)&&float.IsFinite(expandedWorld.Zones[21].Map.Height(816,543)));

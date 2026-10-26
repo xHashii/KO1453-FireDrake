@@ -42,6 +42,7 @@ var characters = new MariaDbCharacterRepository(settings.Database);
 try
 {
     await characters.EnsureTravelSchemaAsync();
+    await characters.EnsureMoradonNpcLayoutAsync();
     await characters.EnsureCombatSchemaAsync();
     await characters.EnsureFoundationSchemaAsync();
     await characters.EnsurePotionDataAsync();
