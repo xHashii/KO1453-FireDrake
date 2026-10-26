@@ -70,6 +70,15 @@ public sealed partial class MariaDbCharacterRepository
         command.CommandText = await reader.ReadToEndAsync().ConfigureAwait(false);
         var repaired = await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         KnightOnline.Shared.Diagnostics.KoLog.Info($"Zone init points: repaired {repaired} shipped placeholder/invalid row(s); map IDs unchanged.");
+        // GameServer also applies this when LoginServer AUTO_MIGRATE is disabled.
+        // This only changes the legacy map filename; never character/spawn rows.
+        using var mapStream = typeof(MariaDbCharacterRepository).Assembly.GetManifestResourceStream(
+            "KnightOnline.Database.MoradonMapRepair.sql")
+            ?? throw new InvalidOperationException("Embedded Moradon map reference update is missing.");
+        using var mapReader = new StreamReader(mapStream);
+        command.CommandText = await mapReader.ReadToEndAsync().ConfigureAwait(false);
+        var mapsUpdated = await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        KnightOnline.Shared.Diagnostics.KoLog.Info($"Moradon map reference: updated {mapsUpdated} legacy row(s); selected expanded map uses Town 816,543.");
     }
 
     public async Task<IReadOnlyList<TravelDestination>> LoadTravelDestinationsAsync(byte nation, byte level, ushort? townZone = null)

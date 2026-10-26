@@ -56,6 +56,21 @@ class WorldCoordinateTests(unittest.TestCase):
         repair(db)
         self.assertEqual(db.execute('SELECT * FROM ZONE_INFO').fetchall(), snapshot)
 
+    def test_expanded_moradon_reference_and_plaza(self):
+        db = load_world()
+        before = db.execute('SELECT * FROM START_POSITION').fetchall()
+        sql = (ROOT / 'sql/mysql/kn_online/0011_moradon_expanded.sql').read_text()
+        db.executescript(sql)
+        self.assertEqual(db.execute('SELECT strZoneName FROM ZONE_INFO WHERE ZoneNo=21').fetchone()[0], 'moradon_expanded.smd')
+        with (ROOT / 'data/map/moradon_expanded.smd').open('rb') as stream:
+            size, spacing = struct.unpack('<if', stream.read(8))
+        self.assertEqual((size - 1) * spacing, 1024)
+        self.assertTrue(816 < (size - 1) * spacing and 543 < (size - 1) * spacing)
+        self.assertEqual(db.execute('SELECT * FROM START_POSITION').fetchall(), before)
+        db.execute("UPDATE ZONE_INFO SET strZoneName='custom.smd' WHERE ZoneNo=21")
+        db.executescript(sql)
+        self.assertEqual(db.execute('SELECT strZoneName FROM ZONE_INFO WHERE ZoneNo=21').fetchone()[0], 'custom.smd')
+
     def test_preserves_custom_coordinates(self):
         db = load_world()
         db.execute('UPDATE ZONE_INFO SET InitX=55000, InitZ=54000 WHERE ZoneNo=12')

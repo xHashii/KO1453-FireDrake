@@ -27,7 +27,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-DATA_SQL_GLOB = ("sql/mysql/kn_online/0002_data.sql", "sql/mysql/kn_online/0003_data.sql")
+# Keep both original assets (rollback) and names introduced by explicit map migration.
+DATA_SQL_GLOB = ("sql/mysql/kn_online/0002_data.sql", "sql/mysql/kn_online/0003_data.sql",
+                 "sql/mysql/kn_online/0011_moradon_expanded.sql")
 
 # Quoted literals ending in .smd / .lua. Data files are huge, so this is a
 # line-oriented scan rather than a parse; map and quest filenames only ever

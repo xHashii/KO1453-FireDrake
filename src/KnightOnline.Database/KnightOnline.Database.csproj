@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Items/StarterItemRepair.sql" />
+    <EmbeddedResource Include="../../sql/mysql/kn_online/0011_moradon_expanded.sql" LogicalName="KnightOnline.Database.MoradonMapRepair.sql" />
     <EmbeddedResource Include="../../sql/mysql/kn_online/0010_combat_rewards.sql" LogicalName="KnightOnline.Database.CombatSchema.sql" />
     <EmbeddedResource Include="Items/PotionMagicRepair.sql" />
     <EmbeddedResource Include="Items/ItemCatalog.sql.gz" LogicalName="KnightOnline.Database.Items.ItemCatalog.sql.gz" />

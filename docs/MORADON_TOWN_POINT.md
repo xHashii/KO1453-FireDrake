@@ -28,3 +28,36 @@ GM turbo is a client input feature: the inspected Open-KO GameProcMain reference
 uses hold-Q for AUTHORITY_MANAGER with chat unfocused. Existing MYINFO sends real
 owner authority. No invented server-side held-key detector or universal speed
 bypass is added here; exact behavior depends on the user's executable.
+
+## Follow-up fix: native Town still selected old coordinates
+
+The prior bounds fallback left Town on the old point when the server still loaded
+512-unit Moradon, even though the owner's client displayed the expanded map.
+Now the selected larger SMD is packaged as `data/map/moradon_expanded.smd` and
+copied into build/publish output. Its source is the owner's previously supplied
+map (SHA256 ceedfdcf0a77519f498c8db903903e775cf8053bab5fc53e7732e32999da42a4).
+No alternate client/protocol support is reintroduced.
+
+Migration 0011 changes ONLY server-1 zone-21's exact legacy filename
+`moradon_20060124.smd` to `moradon_expanded.smd`. GameServer startup also applies
+the same guarded update when LoginServer migration is disabled. Custom map names
+are preserved. Restart is required because WorldCatalog caches maps. This fixes
+the prerequisite for the already implemented 816,543 Town rule. Native H-menu
+Home and chat Town both dispatch to the same Town method.
+
+START_POSITION, NPC spawn coordinates, ZONE_INFO init coordinates, existing
+character positions/items and other zones are not rewritten. However, loading
+the new map changes terrain-derived NPC heights and the available warp data;
+those are inherent map differences, not stair-collision repair. The old SMD is
+retained for rollback, not deleted or overwritten.
+
+Update/rebuild/restart GameServer. Expect the `[ WORLD ]` zone-21 warp count to
+be 14 and `[ TOWN ]` to show X=816 Z=543 mapExtent=1024. No manual SQL is required
+for the exact legacy reference. If the destination remains old, provide the Town
+log: a preserved custom map or a stale binary/runtime asset may be involved.
+
+Rollback: stop server, copy original SMD to a distinct custom rollback filename
+(e.g. moradon_legacy_restore.smd), point only server-1 zone-21 at that filename,
+then restart. Using a custom name prevents the exact-legacy migration from
+immediately selecting the expanded map again. This changes no saved positions;
+use a disposable test character and return to safe ground before rollback.
