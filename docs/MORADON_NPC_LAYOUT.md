@@ -115,3 +115,32 @@ is not rerun. V2 has its own transactional snapshot in
 KO_MORADON_V2_NPCPOS_BACKUP and does not overwrite original v1 backups. Restarts
 preserve subsequent edits. Custom maps remain skipped. Deployment is the same
 pull/rebuild/restart; no manual SQL or marker reset is required.
+
+## Layout v3: donor-anchored similarity (current)
+
+After rechecking donor K_NPCPOS and K_OBJECTPOS, those six legacy IDs still have
+no Moradon placement. Clepio exists in donor zone 64, **not Moradon**; copying
+179,241 into Moradon would be incorrect. The other unmatched IDs have no donor
+spawn rows. Therefore exact donor placement for them is not available.
+
+The owner's request to get as close as possible supersedes v2's loose placements:
+
+- Clepio: **850,561**, five units beside donor Karpis (855,561), same facing.
+- Arendil: **743,529**, six units beside donor military-service NPC Kugar
+  (749,529), instead of the unrelated Coliseum location.
+- Statues: **792,537** (Karus), **843,537** (Elmorad), small rounded offsets from
+  the actual donor nation gates, outside their interaction points.
+- Extra guards follow the exact donor guard columns and facing: Elmorad
+  X=842/836, Karus X=795/801. Additional ranks use Z=495/499/503, four-unit
+  spacing ahead of the donor guards at Z=491. All twelve extra guards are kept.
+
+These are **similar**, chosen placements, not claimed donor spawn rows. The
+21 exact shared-ID matches, three object positions and all field outposts remain
+unchanged. See MORADON_DONOR_ALIGNMENT.json for per-instance anchors/reasons.
+
+V3 has its own marker and KO_MORADON_V3_NPCPOS_BACKUP snapshot; already deployed
+v1/v2 installations upgrade automatically on restart, without replaying older
+stages. Exact v2-coordinate predicates preserve subsequent manual edits. No
+monsters, services, other zones or characters change. SQL/DB regression tests
+cover v2-to-v3 upgrade, donor guard/potion anchors and unchanged exact matches.
+Actual visual clearance still needs native-client acceptance.

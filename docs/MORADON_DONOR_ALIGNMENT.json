@@ -1,0 +1,197 @@
+{
+  "source": "Similar placements anchored to supplied donor SQL; these six IDs have no zone-21 donor placement",
+  "spawns": [
+    {
+      "id": 521,
+      "previous": [
+        746,
+        479
+      ],
+      "x": 743,
+      "z": 529,
+      "direction": 0,
+      "donorAnchor": "Kugar 13009 at 749,529",
+      "rationale": "Six units beside donor military-service NPC, rather than the Coliseum."
+    },
+    {
+      "id": 11020,
+      "previous": [
+        838,
+        502
+      ],
+      "x": 842,
+      "z": 495,
+      "direction": 0,
+      "donorAnchor": "Donor guard 11021 at 842,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    },
+    {
+      "id": 11020,
+      "previous": [
+        842,
+        502
+      ],
+      "x": 836,
+      "z": 495,
+      "direction": 0,
+      "donorAnchor": "Donor guard 11021 at 836,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    },
+    {
+      "id": 11020,
+      "previous": [
+        846,
+        502
+      ],
+      "x": 842,
+      "z": 499,
+      "direction": 0,
+      "donorAnchor": "Donor guard 11021 at 842,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    },
+    {
+      "id": 11020,
+      "previous": [
+        838,
+        506
+      ],
+      "x": 836,
+      "z": 499,
+      "direction": 0,
+      "donorAnchor": "Donor guard 11021 at 836,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    },
+    {
+      "id": 11020,
+      "previous": [
+        842,
+        506
+      ],
+      "x": 842,
+      "z": 503,
+      "direction": 0,
+      "donorAnchor": "Donor guard 11021 at 842,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    },
+    {
+      "id": 11020,
+      "previous": [
+        846,
+        506
+      ],
+      "x": 836,
+      "z": 503,
+      "direction": 0,
+      "donorAnchor": "Donor guard 11021 at 836,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    },
+    {
+      "id": 13003,
+      "previous": [
+        849,
+        570
+      ],
+      "x": 850,
+      "z": 561,
+      "direction": 90,
+      "donorAnchor": "Karpis 13005 at 855,561",
+      "rationale": "Five units beside donor potion vendor; same facing."
+    },
+    {
+      "id": 16073,
+      "previous": [
+        790,
+        539
+      ],
+      "x": 792,
+      "z": 537,
+      "direction": 0,
+      "donorAnchor": "Karus gate 4014 at 797.696167,526.878845",
+      "rationale": "Rounded nearby offset outside the gate interaction point."
+    },
+    {
+      "id": 16074,
+      "previous": [
+        845,
+        539
+      ],
+      "x": 843,
+      "z": 537,
+      "direction": 0,
+      "donorAnchor": "Elmorad gate 4013 at 837.3597,526.756958",
+      "rationale": "Mirrored gate-side offset, outside interaction point."
+    },
+    {
+      "id": 21020,
+      "previous": [
+        788,
+        502
+      ],
+      "x": 795,
+      "z": 495,
+      "direction": 0,
+      "donorAnchor": "Donor guard 21021 at 795,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    },
+    {
+      "id": 21020,
+      "previous": [
+        792,
+        502
+      ],
+      "x": 801,
+      "z": 495,
+      "direction": 0,
+      "donorAnchor": "Donor guard 21021 at 801,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    },
+    {
+      "id": 21020,
+      "previous": [
+        796,
+        502
+      ],
+      "x": 795,
+      "z": 499,
+      "direction": 0,
+      "donorAnchor": "Donor guard 21021 at 795,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    },
+    {
+      "id": 21020,
+      "previous": [
+        788,
+        506
+      ],
+      "x": 801,
+      "z": 499,
+      "direction": 0,
+      "donorAnchor": "Donor guard 21021 at 801,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    },
+    {
+      "id": 21020,
+      "previous": [
+        792,
+        506
+      ],
+      "x": 795,
+      "z": 503,
+      "direction": 0,
+      "donorAnchor": "Donor guard 21021 at 795,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    },
+    {
+      "id": 21020,
+      "previous": [
+        796,
+        506
+      ],
+      "x": 801,
+      "z": 503,
+      "direction": 0,
+      "donorAnchor": "Donor guard 21021 at 801,491",
+      "rationale": "Same guard columns/facing; three additional ranks at four-unit spacing."
+    }
+  ]
+}

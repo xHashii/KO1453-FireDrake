@@ -62,6 +62,33 @@ class MoradonLayoutTests(unittest.TestCase):
         db.executescript(sql)
         self.assertEqual(snapshot,list(db.execute('SELECT * FROM K_NPCPOS')))
 
+    def test_donor_anchored_alignment_updates_v2_only(self):
+        db = load_tables()
+        for name in ('MoradonNpcPlacements','MoradonRemainingPlacements'):
+            db.executescript((ROOT / f'src/KnightOnline.Database/World/{name}.sql').read_text())
+        layout = json.loads((ROOT / 'docs/MORADON_DONOR_ALIGNMENT.json').read_text())
+        ids = '521,11020,13003,16073,16074,21020'
+        scope = f'ZoneID<>21 OR ActType<100 OR NpcID NOT IN ({ids})'
+        before = list(db.execute(f'SELECT * FROM K_NPCPOS WHERE {scope}'))
+        sql = (ROOT / 'src/KnightOnline.Database/World/MoradonDonorAlignment.sql').read_text()
+        db.executescript(sql)
+        for r in layout['spawns']:
+            row = db.execute('SELECT LeftX,TopZ,RightX,BottomZ,byDirection,NumNPC FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100 AND NpcID=? AND LeftX=? AND TopZ=?',(r['id'],r['x'],r['z'])).fetchall()
+            self.assertEqual(row,[(r['x'],r['z'],r['x'],r['z'],r['direction'],1)])
+        self.assertEqual(before,list(db.execute(f'SELECT * FROM K_NPCPOS WHERE {scope}')))
+        donor = json.loads((ROOT / 'docs/MORADON_NPC_PLACEMENTS.json').read_text())
+        for r in layout['spawns']:
+            if r['id'] in (11020,21020):
+                reference_id = 11021 if r['id']==11020 else 21021
+                anchors = [a for a in donor['spawns'] if a['id']==reference_id]
+                self.assertTrue(any(a['x']==r['x'] and r['z']-a['z'] in (4,8,12) and a['direction']==r['direction'] for a in anchors))
+        potion = next(a for a in donor['spawns'] if a['id']==13005 and a['x']==855)
+        clepio = next(r for r in layout['spawns'] if r['id']==13003)
+        self.assertEqual((clepio['x'],clepio['z'],clepio['direction']),(potion['x']-5,potion['z'],potion['direction']))
+        snapshot = list(db.execute('SELECT * FROM K_NPCPOS'))
+        db.executescript(sql)
+        self.assertEqual(snapshot,list(db.execute('SELECT * FROM K_NPCPOS')))
+
 
 if __name__ == '__main__':
     unittest.main()

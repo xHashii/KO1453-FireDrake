@@ -15,6 +15,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Items/StarterItemRepair.sql" />
+    <EmbeddedResource Include="../../sql/mysql/kn_online/0014_moradon_donor_alignment.sql" LogicalName="KnightOnline.Database.MoradonAlignmentSchema.sql" />
+    <EmbeddedResource Include="World/MoradonDonorAlignment.sql" LogicalName="KnightOnline.Database.MoradonDonorAlignment.sql" />
     <EmbeddedResource Include="../../sql/mysql/kn_online/0013_moradon_remaining_npcs.sql" LogicalName="KnightOnline.Database.MoradonRemainingSchema.sql" />
     <EmbeddedResource Include="World/MoradonRemainingPlacements.sql" LogicalName="KnightOnline.Database.MoradonRemainingPlacements.sql" />
     <EmbeddedResource Include="../../sql/mysql/kn_online/0012_moradon_npc_layout.sql" LogicalName="KnightOnline.Database.MoradonLayoutSchema.sql" />

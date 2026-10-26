@@ -18,6 +18,7 @@ public sealed partial class MariaDbCharacterRepository
     {
         await ApplyMoradonNpcLayoutAsync(1).ConfigureAwait(false);
         await ApplyMoradonNpcLayoutAsync(2).ConfigureAwait(false);
+        await ApplyMoradonNpcLayoutAsync(3).ConfigureAwait(false);
     }
 
     private async Task ApplyMoradonNpcLayoutAsync(int layoutId)
@@ -26,7 +27,8 @@ public sealed partial class MariaDbCharacterRepository
         await connection.OpenAsync().ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = await ReadMoradonResource("KnightOnline.Database.MoradonLayoutSchema.sql") +
-                              await ReadMoradonResource("KnightOnline.Database.MoradonRemainingSchema.sql");
+                              await ReadMoradonResource("KnightOnline.Database.MoradonRemainingSchema.sql") +
+                              await ReadMoradonResource("KnightOnline.Database.MoradonAlignmentSchema.sql");
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         // A persistent sentinel row serializes concurrent startup attempts. DDL stays
         // outside the transaction; backups, changes and AppliedUtc commit together.
@@ -50,12 +52,19 @@ public sealed partial class MariaDbCharacterRepository
             await transaction.CommitAsync().ConfigureAwait(false);
             return;
         }
-        command.CommandText = layoutId == 2
+        command.CommandText = layoutId == 3
+            ? "INSERT INTO KO_MORADON_V3_NPCPOS_BACKUP SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100"
+            : layoutId == 2
             ? "INSERT INTO KO_MORADON_V2_NPCPOS_BACKUP SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100"
             : "INSERT INTO KO_MORADON_NPCPOS_BACKUP SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100; " +
                               "INSERT INTO KO_MORADON_OBJECTPOS_BACKUP SELECT * FROM K_OBJECTPOS WHERE ZoneID=21;";
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
-        command.CommandText = await ReadMoradonResource(layoutId == 1 ? "KnightOnline.Database.MoradonNpcPlacements.sql" : "KnightOnline.Database.MoradonRemainingPlacements.sql");
+        command.CommandText = await ReadMoradonResource(layoutId switch
+        {
+            1 => "KnightOnline.Database.MoradonNpcPlacements.sql",
+            2 => "KnightOnline.Database.MoradonRemainingPlacements.sql",
+            _ => "KnightOnline.Database.MoradonDonorAlignment.sql"
+        });
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         command.CommandText = "SELECT COUNT(*) FROM K_NPCPOS p LEFT JOIN K_NPC n ON n.sSid=p.NpcID " +
                               "WHERE p.ZoneID=21 AND p.ActType>=100 AND n.sSid IS NULL";
@@ -66,6 +75,8 @@ public sealed partial class MariaDbCharacterRepository
         await transaction.CommitAsync().ConfigureAwait(false);
         KoLog.Info(layoutId == 1
             ? "[ MORADON NPC ] Applied matched donor layout; backed up original placements."
+            : layoutId == 3
+            ? "[ MORADON NPC ] Applied layout v3: remaining NPCs aligned to donor service, gate and guard anchors; exact donor placements unchanged."
             : "[ MORADON NPC ] Applied layout v2: remaining 16 legacy NPC instances moved into expanded town. Monsters unchanged; v2 backup saved.");
     }
 }
