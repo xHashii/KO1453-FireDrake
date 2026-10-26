@@ -408,6 +408,15 @@ IntroVerification.Rules((name,ok)=>Check(name,ok));
 
 // ---------- Prototype travel rules and wire vectors ----------
 {
+    var karusTown = new KnightOnline.Database.TravelDestination(21,"Moradon",81700,43200,0);
+    var elmoTown = karusTown with {Px=30600,Pz=35200};
+    var plaza = KnightOnline.Database.TravelRules.TownForMap(karusTown,1024);
+    Check("town: expanded Moradon uses owner plaza in database units",plaza.Px==81600&&plaza.Pz==54300&&plaza.Zone==21);
+    Check("town: same plaza for both nations",KnightOnline.Database.TravelRules.TownForMap(elmoTown,1024)==plaza);
+    Check("town: legacy Moradon retains valid authored destination",KnightOnline.Database.TravelRules.TownForMap(elmoTown,512)==elmoTown);
+    var homeTown=karusTown with {Zone=1};
+    Check("town: other zones unchanged",KnightOnline.Database.TravelRules.TownForMap(homeTown,2048)==homeTown);
+    Check("town: reject boundary and invalid map extent overrides",KnightOnline.Database.TravelRules.TownForMap(karusTown,816)==karusTown&&KnightOnline.Database.TravelRules.TownForMap(karusTown,float.NaN)==karusTown);
     Check("travel: Moradon is public", KnightOnline.Database.TravelRules.CanEnter(21, 1, 1));
     Check("travel: own homeland", KnightOnline.Database.TravelRules.CanEnter(2, 2, 80));
     Check("travel: enemy homeland rejected", !KnightOnline.Database.TravelRules.CanEnter(1, 2, 80));

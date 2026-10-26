@@ -7,6 +7,17 @@ public sealed record TravelDestination(ushort Zone, string Name, int Px, int Pz,
 /// <summary>Public prototype travel routes. Event/war zones are deliberately not exposed.</summary>
 public static class TravelRules
 {
+    // Owner-selected flat plaza in the expanded Moradon, shared by both nations.
+    // Repository's original 512-unit map cannot contain this point: retain its
+    // database-authored destination rather than warping outside loaded geometry.
+    public static TravelDestination TownForMap(TravelDestination configured, float extent)
+    {
+        const int x = 816, z = 543;
+        if (configured.Zone != 21 || !float.IsFinite(extent) || extent <= x || extent <= z)
+            return configured;
+        return configured with { Px = x * 100, Pz = z * 100 };
+    }
+
     public static bool CanEnter(ushort zone, byte nation, byte level) => zone switch
     {
         21 => true,

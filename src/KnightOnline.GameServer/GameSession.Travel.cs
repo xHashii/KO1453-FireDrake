@@ -108,7 +108,14 @@ internal sealed partial class GameSession
             var target = _characters.LoadTravelDestinationsAsync(_user!.Nation, _user.Level, _user.Zone)
                 .GetAwaiter().GetResult().FirstOrDefault();
             if (target is null) TravelMessage("No town position is configured for this zone.");
-            else BeginTravel(target);
+            else
+            {
+                if (CurrentWorld is not { } zone) return;
+                target = TravelRules.TownForMap(target, zone.Map.Extent);
+                if (target.Zone == 21)
+                    KoLog.Info($"[ TOWN ] {_charId} Moradon X={target.Px / 100f}, Z={target.Pz / 100f}, mapExtent={zone.Map.Extent}; expanded plaza is 816,543.");
+                BeginTravel(target);
+            }
         });
     }
 
