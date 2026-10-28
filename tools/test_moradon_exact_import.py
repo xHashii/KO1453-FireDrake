@@ -2,7 +2,7 @@
 import collections
 import unittest
 from audit_world_npcs import ROOT, load_tables
-from build_moradon_import import source_rows, build, parse_values
+from build_moradon_import import source_rows, build, parse_values, corrected_name
 
 
 class ExactImportTests(unittest.TestCase):
@@ -31,7 +31,8 @@ class ExactImportTests(unittest.TestCase):
                 values=dict(zip(columns,row));definition=original[values['sSid']]
                 for c,value in definition.items():
                     if c in values and not (table=='K_MONSTER' and c=='sItem'):
-                        self.assertEqual(values[c],value,(table,values['sSid'],c))
+                        expected_value=corrected_name(private,values['sSid'],values['sPid'],value) if c=='strName' else value
+                        self.assertEqual(values[c],expected_value,(table,values['sSid'],c))
         self.assertEqual(db.execute('SELECT COUNT(*) FROM KO_MORADON_IMPORTED_NPC').fetchone()[0],39)
         self.assertEqual(db.execute('SELECT COUNT(*) FROM KO_MORADON_IMPORTED_MONSTER').fetchone()[0],37)
         self.assertEqual(db.execute('SELECT SUM(NumNPC) FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100').fetchone()[0],375)

@@ -45,6 +45,7 @@ try
     await characters.EnsureMoradonNpcLayoutAsync();
     await characters.EnsureMoradonMonsterLayoutAsync();
     await characters.EnsureMoradonExactImportAsync();
+    await characters.RepairActorNamesAsync();
     await characters.EnsureCombatSchemaAsync();
     await characters.EnsureFoundationSchemaAsync();
     await characters.EnsurePotionDataAsync();

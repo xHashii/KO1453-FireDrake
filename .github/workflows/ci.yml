@@ -61,6 +61,7 @@ jobs:
           python tools/test_moradon_monster_layout.py
           python tools/build_moradon_import.py --check
           python tools/test_moradon_exact_import.py
+          python tools/test_actor_names.py
           python tools/test_starter_item_repair.py
           python tools/build_item_catalog.py --check
 

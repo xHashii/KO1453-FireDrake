@@ -67,6 +67,13 @@ def literal(value):
     return str(value)
 
 
+def corrected_name(table,sid,model,name):
+    catalog=json.loads((ROOT/'src/KnightOnline.Database/World/ActorNameRepairs.json').read_text())
+    for rule in catalog['rules']:
+        if (rule['table'],rule['id'],rule['model'],rule['old'])==(table,sid,model,(name or '').strip()):return rule['name']
+    return name
+
+
 def build():
     source=source_rows();base=load_tables()
     schemas={t:[r[1] for r in base.execute('PRAGMA table_info('+t+')')] for t in ALLOW}
@@ -91,6 +98,7 @@ def build():
         selected[table]=[]
         for sid in sorted(ids):
             row={c:definitions[sid].get(c,0) for c in schemas[table]}
+            row['strName']=corrected_name('KO_MORADON_IMPORTED_'+('NPC' if table=='K_NPC' else 'MONSTER'),sid,row['sPid'],row['strName'])
             if table=='K_MONSTER':
                 existing=baseline[sid if sid in baseline else fallbacks[sid]]
                 group=existing['sItem'] if existing['sItem'] in drop_ids else 0

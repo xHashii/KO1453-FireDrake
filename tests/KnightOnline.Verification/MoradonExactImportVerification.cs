@@ -53,6 +53,7 @@ internal static class MoradonExactImportVerification
         await repo.EnsureMoradonNpcLayoutAsync();await repo.EnsureMoradonMonsterLayoutAsync();await repo.EnsureMoradonExactImportAsync();
         command.CommandText="SELECT strName FROM KO_MORADON_IMPORTED_NPC WHERE sSid=13016";
         test("exact Moradon import: later startup preserves operator edits",Convert.ToString(await command.ExecuteScalarAsync())=="Operator edit");
+        await ActorNameVerification.DatabaseAsync(repo,connection,test);
         // Prove reversible without changing global catalogs or re-running migrations.
         await Execute("START TRANSACTION; DELETE FROM K_NPCPOS WHERE ZoneID=21; INSERT INTO K_NPCPOS SELECT * FROM KO_MORADON_PREIMPORT_NPCPOS; DELETE FROM K_OBJECTPOS WHERE ZoneID=21; INSERT INTO K_OBJECTPOS SELECT * FROM KO_MORADON_PREIMPORT_OBJECTPOS; DELETE FROM KO_MORADON_IMPORTED_NPC; DELETE FROM KO_MORADON_IMPORTED_MONSTER; COMMIT");
         var restoredData=await repo.LoadWorldDataAsync();

@@ -1,0 +1,630 @@
+{
+  "reference": "Previously supplied full world-table archive; names only, SID/model matched. Current upload used as a secondary matching reference.",
+  "referenceZipSha256": "1999b02e2076ee1abf5f6b652e1e16c132c679456ba407512ad7bbafffac8bee",
+  "rules": [
+    {
+      "table": "K_NPC",
+      "id": 14429,
+      "model": 11000,
+      "old": "a",
+      "name": "Gate Guide(China)",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 16079,
+      "model": 30400,
+      "old": "[Kaishan`s Daughter] Menissiah",
+      "name": "[Kaishan's Daughter] Menissiah",
+      "reason": "punctuation"
+    },
+    {
+      "table": "K_NPC",
+      "id": 17001,
+      "model": 25200,
+      "old": "a",
+      "name": "sohu_npc",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 18001,
+      "model": 12100,
+      "old": "a",
+      "name": "[Sundries] Cobel",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 18002,
+      "model": 12000,
+      "old": "a",
+      "name": "[Inn Hostess] Daruana",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 18003,
+      "model": 2050,
+      "old": "a",
+      "name": "[Item Rental] Nernozan",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 24429,
+      "model": 21000,
+      "old": "a",
+      "name": "Gate Guide(China)",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 24433,
+      "model": 2040,
+      "old": "a",
+      "name": "[Familiar Tamer] Perda",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 27001,
+      "model": 25200,
+      "old": "a",
+      "name": "sohu_npc",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 27002,
+      "model": 25220,
+      "old": "a",
+      "name": "[Weapon Merchant] Kuus",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 27003,
+      "model": 25220,
+      "old": "a",
+      "name": "[Armor Merchant] Hion",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 27004,
+      "model": 25230,
+      "old": "a",
+      "name": "[Sundries] Udian",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 27005,
+      "model": 25230,
+      "old": "a",
+      "name": "[Potion Merchant] Kawani",
+      "reason": "matching reference name, Potion spelling corrected"
+    },
+    {
+      "table": "K_NPC",
+      "id": 27006,
+      "model": 25200,
+      "old": "a",
+      "name": "[Warehouse] Bitheri",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 27007,
+      "model": 25200,
+      "old": "a",
+      "name": "<Kiyoth>",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 27008,
+      "model": 25200,
+      "old": "a",
+      "name": "[Teleporter] Shangduff",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 27009,
+      "model": 25200,
+      "old": "a",
+      "name": "[Teleporter] Shangduff",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 27010,
+      "model": 25200,
+      "old": "a",
+      "name": "[Teleporter] Shangduff",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_NPC",
+      "id": 18008,
+      "model": 25005,
+      "old": "a",
+      "name": "Adilia",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 13001,
+      "model": 31200,
+      "old": "`Accessory Merchant`",
+      "name": "[Accessory Merchant]Hera",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 13005,
+      "model": 31300,
+      "old": "`Healing Potion`Karp",
+      "name": "[Healing Potion]Karpis",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 13006,
+      "model": 12200,
+      "old": "`Armor Merchant`Hest",
+      "name": "[Armor Merchant]Hesta",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 13007,
+      "model": 12100,
+      "old": "`Sundries`Zarta",
+      "name": "[Sundries]Zarta",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 13008,
+      "model": 31400,
+      "old": "`Weapon Merchant`Gar",
+      "name": "[Weapon Merchant]Gargameth",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 13009,
+      "model": 31600,
+      "old": "`Mercenary Captain`C",
+      "name": "[Mercenary Captain]Kugar",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 13013,
+      "model": 30600,
+      "old": "`Sentinel` Patrick",
+      "name": "[Sentinel] Patrick",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 13015,
+      "model": 2060,
+      "old": "`Priest` Iris",
+      "name": "[Priest] Iris",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 13016,
+      "model": 31600,
+      "old": "`Trainer` Kate",
+      "name": "[Familiar Trainer] Kate",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 14301,
+      "model": 31100,
+      "old": "`Blacksmith` Heppa",
+      "name": "[Blacksmith] Heppa",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 14401,
+      "model": 2050,
+      "old": "`Rental booth`Helard",
+      "name": "[Rental booth]Helard",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 14402,
+      "model": 2050,
+      "old": "[Novice Weapon Renta",
+      "name": "[Novice Weapon Rental]Sodern",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 15002,
+      "model": 21610,
+      "old": "`Coliseum` Artes",
+      "name": "[Coliseum] Artes",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 16047,
+      "model": 11100,
+      "old": "`Operator` Moira",
+      "name": "[Operator] Moira",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 16079,
+      "model": 30400,
+      "old": "[Grand Merchant`s Da",
+      "name": "[Kaishan's Daughter] Menissiah",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 16085,
+      "model": 31000,
+      "old": "`Peddler`Hemes",
+      "name": "[Peddler]Hemes",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 16096,
+      "model": 30700,
+      "old": "`InnHostess` Neria",
+      "name": "[InnHostess] Neria",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 16097,
+      "model": 30700,
+      "old": "`InnHostess` Nia",
+      "name": "[InnHostess] Nia",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 18004,
+      "model": 31900,
+      "old": "`Grand Merchant` Kai",
+      "name": "[Grand Merchant] Kaishan",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 18005,
+      "model": 30500,
+      "old": "`Manager`Billbor",
+      "name": "[Manager]Billbor",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 19001,
+      "model": 11510,
+      "old": "[Elmo Dispatch Offic",
+      "name": "[Elmo Dispatch Officer] Laidas",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 19002,
+      "model": 12100,
+      "old": "`Entrep Trader` Berr",
+      "name": "[Entrep Trader] Berret",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 19003,
+      "model": 2050,
+      "old": "`Mercenary adjutant`",
+      "name": "[Mercenary adjutant] Lazer",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 19004,
+      "model": 21510,
+      "old": "[Mercenary Supply Of",
+      "name": "[Mercenary Supply Officer] Osm",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 19005,
+      "model": 19005,
+      "old": "`Tarot Reader` Mekin",
+      "name": "[Tarot Reader] Mekin",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 19006,
+      "model": 11610,
+      "old": "`Arena Manager` Dual",
+      "name": "[Arena Manager] Dualer",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 22301,
+      "model": 30900,
+      "old": "`Scrolls`Charon",
+      "name": "[Scrolls]Charon",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "KO_MORADON_IMPORTED_NPC",
+      "id": 29001,
+      "model": 21610,
+      "old": "[Karus Dispatch Offi",
+      "name": "[Karus Dispatch Office] Porm",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 201,
+      "model": 200,
+      "old": "Wold bulcan",
+      "name": "Wild Bulcan",
+      "reason": "reference spelling"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 207,
+      "model": 210,
+      "old": "shilan",
+      "name": "Silan",
+      "reason": "reference spelling"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 251,
+      "model": 200,
+      "old": "Wold bulcan",
+      "name": "Wild bulcan",
+      "reason": "reference spelling"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 257,
+      "model": 210,
+      "old": "shilan",
+      "name": "silan",
+      "reason": "reference spelling"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 5801,
+      "model": 5500,
+      "old": "",
+      "name": "Ego",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 5851,
+      "model": 5500,
+      "old": "",
+      "name": "Ego",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 5901,
+      "model": 5501,
+      "old": "",
+      "name": "Glutton",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 5951,
+      "model": 5501,
+      "old": "",
+      "name": "Glutton",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6001,
+      "model": 5502,
+      "old": "",
+      "name": "Wrath",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6051,
+      "model": 5502,
+      "old": "",
+      "name": "Wrath",
+      "reason": "same-family spelling"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6101,
+      "model": 5503,
+      "old": "",
+      "name": "Sloth",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6151,
+      "model": 5503,
+      "old": "",
+      "name": "Sloth",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6201,
+      "model": 5504,
+      "old": "",
+      "name": "Lust",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6251,
+      "model": 5504,
+      "old": "",
+      "name": "Lust",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6301,
+      "model": 5505,
+      "old": "",
+      "name": "Envy",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6351,
+      "model": 5505,
+      "old": "",
+      "name": "Envy",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6401,
+      "model": 5506,
+      "old": "",
+      "name": "Greed",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6451,
+      "model": 5506,
+      "old": "",
+      "name": "Greed",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6501,
+      "model": 5508,
+      "old": "",
+      "name": "Ultima",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6551,
+      "model": 5508,
+      "old": "",
+      "name": "Ultima",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6601,
+      "model": 5507,
+      "old": "",
+      "name": "Ashiton",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6651,
+      "model": 5507,
+      "old": "",
+      "name": "Ashiton",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6801,
+      "model": 30300,
+      "old": "",
+      "name": "Treasure Box",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 6851,
+      "model": 30300,
+      "old": "",
+      "name": "Treasure Box",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 7041,
+      "model": 5600,
+      "old": "a",
+      "name": "Dark Dragon",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 7042,
+      "model": 5601,
+      "old": "a",
+      "name": "Golden Dragon",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 7043,
+      "model": 5603,
+      "old": "a",
+      "name": "Ghost",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 7044,
+      "model": 5604,
+      "old": "a",
+      "name": "Red Ghost",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 7045,
+      "model": 5605,
+      "old": "a",
+      "name": "Tarantula",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 7046,
+      "model": 5606,
+      "old": "a",
+      "name": "Cannibalistic Tarantula",
+      "reason": "full reference name (matching SID and model)"
+    },
+    {
+      "table": "K_MONSTER",
+      "id": 7047,
+      "model": 5607,
+      "old": "a",
+      "name": "Dragon God-Kamera",
+      "reason": "full reference name (matching SID and model)"
+    }
+  ]
+}

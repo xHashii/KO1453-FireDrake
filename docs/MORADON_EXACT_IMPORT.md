@@ -17,7 +17,8 @@ procedures, SQL-mode directives or protocol changes are applied.
 - 39 NPC definitions (38 spawn IDs plus anvil 5001) and 37 monster definitions
   are stored privately for Moradon. Model, name, size, faction/type, stats and
   runtime-loaded AI properties use uploaded source values, subject to existing
-  runtime safety caps. Names already truncated in the upload are not invented.
+  runtime safety caps. Truncated display names are restored by the vetted name-only catalog described
+  in ACTOR_NAME_REPAIR.md; other compatible definition fields keep the import rules.
 - Full supplied spawn rows replace ALL earlier zone-21 spawns. No old guard,
   statue, boss or adapted variant is kept unless present in this upload. The
   previous mixed population of 646 is intentionally replaced by 375.

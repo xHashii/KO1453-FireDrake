@@ -15,6 +15,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Items/StarterItemRepair.sql" />
+    <EmbeddedResource Include="../../sql/mysql/kn_online/0017_actor_name_repair.sql" LogicalName="KnightOnline.Database.ActorNameSchema.sql" />
+    <EmbeddedResource Include="World/ActorNameRepairs.json" LogicalName="KnightOnline.Database.ActorNameRepairs.json" />
     <EmbeddedResource Include="../../sql/mysql/kn_online/0016_moradon_exact_import.sql" LogicalName="KnightOnline.Database.MoradonExactSchema.sql" />
     <EmbeddedResource Include="World/MoradonExactImport.sql" LogicalName="KnightOnline.Database.MoradonExactImport.sql" />
     <EmbeddedResource Include="../../sql/mysql/kn_online/0015_moradon_monster_layout.sql" LogicalName="KnightOnline.Database.MoradonMonsterSchema.sql" />

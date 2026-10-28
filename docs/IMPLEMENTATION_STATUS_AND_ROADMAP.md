@@ -389,3 +389,11 @@ replacement and explicit 1453 loot adapters. Global definitions and other zones
 remain unchanged. Imported rental/trainer/quest actors are not newly implemented
 services. This content experiment does not change the client protocol or roadmap;
 native model/menu compatibility must be checked before calling it complete.
+
+## Follow-up: complete actor display names
+
+See [ACTOR_NAME_REPAIR.md](ACTOR_NAME_REPAIR.md). All global and Moradon-private
+catalogs are audited; 78 targeted name corrections recover full labels and fix
+backticks, blanks/placeholders and verified spelling. Existing imports upgrade
+without rerunning world migrations. Only names change, with original-name backups
+and custom-name/model guards. Native name display needs restart/reconnect checking.
