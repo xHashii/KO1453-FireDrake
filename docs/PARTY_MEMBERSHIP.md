@@ -42,7 +42,13 @@ solo rules. Do not call this full retail party gameplay or economy parity.
 Automated tests cover native byte vectors, malformed/trailing data, missing and
 replayed permits, concurrent duplicate acceptance, capacity, leader authority,
 refusal/timeout/death/zone/disconnect eligibility and session ID reuse, private
-party-chat routing and HP/MP update layout. No Windows client test was run here.
+party-chat routing and HP/MP update layout. Owner confirms native visibility, invitation/acceptance and
+kicking after a515a46. Other Windows UI acceptance remains pending.
+
+A four-client TCP/KO-frame harness now checks three-member rosters plus a
+nonmember observer, private party chat, HP/MP changes/death/recovery, leader
+promotion and old-leader denial, self-leave/rejoin, zone changes, forced client
+close and leader disconnect cleanup. See PARTY_ACCEPTANCE.md for exact scope.
 
 ## Owner acceptance (two or preferably three clients)
 

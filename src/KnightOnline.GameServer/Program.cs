@@ -1274,7 +1274,7 @@ internal sealed partial class GameSession : KoSession
             ? $": {Hexdump(packet.Payload)}" : string.Empty;
         // Queue acceptance is not proof the native client parsed/rendered an actor.
         // Bound dumps; only discovery packets, never credentials or full MYINFO.
-        var playerDump = packet.Opcode is WizOpcode.UserInout or WizOpcode.ReqUserin or WizOpcode.Regionchange or WizOpcode.TargetHp
+        var playerDump = packet.Opcode is WizOpcode.UserInout or WizOpcode.ReqUserin or WizOpcode.Regionchange or WizOpcode.TargetHp or WizOpcode.Party
             ? $" [PLAYER WIRE] hex={Convert.ToHexString(packet.Payload[..Math.Min(packet.Length,1024)])} truncated={packet.Length>1024}" : string.Empty;
         var queued=base.Send(packet);
         KoLog.Info($"-> {RemoteIp} sid={_socketId} char={_charId} {Name(packet.Opcode)} ({packet.Length} byte(s)) queued={queued}{travelDump}{playerDump}");

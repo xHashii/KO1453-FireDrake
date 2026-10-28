@@ -577,6 +577,7 @@ try
 {
     await ShutdownVerification.RunAsync((name,ok) => Check(name,ok));
     await PlayerSessionVerification.RunAsync((name,ok) => Check(name,ok));
+    await PartyAcceptanceVerification.RunAsync((name,ok) => Check(name,ok));
     await ShopVerification.RunAsync((name, ok) => Check(name, ok));
 }
 catch (Exception ex)

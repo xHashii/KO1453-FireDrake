@@ -83,6 +83,14 @@ internal static class PartyVerification
         test("party departure cancels leader invitation setup",hub.Process(1,Invite("B")));
         hub.Remove(1);hub.Publish(Player(1));
         test("party leader ID reuse cannot revive invite",!hub.Process(2,Permit()));
+        test("party zone-transition established setup",hub.Process(1,Invite("B"))&&hub.Process(2,Permit()));
+        hub.Publish(Player(2,zone:1));
+        test("party zone publication disbands a two-member roster defensively",hub.Members(1).Length==0&&hub.Members(2).Length==0&&!hub.Chat(2,"stale"));
+        hub.Publish(Player(2));
+        test("party hidden established leader setup",hub.Process(1,Invite("B"))&&hub.Process(2,Permit()));
+        hub.Publish(Player(1,hidden:true));
+        test("party hiding leader removes membership and chat authorization",hub.Members(1).Length==0&&hub.Members(2).Length==0&&!hub.Chat(1,"hidden"));
+        hub.Publish(Player(1));
         hub.Publish(Player(10) with {Name="B"});
         test("party ambiguous character identity refused",!hub.Process(1,Invite("B")));
     }

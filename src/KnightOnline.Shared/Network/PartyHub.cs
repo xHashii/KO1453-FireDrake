@@ -64,7 +64,11 @@ public sealed class PartyHub
             _players.TryGetValue(member.Id, out var old);
             _players[member.Id] = member;
             if (old is not null && (old.Zone != member.Zone || member.Hp <= 0 || member.Hidden)) CancelInvites(member.Id);
-            if (member.Hidden && _groups.TryGetValue(member.Id, out var hiddenGroup)) Leave(member.Id, hiddenGroup);
+            // Travel normally removes the session before republishing. Enforce
+            // the same policy here too so direct zone transitions cannot retain
+            // a stale roster or cross-zone party-chat route.
+            if ((member.Hidden || old is not null && old.Zone != member.Zone)
+                && _groups.TryGetValue(member.Id, out var departingGroup)) Leave(member.Id, departingGroup);
             if (old is null || !_groups.TryGetValue(member.Id, out var group)) return;
             if ((old.MaxHp, old.Hp, old.MaxMp, old.Mp) != (member.MaxHp, member.Hp, member.MaxMp, member.Mp)) Broadcast(group, Vitals(member));
             if (old.Level != member.Level) Broadcast(group, new Packet(WizOpcode.Party).WriteByte(7).WriteUInt16(member.Id).WriteByte(member.Level));
