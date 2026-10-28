@@ -101,6 +101,7 @@ internal static class PartyVerification
         test("party chat still works after town",hub.Chat(2,"after town"));
         hub.Travel(2,21,1);
         test("party actual map change still cleans up two-member party",hub.Members(1).Length==0&&hub.Members(2).Length==0);
+        hub.Publish(Player(2)); // destination load republishes the traveling session
         test("party map-change pending invite setup",hub.Process(1,Invite("B")));
         hub.Travel(1,21,1);
         test("party actual map change cancels invitation",!hub.Process(2,Permit()));
