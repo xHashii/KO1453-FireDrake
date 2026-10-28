@@ -41,7 +41,9 @@ IDs retain those existing drop-group references. Four new IDs use explicit legac
 family fallbacks: 1056->1052 (Battalion), 1057->1003 (Rotten Eyes), 1058->1054
 (undying), 1180->1150 (Skeleton). These sItem adaptations are documented in the
 manifest; all other supplied compatible definition columns are imported unchanged.
-The old schema's extra sLightR field, absent from source, defaults to 0. No source
+Keilan's existing group 256 has no 1453 drop row; its private group is explicitly
+0 (coins-only), preserving the existing effective behavior rather than inventing
+items. The old schema's extra sLightR field, absent from source, defaults to 0. No source
 monster spells or new services are implemented by this import. Map/AI collision
 and client asset limitations from BASIC_MONSTER_AI.md remain.
 

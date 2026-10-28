@@ -11,6 +11,12 @@
   "objects": 33,
   "preservedLootAdapters": [
     {
+      "id": 256,
+      "sourceDrop": 256,
+      "existingDefinition": 256,
+      "drop": 0
+    },
+    {
       "id": 1056,
       "sourceDrop": 1056,
       "existingDefinition": 1052,
