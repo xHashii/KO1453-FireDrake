@@ -1,7 +1,7 @@
 using KnightOnline.Shared.Protocol;
 namespace KnightOnline.Database.Items;
 public sealed record PlayerAppearance(string Name,byte Nation,byte Level,byte Race,ushort Class,
-    ushort X,ushort Z,short Y,byte Face,byte Hair,byte Pose,byte Authority,short Direction,byte Rank,byte Zone,IReadOnlyList<ItemSlotData> Items);
+    ushort X,ushort Z,short Y,byte Face,byte Hair,byte Pose,byte Authority,short Direction,byte Rank,byte Zone,IReadOnlyList<ItemSlotData> Items,bool PartyLeader = false);
 public static class PlayerPackets
 {
     // Some 1453 clients suppress authority-0 remote actors for ordinary viewers.
@@ -22,7 +22,7 @@ public static class PlayerPackets
             .WriteByte(u.Level).WriteByte(u.Race).WriteUInt16(u.Class)
             .WriteUInt16(u.X).WriteUInt16(u.Z).WriteInt16(u.Y)
             .WriteByte(u.Face).WriteByte(u.Hair).WriteByte(u.Pose)
-            .WriteUInt32(1).WriteByte(1).WriteByte(PublicAuthority(u.Authority)).WriteByte(0).WriteByte(0).WriteByte(0)
+            .WriteUInt32(1).WriteByte(1).WriteByte(PublicAuthority(u.Authority)).WriteByte(u.PartyLeader ? (byte)1 : (byte)0).WriteByte(0).WriteByte(0)
             .WriteInt16(u.Direction).WriteByte(0).WriteByte(u.Rank).WriteSByte(-1).WriteSByte(-1);
         foreach(var index in new[]{4,10,1,12,13,5,6,8,46,43})
         { var s=index<u.Items.Count?u.Items[index]:ItemSlotData.Empty; if(s.IsEmpty || (knownItem is not null && !knownItem(s.ItemId))) s=ItemSlotData.Empty; p.WriteUInt32(s.ItemId).WriteInt16(s.Durability).WriteByte(0); }

@@ -27,6 +27,7 @@ internal static class PartyVerification
         test("party competing invitation cannot steal pending recipient", !hub.Process(3, Invite("B")));
         test("party explicit refusal clears pending invitation", hub.Process(2, Permit(0)) && hub.Process(1, Invite("B")));
         test("party acceptance establishes shared leader-first membership", hub.Process(2, Permit()) && hub.Members(1).SequenceEqual(new ushort[]{1,2}) && hub.Members(2).SequenceEqual(new ushort[]{1,2}));
+        test("party authoritative leader query agrees with roster",hub.IsLeader(1)&&!hub.IsLeader(2)&&!hub.IsLeader(999));
         test("party acceptance replay does not duplicate members", !hub.Process(2, Permit()) && hub.Members(2).Length == 2);
         test("party wire: leader state uses uint32 value", Convert.ToHexString(packets[1].Last().Payload)=="01000601000000");
         var before = packets[3].Count;
@@ -37,6 +38,7 @@ internal static class PartyVerification
         test("party cannot kick nonmember", !hub.Process(1,Member(4,4)));
         test("party nonleader cannot promote", !hub.Process(2,Member(28,3)));
         test("party promotion swaps leader slot",hub.Process(1,Member(28,3)) && hub.Members(1).SequenceEqual(new ushort[]{3,2,1}));
+        test("party leadership query changes on promotion",hub.IsLeader(3)&&!hub.IsLeader(1)&&!hub.IsLeader(2));
         test("party former leader loses authority",!hub.Process(1,new Packet(WizOpcode.Party).WriteByte(5)));
         test("party current leader can kick",hub.Process(3,Member(4,2)) && hub.Members(2).Length==0 && hub.Members(3).Length==2);
         var start = packets[3].Count;
@@ -45,6 +47,7 @@ internal static class PartyVerification
         hub.Publish(Player(1) with {Hp=0});
         test("party death preserves established membership",hub.Members(1).Length==2);
         hub.Remove(1);
+        test("party disband clears authoritative leadership",!hub.IsLeader(3)&&!hub.IsLeader(1));
         test("party last member departure disbands remaining solo member",hub.Members(3).Length==0 && hub.Members(1).Length==0);
         hub.Publish(Player(1));
         test("party timeout invite setup",hub.Process(1,Invite("B")));

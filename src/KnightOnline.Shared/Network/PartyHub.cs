@@ -21,6 +21,9 @@ public sealed class PartyHub
     public ushort[] Members(ushort id)
     { lock (_gate) return _groups.TryGetValue(id, out var group) ? group.ToArray() : []; }
 
+    public bool IsLeader(ushort id)
+    { lock (_gate) return _groups.TryGetValue(id, out var group) && group[0] == id; }
+
     private void Send(ushort id, Packet packet)
     { if (_players.TryGetValue(id, out var player)) player.Deliver(packet); }
     private static Packet Failure(short reason = -1) => new Packet(WizOpcode.Party).WriteByte(3).WriteInt16(reason);
@@ -30,7 +33,7 @@ public sealed class PartyHub
         .WriteInt16(p.MaxMp).WriteInt16(p.Mp).WriteByte(p.Nation);
     private static Packet Vitals(PartyMember p) => new Packet(WizOpcode.Party).WriteByte(6)
         .WriteUInt16(p.Id).WriteInt16(p.MaxHp).WriteInt16(p.Hp).WriteInt16(p.MaxMp).WriteInt16(p.Mp);
-    private static Packet LeaderFlag(ushort id, byte value) => new Packet(WizOpcode.StateChange)
+    public static Packet LeaderState(ushort id, byte value) => new Packet(WizOpcode.StateChange)
         .WriteUInt16(id).WriteByte(6).WriteUInt32(value);
     private void Broadcast(List<ushort> group, Packet packet)
     { foreach (var id in group) Send(id, packet); }
@@ -94,7 +97,7 @@ public sealed class PartyHub
     private void Disband(List<ushort> group)
     {
         foreach (var id in group.ToArray()) CancelInvites(id);
-        Broadcast(group, LeaderFlag(group[0], 0));
+        Broadcast(group, LeaderState(group[0], 0));
         Broadcast(group, new Packet(WizOpcode.Party).WriteByte(5));
         foreach (var id in group) _groups.Remove(id);
     }
@@ -154,7 +157,7 @@ public sealed class PartyHub
                 foreach (var id in group) Send(sender, Insert(_players[id]));
                 group.Add(sender); _groups[sender] = group;
                 Broadcast(group, Insert(player));
-                Broadcast(group, LeaderFlag(group[0], 1));
+                Broadcast(group, LeaderState(group[0], 1));
                 return true;
             }
             if (!_groups.TryGetValue(sender, out var party)) return false;
@@ -169,7 +172,7 @@ public sealed class PartyHub
             if (index <= 0) return false;
             CancelInvites(sender);
             (party[0], party[index]) = (party[index], party[0]);
-            Broadcast(party, LeaderFlag(sender, 0)); Broadcast(party, LeaderFlag(target, 1));
+            Broadcast(party, LeaderState(sender, 0)); Broadcast(party, LeaderState(target, 1));
             Broadcast(party, Insert(_players[target], 100)); return true;
         }
     }

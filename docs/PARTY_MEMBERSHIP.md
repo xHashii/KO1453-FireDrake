@@ -29,8 +29,9 @@ as declared by the local reference User.h. Party chat is native channel 3.
   Session-ID reuse cannot inherit an invitation or party.
 - Immutable player snapshots, one membership lock, delivery only queues packets;
   never acquire another session's game lock or write a DB transaction in the hub.
-- Group members receive leader state; complete region-wide leader icon/late-viewer
-  appearance synchronization is not claimed by this increment.
+- Group members receive leader state. Actor snapshots now carry the authoritative
+  leader bit too, with revision refresh on leadership changes for existing/late
+  viewers; see PARTY_LEADER_UI_STATE.md. Native menu visibility remains unverified.
 
 ## What is NOT included
 

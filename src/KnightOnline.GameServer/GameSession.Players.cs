@@ -39,6 +39,7 @@ internal sealed partial class GameSession
 
     private short _direction;
     private int _appearanceVersion;
+    private bool? _publishedPartyLeader;
     private void UpdatePlayerPresence()
     {
         // Log eligibility transitions only, never every 250ms/movement publish.
@@ -51,12 +52,22 @@ internal sealed partial class GameSession
         if (!IsConnected || !_inGame || _travelStage != 0 || _inventoryFaulted || _user is null)
         { _players.Remove(_socketId); _parties.Remove(_socketId); _monsters.Remove(MonsterIdentity); return; }
         UpdatePartyPresence();
+        var partyLeader=_parties.IsLeader(_socketId);
+        if (_publishedPartyLeader != partyLeader)
+        {
+            _publishedPartyLeader=partyLeader;
+            _appearanceVersion++;
+            // Reassert self state as well as the actor snapshot. The native UI
+            // must not retain old-leader controls after promotion/disband.
+            Send(PartyHub.LeaderState(_socketId,partyLeader ? (byte)1 : (byte)0));
+            KoLog.Info($"[ PARTY LEADER SYNC ] sid={_socketId} char={_charId} leader={partyLeader} appearanceVersion={_appearanceVersion}");
+        }
         var u = _user;
         if(_currentHp<=0) _monsters.Remove(MonsterIdentity);
         else _monsters.Publish(new(MonsterIdentity,u.Zone,PlayerX,PlayerZ,!GmVisibilityRules.Hidden(u.Authority,_gmVisible)));
         var info=PlayerPackets.Info(new(_charId,u.Nation,u.Level,u.Race,u.Class,
             (ushort)(u.Px/10),(ushort)(u.Pz/10),(short)(u.Py/10),u.Face,u.Hair,
-            _currentHp<=0?(byte)3:_sitting?(byte)2:(byte)1,u.Authority,_direction,0,(byte)u.Zone,_slots),id=>_protos.ContainsKey(id));
+            _currentHp<=0?(byte)3:_sitting?(byte)2:(byte)1,u.Authority,_direction,0,(byte)u.Zone,_slots,PartyLeader:partyLeader),id=>_protos.ContainsKey(id));
         _players.Publish(new(_socketId,u.Zone,PlayerX,PlayerZ,info,_appearanceVersion,p => { Send(p); },GmVisibilityRules.Hidden(u.Authority,_gmVisible),MaxHp:_maxHp,Hp:_currentHp));
     }
     private void PlayerRotate(Packet packet)
