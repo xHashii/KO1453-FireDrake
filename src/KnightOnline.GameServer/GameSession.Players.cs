@@ -29,13 +29,25 @@ internal sealed partial class GameSession
         _gmVisible=visible;
         UpdatePlayerPresence();
         _players.Refresh(_socketId);
+        TracePlayerVisibility("gm-"+command);
         KoLog.Info($"[ GM VISIBILITY ] {_charId}: {(visible ? "visible" : "hidden")}");
         TravelMessage(visible ? "GM visibility: visible to nearby players." : "GM visibility: hidden from other players.");
     }
+    private string? _lastPresenceGate;
+    private void TracePlayerVisibility(string reason) =>
+        KoLog.Info($"[ PLAYER VISIBILITY ] reason={reason} sid={_socketId} char={_charId} authority={_user?.Authority} gmOptIn={_gmVisible} race={_user?.Race} class={_user?.Class} appearanceVersion={_appearanceVersion} {_players.DescribeVisibility(_socketId)}");
+
     private short _direction;
     private int _appearanceVersion;
     private void UpdatePlayerPresence()
     {
+        // Log eligibility transitions only, never every 250ms/movement publish.
+        var gate=$"connected={IsConnected} inGame={_inGame} travel={_travelStage} inventoryFaulted={_inventoryFaulted} loaded={_user is not null} zone={_user?.Zone} authority={_user?.Authority} gmOptIn={_gmVisible}";
+        if (_lastPresenceGate != gate)
+        {
+            _lastPresenceGate=gate;
+            KoLog.Info($"[ PLAYER PRESENCE GATE ] sid={_socketId} char={_charId} {gate}");
+        }
         if (!IsConnected || !_inGame || _travelStage != 0 || _inventoryFaulted || _user is null)
         { _players.Remove(_socketId); _parties.Remove(_socketId); _monsters.Remove(MonsterIdentity); return; }
         UpdatePartyPresence();
@@ -55,10 +67,15 @@ internal sealed partial class GameSession
     }
     private void RequestedPlayers(Packet packet)
     {
-        if (!_inGame || packet.RemainingToRead < 2) return;
+        if (!_inGame || packet.RemainingToRead < 2)
+        { KoLog.Warn($"[ PLAYER REQUEST ] sid={_socketId} char={_charId} rejected: inGame={_inGame} bytes={packet.RemainingToRead}"); return; }
         var count = packet.ReadUInt16();
-        if (count > 1000 || packet.RemainingToRead != count*2) return;
+        if (count > 1000 || packet.RemainingToRead != count*2)
+        { KoLog.Warn($"[ PLAYER REQUEST ] sid={_socketId} char={_charId} rejected: count={count} remaining={packet.RemainingToRead}"); return; }
         var ids = new ushort[count]; for (var i=0;i<count;i++) ids[i]=packet.ReadUInt16();
-        UpdatePlayerPresence(); foreach(var reply in _players.Requested(_socketId,ids)) Send(reply);
+        UpdatePlayerPresence();
+        KoLog.Info($"[ PLAYER REQUEST ] sid={_socketId} char={_charId} ids={string.Join(",",ids.Take(32))} count={count}");
+        TracePlayerVisibility("requested-users");
+        foreach(var reply in _players.Requested(_socketId,ids)) Send(reply);
     }
 }

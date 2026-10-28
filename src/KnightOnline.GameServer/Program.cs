@@ -238,7 +238,7 @@ internal sealed partial class GameSession : KoSession
     private bool HandleGamePacket(Packet packet)
     {
         if (_inventoryFaulted) return false;
-        KoLog.Info($"<- {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s)): {PacketTrace.GamePayload(packet)}");
+        KoLog.Info($"<- {RemoteIp} sid={_socketId} char={_charId} {Name(packet.Opcode)} ({packet.Length} byte(s)): {PacketTrace.GamePayload(packet)}");
 
         if (!IsCryptoEnabled)
         {
@@ -693,6 +693,7 @@ internal sealed partial class GameSession : KoSession
                 RecomputeStats(refillWhenEmpty: false);
                 UpdatePlayerPresence();
                 _players.Refresh(_socketId);
+                TracePlayerVisibility("world-enter");
                 break;
         }
     }
@@ -1270,8 +1271,13 @@ internal sealed partial class GameSession : KoSession
     {
         var travelDump = packet.Opcode is WizOpcode.SelChar or WizOpcode.ZoneChange or WizOpcode.Warp
             ? $": {Hexdump(packet.Payload)}" : string.Empty;
-        KoLog.Info($"-> {RemoteIp} {Name(packet.Opcode)} ({packet.Length} byte(s)){travelDump}");
-        return base.Send(packet);
+        // Queue acceptance is not proof the native client parsed/rendered an actor.
+        // Bound dumps; only discovery packets, never credentials or full MYINFO.
+        var playerDump = packet.Opcode is WizOpcode.UserInout or WizOpcode.ReqUserin or WizOpcode.Regionchange
+            ? $" [PLAYER WIRE] hex={Convert.ToHexString(packet.Payload[..Math.Min(packet.Length,1024)])} truncated={packet.Length>1024}" : string.Empty;
+        var queued=base.Send(packet);
+        KoLog.Info($"-> {RemoteIp} sid={_socketId} char={_charId} {Name(packet.Opcode)} ({packet.Length} byte(s)) queued={queued}{travelDump}{playerDump}");
+        return queued;
     }
 
     /// <summary>Port of CUser::WordGuardSystem - ASCII alphanumerics only.</summary>

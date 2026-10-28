@@ -71,6 +71,23 @@ public sealed class PlayerHub
         }
     }
 
+    /// <summary>Bounded event-driven diagnostic snapshot. No callbacks or hidden-state changes.</summary>
+    public string DescribeVisibility(ushort id)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(id, out var viewer)) return $"viewer={id} published=false";
+            var peers = _players.Values.Where(p => p.Id != id).OrderBy(p => p.Id).ToArray();
+            var details = peers.Take(16).Select(peer =>
+            {
+                var reason = peer.Zone != viewer.Zone ? "different-zone" :
+                    !Near(viewer, peer) ? "out-of-range" : peer.Hidden ? "hidden-peer" : "eligible";
+                return FormattableString.Invariant($"peer={peer.Id},zone={peer.Zone},pos={peer.X:F2}/{peer.Z:F2},hidden={peer.Hidden},distance={MathF.Sqrt((viewer.X-peer.X)*(viewer.X-peer.X)+(viewer.Z-peer.Z)*(viewer.Z-peer.Z)):F2},reason={reason},viewerKnowsPeer={_visible[id].Contains(peer.Id)},peerKnowsViewer={_visible[peer.Id].Contains(id)}");
+            });
+            return FormattableString.Invariant($"viewer={id} published=true zone={viewer.Zone} pos={viewer.X:F2}/{viewer.Z:F2} hidden={viewer.Hidden} infoBytes={viewer.Info.Length} visible={_visible[id].Count} candidates={peers.Length} [{string.Join("; ", details)}] truncated={peers.Length > 16}");
+        }
+    }
+
     public void Remove(ushort id)
     {
         lock (_gate)

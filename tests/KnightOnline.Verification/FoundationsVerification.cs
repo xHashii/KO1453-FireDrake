@@ -87,6 +87,17 @@ internal static class FoundationsVerification
         test("actor refresh cannot reveal hidden peers but hidden viewers still see visible actors",leftRefresh.Count==1&&leftRefresh[0].Opcode==WizOpcode.Regionchange&&rightRefresh.Count==2);
         refreshHub.Remove(802);leftRefresh.Clear();rightRefresh.Clear();refreshHub.Refresh(801);
         test("actor refresh never resurrects disconnected peers",leftRefresh.Count==1&&rightRefresh.Count==0);
+        var diagnoseHub=new PlayerHub();
+        diagnoseHub.Publish(P(901,21,0,new List<Packet>()));
+        diagnoseHub.Publish(P(902,21,1,new List<Packet>()));
+        diagnoseHub.Publish(P(903,21,2,new List<Packet>()) with {Hidden=true});
+        diagnoseHub.Publish(P(904,21,500,new List<Packet>()));
+        diagnoseHub.Publish(P(905,1,1,new List<Packet>()));
+        var diagnostic=diagnoseHub.DescribeVisibility(901);
+        test("visibility diagnostics distinguish eligible, hidden, distant and other-zone actors",diagnostic.Contains("reason=eligible")&&diagnostic.Contains("reason=hidden-peer")&&diagnostic.Contains("reason=out-of-range")&&diagnostic.Contains("reason=different-zone")&&diagnostic.Contains("visible=1"));
+        test("visibility diagnostics report unpublished viewer without changing membership",diagnoseHub.DescribeVisibility(999)=="viewer=999 published=false"&&diagnoseHub.RegionList(901).Payload.SequenceEqual(new byte[]{2,0,0x85,3,0x86,3}));
+        for(ushort id=910;id<930;id++) diagnoseHub.Publish(P(id,1,0,new List<Packet>()));
+        test("visibility diagnostic peer detail is bounded",diagnoseHub.DescribeVisibility(901).Contains("truncated=True")&&diagnoseHub.DescribeVisibility(901).Split("peer=").Length==17);
         var save=new Packet(WizOpcode.Skilldata).WriteByte(1).WriteUInt16(3).WriteUInt32(490014).WriteUInt32(1490020).WriteUInt32(uint.MaxValue);
         test("skill bar parses opaque shortcut IDs without executing them",SkillBarPackets.TryRead(save,out var action,out var values)&&action==1&&values.SequenceEqual(new uint[]{490014,1490020,uint.MaxValue}));
         test("skill bar native load vector",Convert.ToHexString(SkillBarPackets.Loaded([0x01020304]).Payload)=="02010004030201");

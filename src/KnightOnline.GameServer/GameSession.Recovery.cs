@@ -60,6 +60,7 @@ internal sealed partial class GameSession
     {
         lock (_gameGate)
         {
+            if (_inGame) TracePlayerVisibility("disconnect");
             _speedEffect.Clear();
             _chat.Remove(_socketId);
             _players.Remove(_socketId);
