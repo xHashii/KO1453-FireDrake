@@ -63,6 +63,12 @@ internal sealed partial class GameSession
             Send(TargetHealthPackets.Reply(id, echo, _maxHp, _currentHp));
             return;
         }
+        if (id < 10000)
+        {
+            var reply = _players.TargetHealth(_socketId, id, echo);
+            if (reply is not null) Send(reply);
+            return;
+        }
         var npc = CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == id);
         if (npc is null || !_visibleNpcs.Contains(id) || !Near(npc.X, npc.Z, 120)) return;
         Send(TargetHealthPackets.Reply(id, echo, npc.Prototype.MaxHp, npc.Health));

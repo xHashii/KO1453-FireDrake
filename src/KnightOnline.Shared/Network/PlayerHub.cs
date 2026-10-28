@@ -3,7 +3,7 @@ using KnightOnline.Shared.Protocol;
 namespace KnightOnline.Shared.Network;
 
 public sealed record PlayerPresence(ushort Id, ushort Zone, float X, float Z, byte[] Info,
-    int AppearanceVersion, Action<Packet> Deliver, bool Hidden = false);
+    int AppearanceVersion, Action<Packet> Deliver, bool Hidden = false, int MaxHp = 0, int Hp = 0);
 
 /// <summary>Serializes visibility transitions and packet enqueueing, never session locks.
 /// Info arrays are owned immutable snapshots. Callbacks must only enqueue packets.</summary>
@@ -88,6 +88,20 @@ public sealed class PlayerHub
                 return FormattableString.Invariant($"peer={peer.Id},zone={peer.Zone},pos={peer.X:F2}/{peer.Z:F2},hidden={peer.Hidden},distance={MathF.Sqrt((viewer.X-peer.X)*(viewer.X-peer.X)+(viewer.Z-peer.Z)*(viewer.Z-peer.Z)):F2},reason={reason},viewerKnowsPeer={_visible[id].Contains(peer.Id)},peerKnowsViewer={_visible[peer.Id].Contains(id)}");
             });
             return FormattableString.Invariant($"viewer={id} published=true zone={viewer.Zone} pos={viewer.X:F2}/{viewer.Z:F2} hidden={viewer.Hidden} infoBytes={viewer.Info.Length} visible={_visible[id].Count} candidates={peers.Length} [{string.Join("; ", details)}] truncated={peers.Length > 16}");
+        }
+    }
+
+    /// <summary>Read peer HP without acquiring another session's game-state lock.
+    /// Uses the same directional visibility and current range policy as actors.</summary>
+    public Packet? TargetHealth(ushort viewerId, ushort targetId, byte echo)
+    {
+        lock (_gate)
+        {
+            if (echo > 1 || !_players.TryGetValue(viewerId, out var viewer) ||
+                !_players.TryGetValue(targetId, out var target) || target.Hidden ||
+                !Near(viewer, target) || !_visible[viewerId].Contains(targetId) ||
+                target.MaxHp <= 0 || target.Hp <= 0) return null;
+            return TargetHealthPackets.Reply(target.Id, echo, target.MaxHp, target.Hp);
         }
     }
 
