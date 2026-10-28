@@ -105,6 +105,7 @@ internal static class PartyVerification
         test("party map-change pending invite setup",hub.Process(1,Invite("B")));
         hub.Travel(1,21,1);
         test("party actual map change cancels invitation",!hub.Process(2,Permit()));
+        hub.Publish(Player(1)); // ensure ambiguous-name test has an online sender
         hub.Publish(Player(10) with {Name="B"});
         test("party ambiguous character identity refused",!hub.Process(1,Invite("B")));
     }
