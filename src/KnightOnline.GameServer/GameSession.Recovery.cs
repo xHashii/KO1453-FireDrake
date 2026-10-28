@@ -23,11 +23,6 @@ internal sealed partial class GameSession
                     SyncWorldNpcs();
                     MonsterRetaliation();
                     UpdatePlayerPresence();
-                    if (!_inventoryFaulted && Environment.TickCount64 >= _nextPositionSave)
-                    {
-                        _nextPositionSave = Environment.TickCount64+10000;
-                        try { SaveCurrentPosition(); } catch (Exception ex) { InventoryUnavailable(ex); }
-                    }
                     if (Environment.TickCount64 >= _nextLootRefresh)
                     { _nextLootRefresh = Environment.TickCount64+5000; RefreshLoot(); }
                 }

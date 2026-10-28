@@ -28,6 +28,7 @@ internal sealed partial class GameSession
         }
         _gmVisible=visible;
         UpdatePlayerPresence();
+        _players.Refresh(_socketId);
         KoLog.Info($"[ GM VISIBILITY ] {_charId}: {(visible ? "visible" : "hidden")}");
         TravelMessage(visible ? "GM visibility: visible to nearby players." : "GM visibility: hidden from other players.");
     }

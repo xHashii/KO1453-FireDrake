@@ -5,15 +5,17 @@ using KnightOnline.Shared.Protocol;
 namespace KnightOnline.Verification;
 internal static class PlayerSessionVerification
 {
-    private sealed class Session(TcpClient client,ChannelWriter<ushort> accepted):KoSession(client)
+    private sealed class Session(TcpClient client,ChannelWriter<ushort> accepted,ChannelWriter<ushort> closed):KoSession(client)
     {
         protected override bool HandlePacket(Packet packet)=>true;
         protected override void OnConnected()=>accepted.TryWrite(SessionId);
+        protected override void OnDisconnected()=>closed.TryWrite(SessionId);
     }
     public static async Task RunAsync(Action<string,bool> test)
     {
         var ids=Channel.CreateUnbounded<ushort>();
-        var server=new KoTcpServer<Session>(c=>new(c,ids.Writer),maxSessionId:2);
+        var closedIds=Channel.CreateUnbounded<ushort>();
+        var server=new KoTcpServer<Session>(c=>new(c,ids.Writer,closedIds.Writer),maxSessionId:2);
         var running=server.RunAsync(0);
         using var first=new TcpClient();using var second=new TcpClient();using var excess=new TcpClient();using var recycled=new TcpClient();
         using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -29,6 +31,7 @@ internal static class PlayerSessionVerification
             try{closed=await excess.GetStream().ReadAsync(new byte[1],timeout.Token)==0;}catch(IOException){closed=true;}
             test("full player-ID band refuses excess sockets without stopping server",closed&&!running.IsCompleted&&server.SessionCount==2);
             first.Dispose();
+            test("client close/EOF runs final disconnect persistence callback",await closedIds.Reader.ReadAsync(timeout.Token)==one);
             while(server.SessionCount!=1) await Task.Delay(10,timeout.Token);
             await recycled.ConnectAsync("127.0.0.1",server.ListeningPort,timeout.Token);
             var reused=await ids.Reader.ReadAsync(timeout.Token);
@@ -38,6 +41,23 @@ internal static class PlayerSessionVerification
         {
             server.Stop();
             await running.WaitAsync(TimeSpan.FromSeconds(10));
+            var completed=new List<ushort>();
+            while(closedIds.Reader.TryRead(out var id)) completed.Add(id);
+            test("server stop awaits final disconnect callbacks for every live session",completed.Count==2&&completed.Distinct().Count()==2&&server.SessionCount==0);
         }
+        // A blackholed connection may never produce TCP EOF. The game's idle
+        // timeout must still reach the same final-save/disconnect callback.
+        var idleAccepted=Channel.CreateUnbounded<ushort>();var idleClosed=Channel.CreateUnbounded<ushort>();
+        var idleServer=new KoTcpServer<Session>(c=>new(c,idleAccepted.Writer,idleClosed.Writer),idleTimeout:TimeSpan.FromMilliseconds(100));
+        var idleRunning=idleServer.RunAsync(0);
+        using var silentClient=new TcpClient();
+        try
+        {
+            await silentClient.ConnectAsync("127.0.0.1",idleServer.ListeningPort);
+            var idleId=await idleAccepted.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
+            var closedId=await idleClosed.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
+            test("idle/network-loss timeout invokes final disconnect callback without client EOF",closedId==idleId);
+        }
+        finally { idleServer.Stop();await idleRunning.WaitAsync(TimeSpan.FromSeconds(10)); }
     }
 }

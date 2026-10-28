@@ -91,7 +91,7 @@ var chat = new ChatHub();
 var players = new PlayerHub();
 var parties = new PartyHub();
 var monsters = new MonsterSimulation(world);
-var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat, players, parties, monsters),maxSessionId:9999);
+var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat, players, parties, monsters),idleTimeout:TimeSpan.FromSeconds(30),maxSessionId:9999);
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -100,6 +100,16 @@ Console.CancelKeyPress += (_, e) =>
     shutdown.Cancel();
     server.Stop();
 };
+
+// Service-manager SIGTERM is a graceful shutdown too (not a hard process kill).
+using var terminateSignal = OperatingSystem.IsWindows() ? null :
+    System.Runtime.InteropServices.PosixSignalRegistration.Create(
+        System.Runtime.InteropServices.PosixSignal.SIGTERM, context =>
+        {
+            context.Cancel = true;
+            shutdown.Cancel();
+            server.Stop();
+        });
 
 KoLog.Info("[ MONSTER AI ] Shared 250ms simulation enabled: source passive/aggressive types, direct-step chase, leash/return, conservative SMD terrain/shape checks; no route finding or idle roaming.");
 Exception? aiFailure = null;
@@ -682,7 +692,7 @@ internal sealed partial class GameSession : KoSession
                 StartRecovery();
                 RecomputeStats(refillWhenEmpty: false);
                 UpdatePlayerPresence();
-                Send(_players.RegionList(_socketId));
+                _players.Refresh(_socketId);
                 break;
         }
     }

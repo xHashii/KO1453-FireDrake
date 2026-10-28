@@ -44,6 +44,33 @@ public sealed class PlayerHub
             }
         }
     }
+    /// <summary>Reannounce current actors after client loading or an explicit show command.
+    /// A prior queued IN is not proof that the native client retained the actor.
+    /// Never change hidden state or send hidden actors to another viewer.</summary>
+    public void Refresh(ushort id)
+    {
+        lock (_gate)
+        {
+            if (!_players.TryGetValue(id, out var player)) return;
+            foreach (var other in _players.Values)
+            {
+                if (other.Id == id) continue;
+                if (_visible[id].Contains(other.Id) && !other.Hidden)
+                {
+                    player.Deliver(Out(other.Id));
+                    player.Deliver(In(other));
+                }
+                if (_visible[other.Id].Contains(id) && !player.Hidden)
+                {
+                    other.Deliver(Out(id));
+                    other.Deliver(In(player));
+                }
+            }
+            // Native discovery is also retriggered; do not depend solely on unsolicited IN.
+            player.Deliver(RegionList(id));
+        }
+    }
+
     public void Remove(ushort id)
     {
         lock (_gate)

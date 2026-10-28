@@ -8,7 +8,6 @@ internal sealed partial class GameSession
 {
     private readonly WorldCatalog _world;
     private SavedPosition? _savedPosition;
-    private long _nextPositionSave;
 
     private void SaveCurrentPosition()
     {
