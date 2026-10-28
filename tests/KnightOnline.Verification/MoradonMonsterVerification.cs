@@ -28,6 +28,7 @@ internal static class MoradonMonsterVerification
             }
             return rows.Order(StringComparer.Ordinal).ToArray();
         }
+        static bool Equal(string[] a,string[] b) => a.AsSpan().SequenceEqual(b);
         var outside=await Snapshot("SELECT * FROM K_NPCPOS WHERE ZoneID<>21 OR ActType>=100");
         var prototypes=await Snapshot("SELECT * FROM K_MONSTER");
         var objects=await Snapshot("SELECT * FROM K_OBJECTPOS");
@@ -35,20 +36,20 @@ internal static class MoradonMonsterVerification
         var original=await Snapshot("SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100");
         await Execute("UPDATE ZONE_INFO SET strZoneName='custom.smd' WHERE ServerNo=1 AND ZoneNo=21");
         await repository.EnsureMoradonMonsterLayoutAsync();
-        test("monster placement: custom maps skipped",original.SequenceEqual(await Snapshot("SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100"))&&await Number("SELECT COUNT(*) FROM KO_MORADON_MONSTERPOS_BACKUP")==0);
+        test("monster placement: custom maps skipped",Equal(original,await Snapshot("SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100"))&&await Number("SELECT COUNT(*) FROM KO_MORADON_MONSTERPOS_BACKUP")==0);
         await Execute("UPDATE ZONE_INFO SET strZoneName='moradon_expanded.smd' WHERE ServerNo=1 AND ZoneNo=21");
         await Execute("CREATE TRIGGER reject_moradon_monsters BEFORE INSERT ON K_NPCPOS FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='monster layout rollback test'");
         var failed=false;
         try { await repository.EnsureMoradonMonsterLayoutAsync(); }
         catch(MySqlException ex) when(ex.Number==1644) { failed=true; }
-        test("monster placement: failed insert rolls back original monsters and snapshot",failed&&original.SequenceEqual(await Snapshot("SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100"))&&await Number("SELECT COUNT(*) FROM KO_MORADON_MONSTERPOS_BACKUP")==0);
+        test("monster placement: failed insert rolls back original monsters and snapshot",failed&&Equal(original,await Snapshot("SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100"))&&await Number("SELECT COUNT(*) FROM KO_MORADON_MONSTERPOS_BACKUP")==0);
         test("monster placement: failed transaction does not mark applied",await Number("SELECT COUNT(*) FROM KO_MORADON_LAYOUT WHERE LayoutId=4 AND AppliedUtc IS NULL")==1);
         await Execute("DROP TRIGGER reject_moradon_monsters");
         await Task.WhenAll(repository.EnsureMoradonMonsterLayoutAsync(),repository.EnsureMoradonMonsterLayoutAsync());
-        test("monster placement: concurrent starts apply once with full original backup",original.SequenceEqual(await Snapshot("SELECT * FROM KO_MORADON_MONSTERPOS_BACKUP"))&&await Number("SELECT SUM(NumNPC) FROM KO_MORADON_MONSTERPOS_BACKUP")==474);
+        test("monster placement: concurrent starts apply once with full original backup",Equal(original,await Snapshot("SELECT * FROM KO_MORADON_MONSTERPOS_BACKUP"))&&await Number("SELECT SUM(NumNPC) FROM KO_MORADON_MONSTERPOS_BACKUP")==474);
         test("monster placement: exact plus adapted rows populate expanded map",await Number("SELECT COUNT(*) FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100")==195&&await Number("SELECT SUM(NumNPC) FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100")==646);
-        test("monster placement: other zones, NPCs, objects and monster definitions unchanged",outside.SequenceEqual(await Snapshot("SELECT * FROM K_NPCPOS WHERE ZoneID<>21 OR ActType>=100"))&&prototypes.SequenceEqual(await Snapshot("SELECT * FROM K_MONSTER"))&&objects.SequenceEqual(await Snapshot("SELECT * FROM K_OBJECTPOS")));
-        test("monster placement: character positions, inventory and resources unchanged",characters.SequenceEqual(await Snapshot("SELECT * FROM USERDATA")));
+        test("monster placement: other zones, NPCs, objects and monster definitions unchanged",Equal(outside,await Snapshot("SELECT * FROM K_NPCPOS WHERE ZoneID<>21 OR ActType>=100"))&&Equal(prototypes,await Snapshot("SELECT * FROM K_MONSTER"))&&Equal(objects,await Snapshot("SELECT * FROM K_OBJECTPOS")));
+        test("monster placement: character positions, inventory and resources unchanged",Equal(characters,await Snapshot("SELECT * FROM USERDATA")));
         var world=new WorldCatalog(await repository.LoadWorldDataAsync(),WorldCatalog.FindMapDirectory());
         var zone=world.Zones[21];var monsters=zone.Npcs.Where(n=>n.Prototype.IsMonster).ToArray();
         test("monster placement: actual WorldCatalog loads all new points on finite terrain",monsters.Length==646&&monsters.All(n=>zone.Map.Contains(n.X,n.Z)&&float.IsFinite(n.Y))&&zone.Npcs.Count(n=>!n.Prototype.IsMonster)==45);
@@ -58,6 +59,6 @@ internal static class MoradonMonsterVerification
         var edited=await Snapshot("SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100");
         await repository.EnsureMoradonNpcLayoutAsync();
         await repository.EnsureMoradonMonsterLayoutAsync();
-        test("monster placement: subsequent startup preserves operator edits and original backup",edited.SequenceEqual(await Snapshot("SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100"))&&original.SequenceEqual(await Snapshot("SELECT * FROM KO_MORADON_MONSTERPOS_BACKUP")));
+        test("monster placement: subsequent startup preserves operator edits and original backup",Equal(edited,await Snapshot("SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100"))&&Equal(original,await Snapshot("SELECT * FROM KO_MORADON_MONSTERPOS_BACKUP")));
     }
 }
