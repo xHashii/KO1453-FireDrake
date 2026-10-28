@@ -75,6 +75,13 @@ public sealed class PartyHub
             if (old.Class != member.Class) Broadcast(group, new Packet(WizOpcode.Party).WriteByte(8).WriteUInt16(member.Id).WriteUInt16(member.Class));
         }
     }
+    /// <summary>After a successful travel save: town/warp within the map
+    /// preserves membership and invitations; a map change uses normal cleanup.</summary>
+    public void Travel(ushort id, ushort sourceZone, ushort destinationZone)
+    {
+        if (sourceZone != destinationZone) Remove(id);
+    }
+
     public void Remove(ushort id)
     {
         lock (_gate)

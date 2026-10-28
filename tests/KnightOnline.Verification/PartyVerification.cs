@@ -91,6 +91,19 @@ internal static class PartyVerification
         hub.Publish(Player(1,hidden:true));
         test("party hiding leader removes membership and chat authorization",hub.Members(1).Length==0&&hub.Members(2).Length==0&&!hub.Chat(1,"hidden"));
         hub.Publish(Player(1));
+        test("party same-map pending invite setup",hub.Process(1,Invite("B")));
+        var townPackets=packets.Values.Sum(p=>p.Count);
+        hub.Travel(1,21,21);hub.Travel(2,21,21);
+        test("party same-map town preserves pending invitation without packets",packets.Values.Sum(p=>p.Count)==townPackets&&hub.Process(2,Permit()));
+        townPackets=packets.Values.Sum(p=>p.Count);
+        hub.Travel(1,21,21);hub.Travel(2,21,21);
+        test("party two-member leader/member town preserves party and leadership",hub.Members(1).SequenceEqual(new ushort[]{1,2})&&hub.Members(2).SequenceEqual(new ushort[]{1,2})&&packets.Values.Sum(p=>p.Count)==townPackets);
+        test("party chat still works after town",hub.Chat(2,"after town"));
+        hub.Travel(2,21,1);
+        test("party actual map change still cleans up two-member party",hub.Members(1).Length==0&&hub.Members(2).Length==0);
+        test("party map-change pending invite setup",hub.Process(1,Invite("B")));
+        hub.Travel(1,21,1);
+        test("party actual map change cancels invitation",!hub.Process(2,Permit()));
         hub.Publish(Player(10) with {Name="B"});
         test("party ambiguous character identity refused",!hub.Process(1,Invite("B")));
     }

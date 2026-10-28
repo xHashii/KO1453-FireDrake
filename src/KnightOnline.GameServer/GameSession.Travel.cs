@@ -183,7 +183,7 @@ internal sealed partial class GameSession
         _pendingMelee = null; _casting = null;
         _players.Remove(_socketId);
         _monsters.Remove(MonsterIdentity);
-        _parties.Remove(_socketId);
+        _parties.Travel(_socketId, _user!.Zone, target.Zone);
         _warehouse = null; _warehouseNpc = 0;
         var sameZone = target.Zone == _user!.Zone;
         _user = _user with { Zone = target.Zone, Px = target.Px, Pz = target.Pz, Py = target.Py, Gold = gold };
@@ -201,7 +201,7 @@ internal sealed partial class GameSession
             _travelStage = 1;
             Send(TravelPackets.ChangeZone(target.Zone, target.Px, target.Pz, target.Py));
         }
-        KoLog.Info($"[ TRAVEL ] {_charId} zone={target.Zone} position={target.Px},{target.Pz},{target.Py}");
+        KoLog.Info($"[ TRAVEL ] {_charId} zone={target.Zone} sameMap={sameZone} partyPreserved={sameZone} position={target.Px},{target.Pz},{target.Py}");
     }
 
     private void FinishTravel(Packet packet)

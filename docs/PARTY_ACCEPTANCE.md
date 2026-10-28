@@ -27,7 +27,7 @@ still explicitly pending, not marked passed based on self-authored byte vectors.
 
 ## Gap fixed during review
 
-GameSession already removes membership on travel, but PartyHub.Publish previously
+GameSession removes membership on map-changing travel (not same-map H/Town), but PartyHub.Publish previously
 only canceled invitations on a changed zone. A direct zone republish could retain
 an established roster/chat route. Publication now also removes membership on zone
 change, using the existing leave/disband rules. Tests cover two-member disband and
@@ -67,3 +67,15 @@ No party XP, loot sharing, party heal/buff targeting, party-wanted board, persis
 parties or cross-zone retention is added. `PartyBbs` remains unsupported. Next is
 combat/skill/effect foundations followed by source-backed party reward distribution.
 Stair collision is a separate map geometry task, not a party feature.
+
+
+### Same-map Town correction
+
+The owner's 13:42:42 log shows Home at 13:48:36 producing PARTY 05 for both
+members before a same-zone Moradon warp. BeginTravel incorrectly removed the
+party unconditionally. Cleanup now compares source and destination zone AFTER
+the successful DB save: same-map H/Town and warps retain membership, leadership,
+chat and pending invitations; another map still removes membership. Regression
+tests cover two-member parties, pending invites and three-member TCP scenarios.
+Disconnect, kick, explicit leave/disband and hidden-GM policies are unchanged.
+Native H/Town confirmation remains pending after this correction.

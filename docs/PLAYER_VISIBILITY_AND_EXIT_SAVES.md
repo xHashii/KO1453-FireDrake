@@ -57,3 +57,15 @@ Check purchases/Inn transfers and XP remain durable regardless of exit path.
 Automated regressions cover bilateral refresh, repeated refresh, hidden actors,
 region discovery, disconnected-peer exclusion, TCP EOF, idle disconnect and server
 stop awaiting callbacks. Hard server crash recovery is deliberately not promised.
+
+
+### Same-map Town correction
+
+The owner's 13:42:42 log shows Home at 13:48:36 producing PARTY 05 for both
+members before a same-zone Moradon warp. BeginTravel incorrectly removed the
+party unconditionally. Cleanup now compares source and destination zone AFTER
+the successful DB save: same-map H/Town and warps retain membership, leadership,
+chat and pending invitations; another map still removes membership. Regression
+tests cover two-member parties, pending invites and three-member TCP scenarios.
+Disconnect, kick, explicit leave/disband and hidden-GM policies are unchanged.
+Native H/Town confirmation remains pending after this correction.

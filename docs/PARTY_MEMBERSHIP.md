@@ -19,7 +19,8 @@ as declared by the local reference User.h. Party chat is native channel 3.
   Clan/chicken level exceptions are not implemented yet.
 - Nonleaders cannot invite, kick others, promote or disband; any member may leave.
   Leader leaving/disconnecting disbands; a two-member party becoming solo disbands.
-- Disconnect/inventory fault and travel remove membership and pending invitations.
+- Disconnect/inventory fault and **map-changing** travel remove membership and pending invitations.
+  H/Town and other same-map warps preserve the party and invitations.
   This conservative travel policy is NOT full retail cross-zone party behavior.
 - Death cancels invitations but retains existing membership and updates HP.
 - Hidden GMs cannot be invited, invite or remain in a party; +visible opt-in is
@@ -62,3 +63,15 @@ close and leader disconnect cleanup. See PARTY_ACCEPTANCE.md for exact scope.
 
 Do not expect group rewards yet. Record client UI behavior and server logs for
 any remaining native layout mismatch before claiming acceptance.
+
+
+### Same-map Town correction
+
+The owner's 13:42:42 log shows Home at 13:48:36 producing PARTY 05 for both
+members before a same-zone Moradon warp. BeginTravel incorrectly removed the
+party unconditionally. Cleanup now compares source and destination zone AFTER
+the successful DB save: same-map H/Town and warps retain membership, leadership,
+chat and pending invitations; another map still removes membership. Regression
+tests cover two-member parties, pending invites and three-member TCP scenarios.
+Disconnect, kick, explicit leave/disband and hidden-GM policies are unchanged.
+Native H/Town confirmation remains pending after this correction.

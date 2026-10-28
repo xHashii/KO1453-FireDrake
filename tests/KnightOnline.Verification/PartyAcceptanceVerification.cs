@@ -26,7 +26,9 @@ internal static class PartyAcceptanceVerification
                 hub.Chat(SessionId,text);
             else if (packet.Opcode == Snapshot && packet.RemainingToRead==10)
             {
+                var previousZone=_member.Zone;
                 _member=_member with {Hp=packet.ReadInt16(),Mp=packet.ReadInt16(),Zone=packet.ReadUInt16(),Level=packet.ReadByte(),Class=packet.ReadUInt16(),Hidden=packet.ReadByte()!=0};
+                hub.Travel(SessionId,previousZone,_member.Zone);
                 hub.Publish(_member);
             }
             Send(new Packet(Ack));
@@ -93,6 +95,8 @@ internal static class PartyAcceptanceVerification
             test("party acceptance/TCP: three clients form matching leader-first roster",clients.Take(3).All(p=>hub.Members(p.Id).SequenceEqual(new[]{a.Id,b.Id,c.Id}))&&hub.Members(outsider.Id).Length==0);
             test("party acceptance/TCP: outsider gets no invitation/roster/state packets",outsider.Received.Count==0);
             await Clear();
+            await a.Exchange(Publish());await b.Exchange(Publish());await Flush();
+            test("party acceptance/TCP: same-map leader and member travel retain roster without removal/disband packets",clients.Take(3).All(p=>hub.Members(p.Id).SequenceEqual(new[]{a.Id,b.Id,c.Id}))&&clients.All(p=>p.Received.Count==0));
             await b.Exchange(new Packet(WizOpcode.Chat).WriteByte(3).WriteString("party-only"));await Flush();
             var expected=Convert.ToHexString(ChatPackets.Message(3,1,b.Id,"P"+b.Id,"party-only").Payload);
             test("party acceptance/TCP: chat has trusted sender and reaches exactly three members",clients.Take(3).All(p=>Has(p,WizOpcode.Chat,expected))&&outsider.Received.Count==0);
