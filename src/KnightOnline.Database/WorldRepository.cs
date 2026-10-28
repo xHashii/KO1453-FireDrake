@@ -15,35 +15,62 @@ public sealed partial class MariaDbCharacterRepository
         await using (var r = await command.ExecuteReaderAsync().ConfigureAwait(false))
             while (await r.ReadAsync().ConfigureAwait(false))
                 zones.Add(new ZoneDefinition(Convert.ToUInt16(r.GetValue(0)), r.GetString(1)));
-        var protos = new Dictionary<ushort, NpcPrototype>();
-        command.CommandText = "SELECT sSid,strName,sPid,sSize,iWeapon1,iWeapon2,byGroup,byType,iSellingGroup,sLevel,iHpPoint FROM K_NPC";
-        await using (var r = await command.ExecuteReaderAsync().ConfigureAwait(false))
-            while (await r.ReadAsync().ConfigureAwait(false))
+        async Task<Dictionary<ushort,NpcPrototype>> LoadNpcs(string table)
+        {
+            var protos = new Dictionary<ushort,NpcPrototype>();
+            command.CommandText = "SELECT sSid,strName,sPid,sSize,iWeapon1,iWeapon2,byGroup,byType,iSellingGroup,sLevel,iHpPoint FROM " + table;
+            await using (var r = await command.ExecuteReaderAsync().ConfigureAwait(false))
+                while (await r.ReadAsync().ConfigureAwait(false))
+                {
+                    var p = new NpcPrototype(Convert.ToUInt16(r.GetValue(0)), r.IsDBNull(1) ? "" : r.GetString(1),
+                        Convert.ToUInt16(r.GetValue(2)), Convert.ToUInt16(r.GetValue(3)),
+                        unchecked((uint)Convert.ToInt32(r.GetValue(4))), unchecked((uint)Convert.ToInt32(r.GetValue(5))),
+                        Convert.ToByte(r.GetValue(6)), Convert.ToByte(r.GetValue(7)), Convert.ToInt32(r.GetValue(8)),
+                        checked((byte)Math.Clamp(Convert.ToInt32(r.GetValue(9)), 0, 255)), Math.Max(1, Convert.ToInt32(r.GetValue(10))));
+                    protos.Add(p.Id, p);
+                }
+            return protos;
+        }
+        async Task<Dictionary<ushort,NpcPrototype>> LoadMonsters(string table)
+        {
+            var monsters = new Dictionary<ushort,NpcPrototype>();
+            command.CommandText = "SELECT sSid,strName,sPid,sSize,iWeapon1,iWeapon2,byGroup,byType,sLevel,iHpPoint,sItem,sAc,iExp,iMoney,sDamage,sAttackDelay,byAttackRange,byActType,bySpeed2,bySearchRange,byTracingRange FROM " + table;
+            await using (var r = await command.ExecuteReaderAsync().ConfigureAwait(false))
+                while (await r.ReadAsync().ConfigureAwait(false))
+                {
+                    var monster = new NpcPrototype(Convert.ToUInt16(r.GetValue(0)), r.IsDBNull(1) ? "" : r.GetString(1),
+                        Convert.ToUInt16(r.GetValue(2)), Convert.ToUInt16(r.GetValue(3)),
+                        unchecked((uint)Convert.ToInt32(r.GetValue(4))), unchecked((uint)Convert.ToInt32(r.GetValue(5))),
+                        Convert.ToByte(r.GetValue(6)), Convert.ToByte(r.GetValue(7)), 0,
+                        checked((byte)Math.Clamp(Convert.ToInt32(r.GetValue(8)), 0, 255)), Math.Max(1, Convert.ToInt32(r.GetValue(9))), true,
+                        Convert.ToInt32(r.GetValue(10)), Math.Max(0, Convert.ToInt32(r.GetValue(11))), Math.Max(0, Convert.ToInt32(r.GetValue(12))),
+                        Math.Max(0, Convert.ToInt32(r.GetValue(13))), Math.Max(1, Convert.ToInt32(r.GetValue(14))),
+                        Math.Clamp(Convert.ToInt32(r.GetValue(15)), 500, 10000), Math.Clamp(Convert.ToInt32(r.GetValue(16)), 2, 30),
+                        Convert.ToByte(r.GetValue(17)), Math.Clamp(Convert.ToInt32(r.GetValue(18))*1.5f,0,12),
+                        Math.Clamp(Convert.ToInt32(r.GetValue(19)),0,40), Math.Clamp(Convert.ToInt32(r.GetValue(20)),8,80));
+                    monsters.Add(monster.Id, monster);
+                }
+            return monsters;
+        }
+        var protos=await LoadNpcs("K_NPC").ConfigureAwait(false);
+        var monsters=await LoadMonsters("K_MONSTER").ConfigureAwait(false);
+        Dictionary<ushort,NpcPrototype>? moradonNpcs=null, moradonMonsters=null;
+        command.CommandText="SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('KO_MORADON_IMPORTED_NPC','KO_MORADON_IMPORTED_MONSTER','KO_MORADON_LAYOUT')";
+        if(Convert.ToInt32(await command.ExecuteScalarAsync().ConfigureAwait(false))==3)
+        {
+            command.CommandText="SELECT COUNT(*) FROM KO_MORADON_LAYOUT WHERE LayoutId=5 AND AppliedUtc IS NOT NULL";
+            if(Convert.ToInt32(await command.ExecuteScalarAsync().ConfigureAwait(false))==1)
             {
-                var p = new NpcPrototype(Convert.ToUInt16(r.GetValue(0)), r.IsDBNull(1) ? "" : r.GetString(1),
-                    Convert.ToUInt16(r.GetValue(2)), Convert.ToUInt16(r.GetValue(3)),
-                    unchecked((uint)Convert.ToInt32(r.GetValue(4))), unchecked((uint)Convert.ToInt32(r.GetValue(5))),
-                    Convert.ToByte(r.GetValue(6)), Convert.ToByte(r.GetValue(7)), Convert.ToInt32(r.GetValue(8)),
-                    checked((byte)Math.Clamp(Convert.ToInt32(r.GetValue(9)), 0, 255)), Math.Max(1, Convert.ToInt32(r.GetValue(10))));
-                protos.Add(p.Id, p);
+                var importedNpcs=await LoadNpcs("KO_MORADON_IMPORTED_NPC").ConfigureAwait(false);
+                var importedMonsters=await LoadMonsters("KO_MORADON_IMPORTED_MONSTER").ConfigureAwait(false);
+                // Clearing BOTH private catalogs is the documented rollback switch.
+                if(importedNpcs.Count>0 || importedMonsters.Count>0)
+                {
+                    if(importedNpcs.Count==0 || importedMonsters.Count==0) throw new InvalidDataException("Incomplete private Moradon catalogs; restore or reimport both together.");
+                    moradonNpcs=importedNpcs;moradonMonsters=importedMonsters;
+                }
             }
-        var monsters = new Dictionary<ushort, NpcPrototype>();
-        command.CommandText = "SELECT sSid,strName,sPid,sSize,iWeapon1,iWeapon2,byGroup,byType,sLevel,iHpPoint,sItem,sAc,iExp,iMoney,sDamage,sAttackDelay,byAttackRange,byActType,bySpeed2,bySearchRange,byTracingRange FROM K_MONSTER";
-        await using (var r = await command.ExecuteReaderAsync().ConfigureAwait(false))
-            while (await r.ReadAsync().ConfigureAwait(false))
-            {
-                var monster = new NpcPrototype(Convert.ToUInt16(r.GetValue(0)), r.IsDBNull(1) ? "" : r.GetString(1),
-                    Convert.ToUInt16(r.GetValue(2)), Convert.ToUInt16(r.GetValue(3)),
-                    unchecked((uint)Convert.ToInt32(r.GetValue(4))), unchecked((uint)Convert.ToInt32(r.GetValue(5))),
-                    Convert.ToByte(r.GetValue(6)), Convert.ToByte(r.GetValue(7)), 0,
-                    checked((byte)Math.Clamp(Convert.ToInt32(r.GetValue(8)), 0, 255)), Math.Max(1, Convert.ToInt32(r.GetValue(9))), true,
-                    Convert.ToInt32(r.GetValue(10)), Math.Max(0, Convert.ToInt32(r.GetValue(11))), Math.Max(0, Convert.ToInt32(r.GetValue(12))),
-                    Math.Max(0, Convert.ToInt32(r.GetValue(13))), Math.Max(1, Convert.ToInt32(r.GetValue(14))),
-                    Math.Clamp(Convert.ToInt32(r.GetValue(15)), 500, 10000), Math.Clamp(Convert.ToInt32(r.GetValue(16)), 2, 30),
-                    Convert.ToByte(r.GetValue(17)), Math.Clamp(Convert.ToInt32(r.GetValue(18))*1.5f,0,12),
-                    Math.Clamp(Convert.ToInt32(r.GetValue(19)),0,40), Math.Clamp(Convert.ToInt32(r.GetValue(20)),8,80));
-                monsters.Add(monster.Id, monster);
-            }
+        }
         var spawns = new List<NpcSpawn>();
         // AIServer::LoadSpawnCallback: ActType >= 100 selects K_NPC, below 100 selects K_MONSTER.
         command.CommandText = "SELECT ZoneID,NpcID,LeftX,TopZ,RightX,BottomZ,NumNPC,byDirection,ActType,RegTime FROM K_NPCPOS " +
@@ -79,6 +106,6 @@ public sealed partial class MariaDbCharacterRepository
         await LoadWeights("MAKE_WEAPON", "byLevel", Enumerable.Range(1,12).Select(i => $"sClass_{i}").ToArray(), drops.Weapons);
         await LoadWeights("MAKE_DEFENSIVE", "byLevel", Enumerable.Range(1,7).Select(i => $"sClass_{i}").ToArray(), drops.Armor);
         await LoadWeights("MAKE_ITEM_LARECODE", "byLevelGrade", ["sLareItem","sMagicItem","sGereralItem"], drops.Rarity);
-        return new WorldData(zones, protos, spawns, objects, monsters, drops);
+        return new WorldData(zones, protos, spawns, objects, monsters, drops, moradonNpcs, moradonMonsters);
     }
 }

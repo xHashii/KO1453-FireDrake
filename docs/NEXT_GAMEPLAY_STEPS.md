@@ -44,3 +44,5 @@ Never reset characters/items to make a new feature work. No calendar estimates
 or claim of full retail behavior without evidence.
 
 Current next step after native AI acceptance: expand the shared combat/skill/effect rules, then party rewards.
+
+Latest world experiment: MORADON_EXACT_IMPORT.md replaces earlier approximate Moradon actors with the current owner upload. Accept its client assets/placements before advancing gameplay.

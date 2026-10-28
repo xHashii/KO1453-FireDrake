@@ -60,5 +60,7 @@ public sealed record WorldNpc(ushort Id, NpcPrototype Prototype, float SpawnX, f
 }
 public sealed record ZoneDefinition(ushort Id, string MapName);
 public sealed record WorldData(IReadOnlyList<ZoneDefinition> Zones, IReadOnlyDictionary<ushort, NpcPrototype> Prototypes,
-    IReadOnlyList<NpcSpawn> Spawns, IReadOnlyList<WorldObject> Objects, IReadOnlyDictionary<ushort, NpcPrototype>? Monsters = null, DropCatalog? Drops = null);
+    IReadOnlyList<NpcSpawn> Spawns, IReadOnlyList<WorldObject> Objects, IReadOnlyDictionary<ushort, NpcPrototype>? Monsters = null, DropCatalog? Drops = null,
+    IReadOnlyDictionary<ushort,NpcPrototype>? MoradonPrototypes = null,
+    IReadOnlyDictionary<ushort,NpcPrototype>? MoradonMonsters = null);
 public sealed record WorldZone(ushort Id, SmdMap Map, IReadOnlyList<WorldNpc> Npcs, IReadOnlyList<WorldObject> Objects);

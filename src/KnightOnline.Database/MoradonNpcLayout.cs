@@ -23,6 +23,7 @@ public sealed partial class MariaDbCharacterRepository
 
     /// <summary>Independent one-time monster layout; never replays NPC layouts.</summary>
     public Task EnsureMoradonMonsterLayoutAsync() => ApplyMoradonLayoutAsync(4);
+    public Task EnsureMoradonExactImportAsync() => ApplyMoradonLayoutAsync(5);
 
     private async Task ApplyMoradonLayoutAsync(int layoutId)
     {
@@ -32,7 +33,8 @@ public sealed partial class MariaDbCharacterRepository
         command.CommandText = await ReadMoradonResource("KnightOnline.Database.MoradonLayoutSchema.sql") +
                               await ReadMoradonResource("KnightOnline.Database.MoradonRemainingSchema.sql") +
                               await ReadMoradonResource("KnightOnline.Database.MoradonAlignmentSchema.sql") +
-                              await ReadMoradonResource("KnightOnline.Database.MoradonMonsterSchema.sql");
+                              await ReadMoradonResource("KnightOnline.Database.MoradonMonsterSchema.sql") +
+                              await ReadMoradonResource("KnightOnline.Database.MoradonExactSchema.sql");
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         // A persistent sentinel row serializes concurrent startup attempts. DDL stays
         // outside the transaction; backups, changes and AppliedUtc commit together.
@@ -56,7 +58,9 @@ public sealed partial class MariaDbCharacterRepository
             await transaction.CommitAsync().ConfigureAwait(false);
             return;
         }
-        command.CommandText = layoutId == 4
+        command.CommandText = layoutId == 5
+            ? "INSERT INTO KO_MORADON_PREIMPORT_NPCPOS SELECT * FROM K_NPCPOS WHERE ZoneID=21; INSERT INTO KO_MORADON_PREIMPORT_OBJECTPOS SELECT * FROM K_OBJECTPOS WHERE ZoneID=21"
+            : layoutId == 4
             ? "INSERT INTO KO_MORADON_MONSTERPOS_BACKUP SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100"
             : layoutId == 3
             ? "INSERT INTO KO_MORADON_V3_NPCPOS_BACKUP SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100"
@@ -70,10 +74,13 @@ public sealed partial class MariaDbCharacterRepository
             1 => "KnightOnline.Database.MoradonNpcPlacements.sql",
             2 => "KnightOnline.Database.MoradonRemainingPlacements.sql",
             3 => "KnightOnline.Database.MoradonDonorAlignment.sql",
-            _ => "KnightOnline.Database.MoradonMonsterPlacements.sql"
+            4 => "KnightOnline.Database.MoradonMonsterPlacements.sql",
+            _ => "KnightOnline.Database.MoradonExactImport.sql"
         });
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
-        command.CommandText = layoutId == 4
+        command.CommandText = layoutId == 5
+            ? "SELECT (SELECT COUNT(*) FROM K_NPCPOS p LEFT JOIN KO_MORADON_IMPORTED_NPC n ON n.sSid=p.NpcID WHERE p.ZoneID=21 AND p.ActType>=100 AND n.sSid IS NULL) + (SELECT COUNT(*) FROM K_NPCPOS p LEFT JOIN KO_MORADON_IMPORTED_MONSTER n ON n.sSid=p.NpcID WHERE p.ZoneID=21 AND p.ActType<100 AND n.sSid IS NULL)"
+            : layoutId == 4
             ? "SELECT COUNT(*) FROM K_NPCPOS p LEFT JOIN K_MONSTER n ON n.sSid=p.NpcID WHERE p.ZoneID=21 AND p.ActType<100 AND n.sSid IS NULL"
             : "SELECT COUNT(*) FROM K_NPCPOS p LEFT JOIN K_NPC n ON n.sSid=p.NpcID WHERE p.ZoneID=21 AND p.ActType>=100 AND n.sSid IS NULL";
         if (Convert.ToInt32(await command.ExecuteScalarAsync().ConfigureAwait(false)) != 0)
@@ -81,7 +88,9 @@ public sealed partial class MariaDbCharacterRepository
         command.CommandText = "UPDATE KO_MORADON_LAYOUT SET AppliedUtc=UTC_TIMESTAMP(6) WHERE LayoutId=@layout";
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         await transaction.CommitAsync().ConfigureAwait(false);
-        KoLog.Info(layoutId == 4
+        KoLog.Info(layoutId == 5
+            ? "[ MORADON IMPORT ] Applied owner upload: 48 NPCs, 375 monsters, 33 object rows. Private Moradon definitions; other zones unchanged. Previous zone rows backed up in KO_MORADON_PREIMPORT_*POS."
+            : layoutId == 4
             ? "[ MORADON MONSTERS ] Applied 195 rectangles / 646 monsters: 161 exact supplied rows plus 34 adapted legacy rows. Other zones, NPCs and definitions unchanged; original zone-21 monster rows backed up in KO_MORADON_MONSTERPOS_BACKUP."
             : layoutId == 1
             ? "[ MORADON NPC ] Applied matched donor layout; backed up original placements."

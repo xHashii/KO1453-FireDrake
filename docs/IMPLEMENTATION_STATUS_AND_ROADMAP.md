@@ -379,3 +379,13 @@ native movement packets are implemented. Conservative SMD shape/terrain checks
 are monster-only, not full pathfinding or a player stair-collision fix. Native
 client acceptance is pending; idle roaming, packs, navigation and advanced monster
 skills remain missing. No database reset or new spawn migration.
+
+## Current experiment: exact owner-uploaded Moradon content
+
+[MORADON_EXACT_IMPORT.md](MORADON_EXACT_IMPORT.md) supersedes the earlier mixed
+Moradon layout using the newly uploaded 0002_data.zip: 48 NPC instances and 375
+monsters, exact supplied placements and Moradon-private definitions, with backed-up
+replacement and explicit 1453 loot adapters. Global definitions and other zones
+remain unchanged. Imported rental/trainer/quest actors are not newly implemented
+services. This content experiment does not change the client protocol or roadmap;
+native model/menu compatibility must be checked before calling it complete.

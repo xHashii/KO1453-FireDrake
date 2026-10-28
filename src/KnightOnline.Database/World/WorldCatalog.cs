@@ -25,11 +25,14 @@ public sealed class WorldCatalog
                 map = new SmdMap(Path.Combine(mapDirectory, definition.MapName));
                 maps.Add(definition.MapName, map);
             }
+            var scoped = definition.Id==21 && string.Equals(definition.MapName,"moradon_expanded.smd",StringComparison.OrdinalIgnoreCase);
+            var npcPrototypes = scoped && data.MoradonPrototypes is not null ? data.MoradonPrototypes : data.Prototypes;
+            var monsterPrototypes = scoped && data.MoradonMonsters is not null ? data.MoradonMonsters : data.Monsters;
             var npcs = new List<WorldNpc>();
             ushort Allocate() => nextId < 20000 ? (ushort)nextId++ : throw new InvalidDataException("Static NPC ID band exhausted.");
             foreach (var spawn in data.Spawns.Where(s => s.Zone == definition.Id))
             {
-                var prototypes = spawn.IsMonster ? data.Monsters : data.Prototypes;
+                var prototypes = spawn.IsMonster ? monsterPrototypes : npcPrototypes;
                 if (prototypes is null || !prototypes.TryGetValue(spawn.Prototype, out var proto))
                     throw new InvalidDataException($"Zone {definition.Id}: missing NPC prototype {spawn.Prototype}.");
                 for (var i = 0; i < spawn.Count; i++)
@@ -54,7 +57,7 @@ public sealed class WorldCatalog
                 // AIServer::AddObjectEventNpc uses the object index for gates/anvils/artifacts.
                 var sid = obj.Type is 1 or 2 or 3 or 8 or 9 ? obj.Index : obj.Control;
                 if (sid == 0) continue;
-                if (!data.Prototypes.TryGetValue(sid, out var proto))
+                if (!npcPrototypes.TryGetValue(sid, out var proto))
                 {
                     KoLog.Warn($"[ WORLD ] zone={definition.Id} object={obj.Index}: no proxy NPC prototype {sid}; map object remains interactive.");
                     continue;

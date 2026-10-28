@@ -44,6 +44,7 @@ try
     await characters.EnsureTravelSchemaAsync();
     await characters.EnsureMoradonNpcLayoutAsync();
     await characters.EnsureMoradonMonsterLayoutAsync();
+    await characters.EnsureMoradonExactImportAsync();
     await characters.EnsureCombatSchemaAsync();
     await characters.EnsureFoundationSchemaAsync();
     await characters.EnsurePotionDataAsync();

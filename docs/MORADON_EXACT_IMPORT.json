@@ -1,0 +1,63 @@
+{
+  "archive": "0002_data.zip",
+  "sha256": "4dd632c90fcb1346e6d86e00fc0e5ea7ddeb21fee239610bb7e181b69b6d91f3",
+  "zone": 21,
+  "npcDefinitions": 39,
+  "monsterDefinitions": 37,
+  "npcRows": 48,
+  "npcPopulation": 48,
+  "monsterRows": 75,
+  "monsterPopulation": 375,
+  "objects": 33,
+  "preservedLootAdapters": [
+    {
+      "id": 1056,
+      "sourceDrop": 1056,
+      "existingDefinition": 1052,
+      "drop": 1052
+    },
+    {
+      "id": 1057,
+      "sourceDrop": 1057,
+      "existingDefinition": 1003,
+      "drop": 1003
+    },
+    {
+      "id": 1058,
+      "sourceDrop": 1058,
+      "existingDefinition": 1054,
+      "drop": 1054
+    },
+    {
+      "id": 1180,
+      "sourceDrop": 1180,
+      "existingDefinition": 1150,
+      "drop": 1150
+    }
+  ],
+  "missingObjectProxyDefinitions": [
+    1019,
+    1020,
+    1021,
+    1022
+  ],
+  "unsupportedServiceTypes": [
+    11,
+    29,
+    34,
+    46,
+    47,
+    49,
+    77,
+    78,
+    98,
+    100,
+    126,
+    132,
+    133,
+    136,
+    146,
+    162,
+    171
+  ]
+}
