@@ -42,7 +42,7 @@ public sealed class MonsterSimulation
         lock(_gate)
         {
             if(actor.Key.Id==0||actor.Key.Lease==Guid.Empty||!float.IsFinite(actor.X)||!float.IsFinite(actor.Z)) return;
-            if(_observers.TryGetValue(actor.Key.Id,out var old)&&(old.Actor.Key!=actor.Key||old.Actor.Zone!=actor.Zone||!actor.Targetable))
+            if(_observers.TryGetValue(actor.Key.Id,out var old)&&(old.Actor.Key!=actor.Key||old.Actor.Zone!=actor.Zone||old.Actor.Targetable&&!actor.Targetable))
                 Invalidate(old.Actor.Key,_clock());
             _observers[actor.Key.Id]=(actor,_clock());
         }
@@ -51,7 +51,10 @@ public sealed class MonsterSimulation
     {
         lock(_gate)
         {
-            if(_observers.TryGetValue(key.Id,out var old)&&old.Actor.Key==key) _observers.Remove(key.Id);
+            // Pre-login packets and repeated cleanup must not scan every brain.
+            // Publish already invalidates an old lease before replacing its ID.
+            if(!_observers.TryGetValue(key.Id,out var old)||old.Actor.Key!=key) return;
+            _observers.Remove(key.Id);
             Invalidate(key,_clock());
         }
     }
@@ -110,7 +113,7 @@ public sealed class MonsterSimulation
         lock(_gate)
         {
             var now=_clock();
-            if(!_brains.TryGetValue(npc.Id,out var b)||b.Target!=key||b.Mode is not (MonsterAiMode.Chasing or MonsterAiMode.Attacking)) return false;
+            if(!_brains.TryGetValue(npc.Id,out var b)||!ReferenceEquals(npc,b.Npc)||b.Target!=key||b.Mode is not (MonsterAiMode.Chasing or MonsterAiMode.Attacking)) return false;
             var a=Observer(b,key,now,true);var p=npc.Motion;
             if(a is null||!WithinHome(b,a)||!Visible(b,a)||Distance(p.X,p.Z,a.X,a.Z)>npc.Prototype.AttackRange) return false;
             return npc.Combat.Retaliate(key.Id,now,npc.Prototype.AttackDelayMs);
