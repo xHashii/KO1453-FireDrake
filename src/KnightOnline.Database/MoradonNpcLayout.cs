@@ -13,22 +13,26 @@ public sealed partial class MariaDbCharacterRepository
         return await reader.ReadToEndAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Apply the owner-selected layout once, backing up static placements only.</summary>
+    /// <summary>Apply the owner-selected NPC layout stages once, backing up placements.</summary>
     public async Task EnsureMoradonNpcLayoutAsync()
     {
-        await ApplyMoradonNpcLayoutAsync(1).ConfigureAwait(false);
-        await ApplyMoradonNpcLayoutAsync(2).ConfigureAwait(false);
-        await ApplyMoradonNpcLayoutAsync(3).ConfigureAwait(false);
+        await ApplyMoradonLayoutAsync(1).ConfigureAwait(false);
+        await ApplyMoradonLayoutAsync(2).ConfigureAwait(false);
+        await ApplyMoradonLayoutAsync(3).ConfigureAwait(false);
     }
 
-    private async Task ApplyMoradonNpcLayoutAsync(int layoutId)
+    /// <summary>Independent one-time monster layout; never replays NPC layouts.</summary>
+    public Task EnsureMoradonMonsterLayoutAsync() => ApplyMoradonLayoutAsync(4);
+
+    private async Task ApplyMoradonLayoutAsync(int layoutId)
     {
         await using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync().ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         command.CommandText = await ReadMoradonResource("KnightOnline.Database.MoradonLayoutSchema.sql") +
                               await ReadMoradonResource("KnightOnline.Database.MoradonRemainingSchema.sql") +
-                              await ReadMoradonResource("KnightOnline.Database.MoradonAlignmentSchema.sql");
+                              await ReadMoradonResource("KnightOnline.Database.MoradonAlignmentSchema.sql") +
+                              await ReadMoradonResource("KnightOnline.Database.MoradonMonsterSchema.sql");
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         // A persistent sentinel row serializes concurrent startup attempts. DDL stays
         // outside the transaction; backups, changes and AppliedUtc commit together.
@@ -48,11 +52,13 @@ public sealed partial class MariaDbCharacterRepository
         var map = Convert.ToString(await command.ExecuteScalarAsync().ConfigureAwait(false));
         if (!string.Equals(map, "moradon_expanded.smd", StringComparison.OrdinalIgnoreCase))
         {
-            KoLog.Warn($"[ MORADON NPC ] Skipped: zone 21 uses custom map '{map}', not moradon_expanded.smd.");
+            KoLog.Warn($"[ MORADON LAYOUT ] Skipped: zone 21 uses custom map '{map}', not moradon_expanded.smd.");
             await transaction.CommitAsync().ConfigureAwait(false);
             return;
         }
-        command.CommandText = layoutId == 3
+        command.CommandText = layoutId == 4
+            ? "INSERT INTO KO_MORADON_MONSTERPOS_BACKUP SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType<100"
+            : layoutId == 3
             ? "INSERT INTO KO_MORADON_V3_NPCPOS_BACKUP SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100"
             : layoutId == 2
             ? "INSERT INTO KO_MORADON_V2_NPCPOS_BACKUP SELECT * FROM K_NPCPOS WHERE ZoneID=21 AND ActType>=100"
@@ -63,17 +69,21 @@ public sealed partial class MariaDbCharacterRepository
         {
             1 => "KnightOnline.Database.MoradonNpcPlacements.sql",
             2 => "KnightOnline.Database.MoradonRemainingPlacements.sql",
-            _ => "KnightOnline.Database.MoradonDonorAlignment.sql"
+            3 => "KnightOnline.Database.MoradonDonorAlignment.sql",
+            _ => "KnightOnline.Database.MoradonMonsterPlacements.sql"
         });
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
-        command.CommandText = "SELECT COUNT(*) FROM K_NPCPOS p LEFT JOIN K_NPC n ON n.sSid=p.NpcID " +
-                              "WHERE p.ZoneID=21 AND p.ActType>=100 AND n.sSid IS NULL";
+        command.CommandText = layoutId == 4
+            ? "SELECT COUNT(*) FROM K_NPCPOS p LEFT JOIN K_MONSTER n ON n.sSid=p.NpcID WHERE p.ZoneID=21 AND p.ActType<100 AND n.sSid IS NULL"
+            : "SELECT COUNT(*) FROM K_NPCPOS p LEFT JOIN K_NPC n ON n.sSid=p.NpcID WHERE p.ZoneID=21 AND p.ActType>=100 AND n.sSid IS NULL";
         if (Convert.ToInt32(await command.ExecuteScalarAsync().ConfigureAwait(false)) != 0)
-            throw new InvalidDataException("Moradon placement references a missing 1453 NPC definition; layout rolled back.");
+            throw new InvalidDataException("Moradon placement references a missing creature definition; layout rolled back.");
         command.CommandText = "UPDATE KO_MORADON_LAYOUT SET AppliedUtc=UTC_TIMESTAMP(6) WHERE LayoutId=@layout";
         await command.ExecuteNonQueryAsync().ConfigureAwait(false);
         await transaction.CommitAsync().ConfigureAwait(false);
-        KoLog.Info(layoutId == 1
+        KoLog.Info(layoutId == 4
+            ? "[ MORADON MONSTERS ] Applied 195 rectangles / 646 monsters: 161 exact supplied rows plus 34 adapted legacy rows. Other zones, NPCs and definitions unchanged; original zone-21 monster rows backed up in KO_MORADON_MONSTERPOS_BACKUP."
+            : layoutId == 1
             ? "[ MORADON NPC ] Applied matched donor layout; backed up original placements."
             : layoutId == 3
             ? "[ MORADON NPC ] Applied layout v3: remaining NPCs aligned to donor service, gate and guard anchors; exact donor placements unchanged."

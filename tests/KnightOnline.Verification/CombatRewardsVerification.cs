@@ -63,7 +63,7 @@ internal static class CombatRewardsVerification
         await repository.EnsureCombatSchemaAsync(); await repository.EnsureCombatSchemaAsync();
         await using var connection = new MySqlConnection(settings.BuildConnectionString()); await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "DROP TABLE IF EXISTS KO_MORADON_V3_NPCPOS_BACKUP,KO_MORADON_V2_NPCPOS_BACKUP,KO_MORADON_LAYOUT,KO_MORADON_NPCPOS_BACKUP,KO_MORADON_OBJECTPOS_BACKUP,USERDATA,LEVEL_UP; CREATE TABLE USERDATA(strUserID varchar(21),Level tinyint unsigned,Exp int,Points smallint,strSkill varbinary(10),Gold int,strItem blob,strSerial blob,Hp smallint,Mp smallint,Zone smallint,PX int,PZ int,PY int) ENGINE=InnoDB; " +
+        command.CommandText = "DROP TABLE IF EXISTS KO_MORADON_MONSTERPOS_BACKUP,KO_MORADON_V3_NPCPOS_BACKUP,KO_MORADON_V2_NPCPOS_BACKUP,KO_MORADON_LAYOUT,KO_MORADON_NPCPOS_BACKUP,KO_MORADON_OBJECTPOS_BACKUP,USERDATA,LEVEL_UP; CREATE TABLE USERDATA(strUserID varchar(21),Level tinyint unsigned,Exp int,Points smallint,strSkill varbinary(10),Gold int,strItem blob,strSerial blob,Hp smallint,Mp smallint,Zone smallint,PX int,PZ int,PY int) ENGINE=InnoDB; " +
             "CREATE TABLE LEVEL_UP(level tinyint unsigned,Exp bigint); INSERT INTO LEVEL_UP VALUES(1,100),(2,200),(3,300),(80,1000000);";
         await command.ExecuteNonQueryAsync();
         var slots = Enumerable.Repeat(ItemSlotData.Empty,75).ToArray(); slots[74] = new(65537,-8687,5044,0,0);
@@ -239,6 +239,7 @@ internal static class CombatRewardsVerification
         test("Moradon map reference repair never rewrites other zones",Convert.ToString(await command.ExecuteScalarAsync())=="moradon_20060124.smd");
         command.CommandText="UPDATE ZONE_INFO SET strZoneName='elmo_051221.smd' WHERE ServerNo=1 AND ZoneNo=2";
         await command.ExecuteNonQueryAsync();
+        await MoradonMonsterVerification.DatabaseAsync(repository, connection, test);
         var oldPosition = new SavedPosition(21,30000,35000,0);
         var walked = new SavedPosition(21,25080,29100,-650);
         test("walking position persists independently of rewards", await repository.TrySavePositionAsync("combat-test",oldPosition,walked));

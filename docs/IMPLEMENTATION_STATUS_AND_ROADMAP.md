@@ -356,3 +356,16 @@ client acceptance is pending; shared XP/loot, party-target skills, cross-zone
 retention and party-wanted remain unimplemented. No database reset/migration.
 
 Expanded-Moradon NPC placement follow-up: see [MORADON_NPC_LAYOUT.md](MORADON_NPC_LAYOUT.md).
+
+## Current follow-up: expanded Moradon monsters and immediate next work
+
+See [MORADON_MONSTERS.md](MORADON_MONSTERS.md) for the new-map placement upgrade:
+161 exact supplied spawn rows plus 34 explicitly adapted legacy rows, 646 monsters
+in total. Other zones, NPCs, definitions and character data are preserved. This
+supersedes the earlier "monsters unchanged" statement for the monster follow-up,
+not for the historical NPC-only migrations. Placement is not moving monster AI.
+
+The current short roadmap and next implementation priority are in
+[NEXT_GAMEPLAY_STEPS.md](NEXT_GAMEPLAY_STEPS.md): native world acceptance, then
+shared basic monster aggro/chase/leash/movement, followed by combat/party rewards,
+progression/economy, social/PvP and finally dependent events/release hardening.
