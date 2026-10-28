@@ -369,3 +369,13 @@ The current short roadmap and next implementation priority are in
 [NEXT_GAMEPLAY_STEPS.md](NEXT_GAMEPLAY_STEPS.md): native world acceptance, then
 shared basic monster aggro/chase/leash/movement, followed by combat/party rewards,
 progression/economy, social/PvP and finally dependent events/release hardening.
+
+## Follow-up: first shared monster AI slice
+
+[BASIC_MONSTER_AI.md](BASIC_MONSTER_AI.md) supersedes the stationary-only AI status:
+shared authoritative positions, source passive/aggressive acquisition, direct-step
+chase, shared retaliation cadence, leash/return/heal, corpse/respawn position and
+native movement packets are implemented. Conservative SMD shape/terrain checks
+are monster-only, not full pathfinding or a player stair-collision fix. Native
+client acceptance is pending; idle roaming, packs, navigation and advanced monster
+skills remain missing. No database reset or new spawn migration.

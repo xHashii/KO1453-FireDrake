@@ -2,6 +2,8 @@ using KnightOnline.Shared.Protocol;
 
 namespace KnightOnline.Database.World;
 
+public readonly record struct MonsterLife(int Hp, string Token, bool Evading);
+
 public sealed record MonsterHealth(int Hp, int Damage, bool Killed, string? KillToken = null);
 
 /// <summary>One shared runtime life per spawn, guarded independently of session locks.</summary>
@@ -12,6 +14,7 @@ public sealed class MonsterCombat(int maxHp, int respawnSeconds)
     private int _hp = Math.Max(1, maxHp);
     private long _respawnAt = long.MaxValue, _diedAt;
     private ushort _target;
+    private bool _evading;
     private long _nextRetaliation, _engagedAt;
     private string _life = Guid.NewGuid().ToString("N");
     public string LifeToken { get { lock (_gate) return _life; } }
@@ -23,15 +26,40 @@ public sealed class MonsterCombat(int maxHp, int respawnSeconds)
         lock (_gate)
         {
             Respawn(now);
-            if (_hp <= 0 || _target != target || now < _nextRetaliation || now - _engagedAt > 30000) return false;
+            if (_evading || _hp <= 0 || _target != target || now < _nextRetaliation || now - _engagedAt > 30000) return false;
             _nextRetaliation = now + Math.Clamp(delayMs, 500, 10000); return true;
         }
     }
 
     private void Respawn(long now)
     {
-        if (_hp == 0 && now >= _respawnAt) { _hp = _maxHp; _respawnAt = long.MaxValue; _target = 0; _nextRetaliation = 0; _engagedAt = 0; _life = Guid.NewGuid().ToString("N"); }
+        if (_hp == 0 && now >= _respawnAt) { _hp = _maxHp; _evading = false; _respawnAt = long.MaxValue; _target = 0; _nextRetaliation = 0; _engagedAt = 0; _life = Guid.NewGuid().ToString("N"); }
     }
+    public MonsterLife Read(long now)
+    { lock(_gate) { Respawn(now); return new(_hp,_life,_evading); } }
+    internal bool WhileLiving(string life,long now,Action change)
+    { lock(_gate) { Respawn(now); if(_hp<=0 || _life!=life) return false; change(); return true; } }
+    internal void ChooseTarget(ushort target,long now)
+    {
+        lock(_gate)
+        {
+            Respawn(now); if(_hp<=0 || _evading) return;
+            if(_nextRetaliation==0) _nextRetaliation=now+1000;
+            _target=target; _engagedAt=now;
+        }
+    }
+    internal void BeginReturn(long now)
+    { lock(_gate) { Respawn(now); if(_hp>0) { _evading=true; _target=0; } } }
+    internal void FinishReturn(long now)
+    {
+        lock(_gate)
+        {
+            Respawn(now); if(_hp<=0 || !_evading) return;
+            _hp=_maxHp; _evading=false; _target=0; _nextRetaliation=0; _engagedAt=0;
+            _life=Guid.NewGuid().ToString("N");
+        }
+    }
+
     public int Health(long now)
     {
         lock (_gate) { Respawn(now); return _hp; }
@@ -41,7 +69,7 @@ public sealed class MonsterCombat(int maxHp, int respawnSeconds)
         lock (_gate)
         {
             Respawn(now);
-            if (_hp <= 0 || damage <= 0 || expectedLife is not null && expectedLife != _life) return null;
+            if (_evading || _hp <= 0 || damage <= 0 || expectedLife is not null && expectedLife != _life) return null;
             if (attacker != 0)
             {
                 // Hits renew aggro, not the attack timer. Repeated R hits must

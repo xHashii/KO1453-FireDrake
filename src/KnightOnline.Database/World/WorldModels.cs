@@ -3,14 +3,35 @@ using KnightOnline.Shared.Protocol;
 namespace KnightOnline.Database.World;
 
 public sealed record NpcPrototype(ushort Id, string Name, ushort Model, ushort Size, uint Weapon1,
-    uint Weapon2, byte Nation, byte Type, int SellingGroup, byte Level, int MaxHp = 1, bool IsMonster = false, int DropGroup = 0, int Armor = 0, int Experience = 0, int Money = 0, int AttackDamage = 1, int AttackDelayMs = 2000, int AttackRange = 3);
+    uint Weapon2, byte Nation, byte Type, int SellingGroup, byte Level, int MaxHp = 1, bool IsMonster = false, int DropGroup = 0, int Armor = 0, int Experience = 0, int Money = 0, int AttackDamage = 1, int AttackDelayMs = 2000, int AttackRange = 3, byte Behaviour = 1, float MoveSpeed = 4, int SearchRange = 0, int TraceRange = 40);
 public sealed record NpcSpawn(ushort Zone, ushort Prototype, int Left, int Top, int Right, int Bottom, int Count, byte Direction, bool IsMonster = false, int RespawnSeconds = 30);
 public sealed record WorldObject(ushort Zone, ushort Index, byte Type, ushort Control, byte Nation,
     byte Status, float X, float Y, float Z);
-public sealed record WorldNpc(ushort Id, NpcPrototype Prototype, float X, float Y, float Z,
+public sealed record WorldNpc(ushort Id, NpcPrototype Prototype, float SpawnX, float SpawnY, float SpawnZ,
     byte Direction, byte ObjectType = 0, byte GateOpen = 0, int RespawnSeconds = 30)
 {
     public MonsterCombat Combat { get; } = new(Prototype.MaxHp, RespawnSeconds);
+    private MonsterMotion _motion = new(SpawnX,SpawnY,SpawnZ,0,0,"");
+    public MonsterMotion Motion
+    {
+        get
+        {
+            var p=Volatile.Read(ref _motion);
+            var life=Combat.LifeToken;
+            return Prototype.IsMonster && p.Life!=life
+                ? new(SpawnX,SpawnY,SpawnZ,0,p.Revision+1,life) : p;
+        }
+    }
+    public float X => Motion.X;
+    public float Y => Motion.Y;
+    public float Z => Motion.Z;
+    internal bool Move(string life,long now,float x,float y,float z,float speed) => Combat.WhileLiving(life,now,() =>
+    {
+        var old=Volatile.Read(ref _motion);
+        if(old.Life==life && old.X==x && old.Y==y && old.Z==z && old.Speed==speed) return;
+        Volatile.Write(ref _motion,new(x,y,z,speed,old.Revision+1,life));
+    });
+
     public int Health => Prototype.IsMonster ? Combat.Health(Environment.TickCount64) : Prototype.MaxHp;
     /// <summary>Legacy clients can refuse right-clicks on an opposing-faction NPC
     /// before emitting WIZ_NPC_EVENT. Moradon has shared services, but its source
@@ -25,14 +46,15 @@ public sealed record WorldNpc(ushort Id, NpcPrototype Prototype, float X, float 
         21 or 22 or 23 or 24 or 29 or 31 or 33 or 34 or 36 or 37 or 40 or 46 or 47 or 49 or 77 or 126 or 132 or 136 or 162;
 
     // CNpc::GetNpcInfo, with NPC ID prefixed by the caller. Names use byte lengths.
-    public void WriteInfo(Packet packet, ushort zone = 0, byte viewerNation = 0)
+    public void WriteInfo(Packet packet, ushort zone = 0, byte viewerNation = 0, MonsterMotion? motion = null)
     {
+        var position=motion ?? Motion;
         packet.SByte();
         packet.WriteUInt16(Prototype.Id).WriteUInt16(Prototype.Model).WriteByte(Prototype.Type)
             .WriteInt32(Prototype.SellingGroup).WriteUInt16(Prototype.Size)
             .WriteUInt32(Prototype.Weapon1).WriteUInt32(Prototype.Weapon2).WriteString(Prototype.Name)
             .WriteByte(InteractionNation(zone, viewerNation)).WriteByte(Prototype.Level)
-            .WriteUInt16((ushort)(X * 10)).WriteUInt16((ushort)(Z * 10)).WriteUInt16(unchecked((ushort)(short)(Y * 10)))
+            .WriteUInt16((ushort)(position.X * 10)).WriteUInt16((ushort)(position.Z * 10)).WriteUInt16(unchecked((ushort)(short)(position.Y * 10)))
             .WriteUInt32(GateOpen).WriteByte(ObjectType).WriteUInt16(0).WriteUInt16(0).WriteByte(Direction);
     }
 }

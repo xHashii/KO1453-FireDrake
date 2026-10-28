@@ -20,6 +20,17 @@ internal sealed partial class GameSession
         KoLog.Info($"[ POSITION SAVE ] {_charId} zone={position.Zone} position={position.X},{position.Z},{position.Y}");
     }
 
+    private readonly Dictionary<ushort,(string Life,long Revision)> _npcMotionVersions = new();
+    private void TrackNpcMotion(WorldNpc npc, MonsterMotion p, bool entering=false)
+    {
+        if(!npc.Prototype.IsMonster) return;
+        var version=(p.Life,p.Revision);
+        var changed=!_npcMotionVersions.TryGetValue(npc.Id,out var old)||old!=version;
+        if(npc.Health>0 && (changed || entering&&p.Speed>0))
+            Send(MonsterMovementPackets.Move(npc.Id,p));
+        _npcMotionVersions[npc.Id]=version;
+    }
+
     private readonly HashSet<ushort> _visibleNpcs = new();
     private readonly HashSet<ushort> _deadNpcs = new();
     private readonly Dictionary<ushort, MapWarp> _gateWarps = new();
@@ -36,6 +47,7 @@ internal sealed partial class GameSession
         foreach (var id in _visibleNpcs)
             Send(new Packet(WizOpcode.NpcInout, (byte)2).WriteUInt16(id));
         _visibleNpcs.Clear();
+        _npcMotionVersions.Clear();
         _deadNpcs.Clear();
         _announcedLoot.Clear();
         var nearby = NearbyNpcs().ToArray();
@@ -46,10 +58,13 @@ internal sealed partial class GameSession
             foreach (var npc in batch)
             {
                 reply.WriteUInt16(npc.Id);
-                npc.WriteInfo(reply, _user!.Zone, _user.Nation);
+                var motion=npc.Motion;
+                npc.WriteInfo(reply, _user!.Zone, _user.Nation,motion);
                 _visibleNpcs.Add(npc.Id);
+                _npcMotionVersions[npc.Id]=(motion.Life,motion.Revision);
             }
             Send(reply);
+            foreach(var npc in batch) TrackNpcMotion(npc,npc.Motion,true);
         }
         SendCorpseAnimations();
         RefreshLoot();
@@ -81,20 +96,23 @@ internal sealed partial class GameSession
         // A respawn reuses its runtime ID, but requires a fresh IN packet.
         foreach (var id in _deadNpcs.ToArray())
             if (CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == id)?.Health > 0)
-            { Send(new Packet(WizOpcode.NpcInout, (byte)2).WriteUInt16(id)); _visibleNpcs.Remove(id); _deadNpcs.Remove(id); ForgetLootForNpc(id); }
+            { Send(new Packet(WizOpcode.NpcInout, (byte)2).WriteUInt16(id)); _visibleNpcs.Remove(id); _npcMotionVersions.Remove(id); _deadNpcs.Remove(id); ForgetLootForNpc(id); }
         var nearby = NearbyNpcs().ToDictionary(n => n.Id);
         foreach (var id in _visibleNpcs.Where(id => !nearby.ContainsKey(id)).ToArray())
         {
             Send(new Packet(WizOpcode.NpcInout, (byte)2).WriteUInt16(id));
-            _visibleNpcs.Remove(id); _deadNpcs.Remove(id); ForgetLootForNpc(id);
+            _visibleNpcs.Remove(id); _npcMotionVersions.Remove(id); _deadNpcs.Remove(id); ForgetLootForNpc(id);
         }
         foreach (var npc in nearby.Values.Where(n => !_visibleNpcs.Contains(n.Id)))
         {
             var reply = new Packet(WizOpcode.NpcInout, (byte)1).WriteUInt16(npc.Id);
-            npc.WriteInfo(reply, _user!.Zone, _user.Nation);
+            var motion=npc.Motion;
+            npc.WriteInfo(reply, _user!.Zone, _user.Nation,motion);
             Send(reply);
             _visibleNpcs.Add(npc.Id);
+            TrackNpcMotion(npc,motion,true);
         }
+        foreach(var npc in nearby.Values) TrackNpcMotion(npc,npc.Motion);
         SendCorpseAnimations();
     }
 

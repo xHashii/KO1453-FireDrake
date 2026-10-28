@@ -10,7 +10,8 @@ short ordering supersedes its older immediate-next-step recommendation.
    newly placed monster fields, attack/kill/XP/loot/respawn, reconnect. Existing
    placements outside Moradon stay authored and receive bounds/terrain checks.
    Resolve observed visual/model/height issues before declaring the map finished.
-2. **Next implementation: shared basic monster AI.** One authoritative simulation
+2. **Accept/harden the first shared monster AI slice.** See BASIC_MONSTER_AI.md.
+   The first implementation now supplies one authoritative simulation
    across sessions: idle/aggro target, attack cadence, chase, distance leash and
    return-to-spawn. Add native movement updates and two-client consistency tests.
    Plan movement validation/collision explicitly; height sampling is not navigation
@@ -33,11 +34,13 @@ short ordering supersedes its older immediate-next-step recommendation.
 Login/characters/world entry, movement/nearby actors, NPC interaction, shop and
 warehouse foundations, equipment, chat/player visibility, basic party membership,
 melee/potions/selected heal/speed skills, solo kill XP/loot, death/respawn, travel,
-and saved positions. Several systems are intentionally partial. Monster placement
-is now implemented; monsters still lack full moving AI. Native acceptance remains
+and saved positions. Several systems are intentionally partial. Monster placement and a first shared direct-step moving AI slice
+are now implemented; full navigation and richer monster behavior remain missing. Native acceptance remains
 separate from automated tests, and the stair collision issue is not solved here.
 
 Every slice: inspect source/packet evidence, implement narrow rules and lifecycle,
 run packet and DB/concurrency tests, then supply a short native acceptance test.
 Never reset characters/items to make a new feature work. No calendar estimates
 or claim of full retail behavior without evidence.
+
+Current next step after native AI acceptance: expand the shared combat/skill/effect rules, then party rewards.

@@ -88,7 +88,8 @@ catch (Exception ex)
 var chat = new ChatHub();
 var players = new PlayerHub();
 var parties = new PartyHub();
-var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat, players, parties),maxSessionId:9999);
+var monsters = new MonsterSimulation(world);
+var server = new KoTcpServer<GameSession>(client => new GameSession(client, characters, world, settings.CharacterPreviewEquipment, chat, players, parties, monsters),maxSessionId:9999);
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -98,9 +99,17 @@ Console.CancelKeyPress += (_, e) =>
     server.Stop();
 };
 
+KoLog.Info("[ MONSTER AI ] Shared 250ms simulation enabled: source passive/aggressive types, direct-step chase, leash/return, conservative SMD terrain/shape checks; no route finding or idle roaming.");
+Exception? aiFailure = null;
+var aiLoop = Task.Run(async () =>
+{
+    try { await monsters.RunAsync(shutdown.Token); }
+    catch(Exception ex) { aiFailure=ex; KoLog.Error("Shared monster simulation failed; stopping server.",ex); server.Stop(); }
+});
+
 KoLog.Warn($"GameServer prototype on port {port}: version check, game login, nation select, the " +
            "character list, creation/selection, NPC/monster spawns, PvE attacks/skills/retaliation, XP/loot, NPC shops, warehouses, saved skill bars, nearby players, anvil windows and native warp gates are implemented; " +
-           "repairs/upgrades, quests, full chasing AI, parties and unsupported skill types remain unported (docs/CSHARP_REWRITE_PLAN.md, M4/M5).");
+           "basic shared monster chase/leash AI and party membership are available; repairs/upgrades, quests, full navigation, party rewards and unsupported skill types remain unported (docs/CSHARP_REWRITE_PLAN.md, M4/M5).");
 KoLog.Info($"Build: {Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion}; NPC shop transactions enabled.");
 
 try
@@ -113,6 +122,12 @@ catch (Exception ex)
     return 1;
 }
 
+finally
+{
+    shutdown.Cancel();
+    await aiLoop;
+}
+if(aiFailure is not null) return 1;
 KoLog.Info("GameServer shut down.");
 return 0;
 
@@ -187,13 +202,14 @@ internal sealed partial class GameSession : KoSession
     private readonly byte[] _stats = new byte[5];
     private short _points;
 
-    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment, ChatHub chat, PlayerHub players, PartyHub parties)
+    public GameSession(TcpClient client, MariaDbCharacterRepository characters, WorldCatalog world, bool characterPreviewEquipment, ChatHub chat, PlayerHub players, PartyHub parties, MonsterSimulation monsters)
         : base(client, maxPayloadSize: 8192)
     {
         _characters = characters;
         _chat = chat;
         _players = players;
         _parties = parties;
+        _monsters = monsters;
         _characterPreviewEquipment = characterPreviewEquipment;
         _world = world;
     }

@@ -28,7 +28,7 @@ public sealed partial class MariaDbCharacterRepository
                 protos.Add(p.Id, p);
             }
         var monsters = new Dictionary<ushort, NpcPrototype>();
-        command.CommandText = "SELECT sSid,strName,sPid,sSize,iWeapon1,iWeapon2,byGroup,byType,sLevel,iHpPoint,sItem,sAc,iExp,iMoney,sDamage,sAttackDelay,byAttackRange FROM K_MONSTER";
+        command.CommandText = "SELECT sSid,strName,sPid,sSize,iWeapon1,iWeapon2,byGroup,byType,sLevel,iHpPoint,sItem,sAc,iExp,iMoney,sDamage,sAttackDelay,byAttackRange,byActType,bySpeed2,bySearchRange,byTracingRange FROM K_MONSTER";
         await using (var r = await command.ExecuteReaderAsync().ConfigureAwait(false))
             while (await r.ReadAsync().ConfigureAwait(false))
             {
@@ -39,7 +39,9 @@ public sealed partial class MariaDbCharacterRepository
                     checked((byte)Math.Clamp(Convert.ToInt32(r.GetValue(8)), 0, 255)), Math.Max(1, Convert.ToInt32(r.GetValue(9))), true,
                     Convert.ToInt32(r.GetValue(10)), Math.Max(0, Convert.ToInt32(r.GetValue(11))), Math.Max(0, Convert.ToInt32(r.GetValue(12))),
                     Math.Max(0, Convert.ToInt32(r.GetValue(13))), Math.Max(1, Convert.ToInt32(r.GetValue(14))),
-                    Math.Clamp(Convert.ToInt32(r.GetValue(15)), 500, 10000), Math.Clamp(Convert.ToInt32(r.GetValue(16)), 2, 30));
+                    Math.Clamp(Convert.ToInt32(r.GetValue(15)), 500, 10000), Math.Clamp(Convert.ToInt32(r.GetValue(16)), 2, 30),
+                    Convert.ToByte(r.GetValue(17)), Math.Clamp(Convert.ToInt32(r.GetValue(18))*1.5f,0,12),
+                    Math.Clamp(Convert.ToInt32(r.GetValue(19)),0,40), Math.Clamp(Convert.ToInt32(r.GetValue(20)),8,80));
                 monsters.Add(monster.Id, monster);
             }
         var spawns = new List<NpcSpawn>();

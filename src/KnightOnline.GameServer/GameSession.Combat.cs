@@ -62,13 +62,13 @@ internal sealed partial class GameSession
         if (_protos.TryGetValue(Slot(RightHand).ItemId,out var weapon) && !weapon.IsShield) return weapon;
         return _protos.TryGetValue(Slot(LeftHand).ItemId,out weapon) && !weapon.IsShield ? weapon : null;
     }
-    private WorldNpc? CombatTarget(ushort id) => CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == id && n.Prototype.IsMonster && n.Health > 0 && _visibleNpcs.Contains(id));
+    private WorldNpc? CombatTarget(ushort id) => CurrentWorld?.Npcs.FirstOrDefault(n => n.Id == id && n.Prototype.IsMonster && n.Health > 0 && _visibleNpcs.Contains(id) && _monsters.CanHit(n,MonsterIdentity));
 
     private void CompleteMonsterHit(WorldNpc npc, MonsterHealth hit)
     {
         Send(TargetHealthPackets.Reply(npc.Id,0,npc.Prototype.MaxHp,hit.Hp,(ushort)hit.Damage));
         KoLog.Info($"[ COMBAT ] {_charId} target={npc.Id} proto={npc.Prototype.Id} damage={hit.Damage} HP={hit.Hp}/{npc.Prototype.MaxHp} killed={hit.Killed}");
-        if (!hit.Killed) return;
+        if (!hit.Killed) { _monsters.Engage(npc,MonsterIdentity); return; }
         SyncWorldNpcs(); // DEAD only; do not immediately delete the actor/death animation.
         try
         {
@@ -185,7 +185,7 @@ internal sealed partial class GameSession
             foreach (var npc in CurrentWorld.Npcs)
             {
                 if (!npc.Prototype.IsMonster || !_visibleNpcs.Contains(npc.Id) || !Near(npc.X,npc.Z,npc.Prototype.AttackRange) ||
-                    !npc.Combat.Retaliate(_socketId,Environment.TickCount64,npc.Prototype.AttackDelayMs)) continue;
+                    !_monsters.TryAttack(npc,MonsterIdentity)) continue;
                 var damage = Math.Min(_currentHp,MeleeRules.Damage(npc.Prototype.AttackDamage,_totalAc));
                 PersistCombatVitals(_currentHp-damage,_currentMp);
                 _sitting = false;
@@ -193,6 +193,7 @@ internal sealed partial class GameSession
                 _chat.Region(_user!.Zone,npc.X,npc.Z,120,MeleeRules.Reply(new(1,_socketId),npc.Id,_currentHp == 0 ? (byte)2 : (byte)1));
                 if (_currentHp == 0)
                 {
+                    _monsters.Remove(MonsterIdentity);
                     _chat.Region(_user.Zone,PlayerX,PlayerZ,120,new Packet(WizOpcode.Dead).WriteUInt16(_socketId));
                     ClearSpeedEffect();
                     _casting = null; _pendingMelee = null; break;

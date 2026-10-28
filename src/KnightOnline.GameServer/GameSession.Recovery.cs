@@ -33,7 +33,7 @@ internal sealed partial class GameSession
                 }
                 catch (Exception ex) { KoLog.Error("World visibility refresh failed.", ex); }
             }
-        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+        }, null, TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(250));
         _recoveryTimer ??= new Timer(_ =>
         {
             lock (_gameGate)
@@ -68,6 +68,7 @@ internal sealed partial class GameSession
             _speedEffect.Clear();
             _chat.Remove(_socketId);
             _players.Remove(_socketId);
+            _monsters.Remove(MonsterIdentity);
             _parties.Remove(_socketId);
             _pendingMelee = null; _meleeTimer?.Dispose(); _meleeTimer = null;
             _worldTimer?.Dispose(); _worldTimer = null;

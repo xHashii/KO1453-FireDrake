@@ -1,5 +1,6 @@
 using KnightOnline.Shared.Network;
 using KnightOnline.Database.Items;
+using KnightOnline.Database.World;
 using KnightOnline.Database;
 using KnightOnline.Shared.Diagnostics;
 using KnightOnline.Shared.Protocol;
@@ -7,6 +8,9 @@ using KnightOnline.Shared.Protocol;
 internal sealed partial class GameSession
 {
     private readonly PlayerHub _players;
+    private readonly MonsterSimulation _monsters;
+    private readonly Guid _monsterLease=Guid.NewGuid();
+    private MonsterActorKey MonsterIdentity => new(_socketId,_monsterLease);
     protected override void OnConnected()
     {
         _socketId=SessionId;
@@ -32,9 +36,11 @@ internal sealed partial class GameSession
     private void UpdatePlayerPresence()
     {
         if (!IsConnected || !_inGame || _travelStage != 0 || _inventoryFaulted || _user is null)
-        { _players.Remove(_socketId); _parties.Remove(_socketId); return; }
+        { _players.Remove(_socketId); _parties.Remove(_socketId); _monsters.Remove(MonsterIdentity); return; }
         UpdatePartyPresence();
         var u = _user;
+        if(_currentHp<=0) _monsters.Remove(MonsterIdentity);
+        else _monsters.Publish(new(MonsterIdentity,u.Zone,PlayerX,PlayerZ,!GmVisibilityRules.Hidden(u.Authority,_gmVisible)));
         var info=PlayerPackets.Info(new(_charId,u.Nation,u.Level,u.Race,u.Class,
             (ushort)(u.Px/10),(ushort)(u.Pz/10),(short)(u.Py/10),u.Face,u.Hair,
             _currentHp<=0?(byte)3:_sitting?(byte)2:(byte)1,u.Authority,_direction,0,(byte)u.Zone,_slots),id=>_protos.ContainsKey(id));

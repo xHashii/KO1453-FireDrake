@@ -1,4 +1,5 @@
 using System.Text;
+using System.Numerics;
 
 namespace KnightOnline.Database.World;
 
@@ -9,6 +10,7 @@ public sealed record MapWarp(ushort Id, string Name, string Announcement, uint F
 public sealed class SmdMap
 {
     private readonly float[] _heights;
+    private readonly MapCollision _collision;
     public int Size { get; }
     public float Spacing { get; }
     public float Extent => (Size - 1) * Spacing;
@@ -31,7 +33,7 @@ public sealed class SmdMap
         var width = r.ReadSingle();
         var length = r.ReadSingle();
         if (width != Extent || length != Extent || width > 4096) throw new InvalidDataException("SMD collision dimensions disagree with terrain.");
-        Skip(r, Count(r, 10_000_000) * 36L);
+        _collision = new MapCollision(r, Count(r, 10_000_000), Extent);
         for (var z = 0; z < length; z += 16)
         for (var x = 0; x < width; x += 16)
         {
@@ -79,6 +81,50 @@ public sealed class SmdMap
         else
             value = dz <= dx ? a + dx * (b - a) + dz * (d - b) : a + dz * (c - a) + dx * (d - c);
         return float.IsFinite(value) ? value : throw new InvalidDataException("Invalid terrain height.");
+    }
+
+    /// <summary>Conservative terrain/shape visibility, independent of client-provided Y.</summary>
+    public bool HasLineOfSight(float x,float z,float targetX,float targetZ)
+    {
+        if(!Contains(x,z)||!Contains(targetX,targetZ)) return false;
+        var a=new Vector3(x,Height(x,z)+.8f,z);var b=new Vector3(targetX,Height(targetX,targetZ)+.8f,targetZ);
+        var distance=Vector3.Distance(a,b);
+        // AI queries are local; reject unbounded/malformed segment work.
+        if(!float.IsFinite(distance)||distance>160) return false;
+        var steps=Math.Max(1,(int)Math.Ceiling(distance));
+        for(var i=1;i<steps;i++)
+        {
+            var p=Vector3.Lerp(a,b,(float)i/steps);
+            if(Height(p.X,p.Z)>p.Y-.2f) return false;
+        }
+        return _collision.Clear(a,b);
+    }
+    /// <summary>Bounded direct steps only. Stop at walls, steep terrain and map edges.</summary>
+    public bool CanMonsterStep(float x,float z,float targetX,float targetZ)
+    {
+        if(!Contains(x,z)||!Contains(targetX,targetZ)) return false;
+        var dx=targetX-x;var dz=targetZ-z;var distance=MathF.Sqrt(dx*dx+dz*dz);
+        if(!float.IsFinite(distance)||distance>6) return false;
+        if(distance<.0001f) return true;
+        var steps=Math.Max(1,(int)Math.Ceiling(distance/.5f));
+        var previous=Height(x,z);
+        for(var i=1;i<=steps;i++)
+        {
+            var px=x+dx*i/steps;var pz=z+dz*i/steps;var height=Height(px,pz);
+            if(Math.Abs(height-previous)>distance/steps+.15f) return false;
+            previous=height;
+        }
+        // Centre plus body-width rays, below and above waist height. This is
+        // conservative collision avoidance, not swept capsule navigation.
+        var ox=-dz/distance*.3f;var oz=dx/distance*.3f;
+        foreach(var side in new[]{-1,0,1})
+        {
+            var ax=x+ox*side;var az=z+oz*side;var bx=targetX+ox*side;var bz=targetZ+oz*side;
+            if(!Contains(ax,az)||!Contains(bx,bz)) return false;
+            foreach(var height in new[]{.35f,1.2f})
+                if(!_collision.Clear(new(ax,Height(ax,az)+height,az),new(bx,Height(bx,bz)+height,bz))) return false;
+        }
+        return true;
     }
 
     private static int Count(BinaryReader r, int max)

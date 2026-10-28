@@ -182,6 +182,7 @@ internal sealed partial class GameSession
         ClearSpeedEffect();
         _pendingMelee = null; _casting = null;
         _players.Remove(_socketId);
+        _monsters.Remove(MonsterIdentity);
         _parties.Remove(_socketId);
         _warehouse = null; _warehouseNpc = 0;
         var sameZone = target.Zone == _user!.Zone;
