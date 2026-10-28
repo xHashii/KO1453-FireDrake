@@ -122,6 +122,7 @@ var aiLoop = Task.Run(async () =>
 KoLog.Warn($"GameServer prototype on port {port}: version check, game login, nation select, the " +
            "character list, creation/selection, NPC/monster spawns, PvE attacks/skills/retaliation, XP/loot, NPC shops, warehouses, saved skill bars, nearby players, anvil windows and native warp gates are implemented; " +
            "basic shared monster chase/leash AI and party membership are available; repairs/upgrades, quests, full navigation, party rewards and unsupported skill types remain unported (docs/CSHARP_REWRITE_PLAN.md, M4/M5).");
+KoLog.Info("[ PLAYER WIRE ] Source envelopes: USER_INOUT ushort action + ushort actor ID; REQ_USERIN ushort count + (byte marker 0, ushort actor ID, info). Native retest required.");
 KoLog.Info($"Build: {Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion}; NPC shop transactions enabled.");
 
 try

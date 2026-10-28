@@ -16,12 +16,20 @@ internal static class FoundationsVerification
         var envelopeHub=new PlayerHub();var envelopes=new List<Packet>();
         envelopeHub.Publish(new(0x2345,21,0,0,info,0,p=>envelopes.Add(p)));
         envelopeHub.Publish(new(0x1234,21,0,0,info,0,p=>{}));
-        test("native IN has byte subtype then full little-endian actor ID",envelopes.Single().Opcode==WizOpcode.UserInout&&Convert.ToHexString(envelopes.Single().Payload[..3])=="013412");
+        test("source IN has ushort subtype then full little-endian actor ID",envelopes.Single().Opcode==WizOpcode.UserInout&&Convert.ToHexString(envelopes.Single().Payload[..4])=="01003412");
         var nativeDetails=envelopeHub.Requested(0x2345,[0x1234]).Single();
-        test("native requested details start count then actor ID then byte-length name",Convert.ToHexString(nativeDetails.Payload[..6])=="010034120141"&&nativeDetails.Length==4+info.Length);
+        test("source requested details start count then marker then actor ID and byte-length name",Convert.ToHexString(nativeDetails.Payload[..7])=="01000034120141"&&nativeDetails.Length==5+info.Length);
         test("native region list contains viewer plus visible actor IDs",Convert.ToHexString(envelopeHub.RegionList(0x2345).Payload)=="020034124523");
+        // Independent source-shaped reader: wrong envelope widths consume the
+        // actor ID/name at the wrong offset even when the body itself is valid.
+        var sourceIn=envelopes.Single();
+        test("source reader decodes IN action, high actor ID and name without shifting",sourceIn.ReadUInt16()==1&&sourceIn.ReadUInt16()==0x1234&&sourceIn.ReadByte()==1&&sourceIn.ReadByte()=='A');
+        test("source reader decodes requested record marker before actor ID",nativeDetails.ReadUInt16()==1&&nativeDetails.ReadByte()==0&&nativeDetails.ReadUInt16()==0x1234&&nativeDetails.ReadByte()==1&&nativeDetails.ReadByte()=='A');
+        var shiftedIn=new Packet(WizOpcode.UserInout).WriteByte(1).WriteUInt16(0x1234).WriteBytes(info);
+        var shiftedDetails=new Packet(WizOpcode.ReqUserin).WriteUInt16(1).WriteUInt16(0x1234).WriteBytes(info);
+        test("removed-envelope regression demonstrably corrupts source action and requested marker",shiftedIn.ReadUInt16()!=1&&shiftedDetails.ReadUInt16()==1&&shiftedDetails.ReadByte()!=0);
         envelopes.Clear();envelopeHub.Remove(0x1234);
-        test("native OUT is exactly byte subtype and actor ID",Convert.ToHexString(envelopes.Single().Payload)=="023412");
+        test("source OUT is exactly ushort subtype and actor ID",Convert.ToHexString(envelopes.Single().Payload)=="02003412");
         var filtered=PlayerPackets.Info(new("A",2,80,12,206,1234,5678,-30,1,2,1,1,-90,0,21,items),id=>id<1040);
         test("remote appearance suppresses unknown costume models without changing saved items",filtered.AsSpan(filtered.Length-15,14).ToArray().All(b=>b==0)&&items[46].ItemId==1046);
         var gmAppearance=new PlayerAppearance("A",2,80,12,206,1234,5678,-30,1,2,1,0,-90,0,21,items);
@@ -50,7 +58,7 @@ internal static class FoundationsVerification
         var hub=new PlayerHub();var a=new List<Packet>();var b=new List<Packet>();var c=new List<Packet>();
         PlayerPresence P(ushort id,ushort zone,float x,List<Packet> sink,int version=0)=>new(id,zone,x,0,info,version,p=>sink.Add(p));
         hub.Publish(P(1,21,0,a));hub.Publish(P(2,21,10,b));hub.Publish(P(3,1,10,c));
-        test("nearby players receive mutual IN without self or cross-zone ghosts",a.Count==1&&b.Count==1&&c.Count==0&&a[0].Payload[0]==1&&a[0].Payload[1]==2&&a[0].Payload.Length==3+info.Length);
+        test("nearby players receive mutual IN without self or cross-zone ghosts",a.Count==1&&b.Count==1&&c.Count==0&&a[0].Payload[0]==1&&a[0].Payload[2]==2&&a[0].Payload.Length==4+info.Length);
         a.Clear();b.Clear();hub.Publish(P(2,21,10,b));
         test("unchanged presence does not duplicate IN",a.Count==0&&b.Count==0);
         hub.Broadcast(1,new Packet(WizOpcode.Rotate).WriteUInt16(1).WriteInt16(-90));
@@ -61,7 +69,7 @@ internal static class FoundationsVerification
         a.Clear();b.Clear();hub.Publish(P(2,21,10,b));a.Clear();b.Clear();hub.Publish(P(2,21,10,b,1));
         test("equipment revision refreshes peers OUT then IN without resetting self",a.Count==2&&a[0].Payload[0]==2&&a[1].Payload[0]==1&&b.Count==0);
         var requested=hub.Requested(1,[2,2,3]).Single();
-        test("requested user record has native count and ushort socket ID with no extra prefix",requested.Payload[0]==1&&requested.Payload[2]==2&&requested.Payload[3]==0&&requested.Payload[4]==info[0]&&requested.Length==4+info.Length);
+        test("requested user record retains source zero marker and ushort socket ID",requested.Payload[0]==1&&requested.Payload[2]==0&&requested.Payload[3]==2&&requested.Payload[4]==0&&requested.Payload[5]==info[0]&&requested.Length==5+info.Length);
         a.Clear();b.Clear();hub.Remove(2);hub.Remove(2);
         test("disconnect sends exactly one OUT",a.Count==1&&a[0].Payload[0]==2);
         hub.Publish(P(2,21,10,b));a.Clear();hub.Publish(P(2,1,10,b));
@@ -80,7 +88,7 @@ internal static class FoundationsVerification
         refreshHub.Publish(rightPlayer with {Hidden=false});
         leftRefresh.Clear();rightRefresh.Clear();refreshHub.Refresh(801);
         test("explicit refresh reannounces both nearby visible actors even when hub already knows them",leftRefresh.Count==3&&rightRefresh.Count==2&&leftRefresh[0].Payload[0]==2&&leftRefresh[1].Payload[0]==1&&rightRefresh[0].Payload[0]==2&&rightRefresh[1].Payload[0]==1);
-        test("refresh sends native region discovery and full current actor records",leftRefresh[2].Opcode==WizOpcode.Regionchange&&leftRefresh[1].Payload[1]==unchecked((byte)802)&&leftRefresh[1].Payload[2]==(802>>8)&&leftRefresh[1].Payload[3..].SequenceEqual(info));
+        test("refresh sends native region discovery and full current actor records",leftRefresh[2].Opcode==WizOpcode.Regionchange&&leftRefresh[1].Payload[2]==unchecked((byte)802)&&leftRefresh[1].Payload[3]==(802>>8)&&leftRefresh[1].Payload[4..].SequenceEqual(info));
         leftRefresh.Clear();rightRefresh.Clear();refreshHub.Refresh(801);
         test("repeated visible refresh repairs a client-dropped actor instead of trusting sent-IN cache",leftRefresh.Count==3&&rightRefresh.Count==2);
         refreshHub.Publish(rightPlayer with {Hidden=true});leftRefresh.Clear();rightRefresh.Clear();refreshHub.Refresh(801);

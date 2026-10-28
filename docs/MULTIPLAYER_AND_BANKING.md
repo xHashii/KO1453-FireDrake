@@ -9,8 +9,8 @@ and allowed sitting/emotion changes reach visible peers. Equipment/stat changes
 refresh peer appearance with OUT/IN; this is deliberately not a complete clan,
 party, merchant, stealth or buff state implementation.
 
-The remote-player wire layout uses the native 1453 envelopes documented by
-RE-KO (see `REKO_REFERENCE_REVIEW.md`), not the conflicting C++ subtype prefix: byte-prefixed name, clanless fields,
+The remote-player wire layout again follows the supplied C++ server envelopes
+(see `PLAYER_ENVELOPE_REGRESSION.md`): byte-prefixed name, clanless fields,
 pose/direction and ten item records in BREAST/LEG/HEAD/GLOVE/FOOT/SHOULDER/
 RIGHTHAND/LEFTHAND/CTOP/CHELMET order, followed by a **byte** zone ID. It is not
 the character-selection layout. Unknown model references are suppressed on this
@@ -141,10 +141,13 @@ compatibility mapping still applies when a GM explicitly becomes visible.
 This is actor visibility, not anonymity: normal chat/private messages and combat
 are not suppressed or made anonymous. It is not a PvP stealth skill.
 
-## Native protocol corrections (after RE-KO comparison)
+## Earlier protocol comparison (player envelopes superseded)
 
-- USER_INOUT uses **byte** action then ushort actor ID (not ushort action).
-- REQ_USERIN records use ushort actor ID then info, with **no extra zero byte**.
+- **Superseded:** the RE-KO byte-action substitution was reverted after failed
+  native captures. USER_INOUT again uses the supplied source **ushort** action
+  then ushort actor ID. See PLAYER_ENVELOPE_REGRESSION.md.
+- **Superseded:** REQ_USERIN again uses the supplied source zero-byte record
+  marker, then ushort actor ID and info. The marker is not a name-length byte.
 - Clanless info explicitly labels the native alliance/name/grade/ranking/mark/
   cape widths; its existing all-zero clan metadata bytes remain unchanged.
 - World entry and completed zone loading send a native 0x15 region-ID list
